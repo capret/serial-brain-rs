@@ -1,5 +1,5 @@
 <template>
-  <details class="panel">
+  <details class="panel" open>
     <summary class="panel-header">
       <span class="font-medium">Data Source</span> 
       <span class="material-symbols-outlined transition-transform group-open:rotate-180">expand_more</span>
@@ -7,15 +7,15 @@
     <div class="panel-body">
       <div class="space-y-2">
         <label class="flex items-center space-x-2 cursor-pointer p-2 hover:bg-gray-100 rounded">
-          <input type="radio" name="dataSource" class="w-4 h-4 text-primary-600 focus:ring-primary-500" checked />
+          <input type="radio" name="dataSource" value="serial" v-model="selectedSource" class="w-4 h-4 text-primary-600 focus:ring-primary-500" />
           <span>Serial Connection</span>
         </label>
         <label class="flex items-center space-x-2 cursor-pointer p-2 hover:bg-gray-100 rounded">
-          <input type="radio" name="dataSource" class="w-4 h-4 text-primary-600 focus:ring-primary-500" />
+          <input type="radio" name="dataSource" value="tcp" v-model="selectedSource" class="w-4 h-4 text-primary-600 focus:ring-primary-500" />
           <span>TCP Connection</span>
         </label>
         <label class="flex items-center space-x-2 cursor-pointer p-2 hover:bg-gray-100 rounded">
-          <input type="radio" name="dataSource" class="w-4 h-4 text-primary-600 focus:ring-primary-500" />
+          <input type="radio" name="dataSource" value="fake" v-model="selectedSource" class="w-4 h-4 text-primary-600 focus:ring-primary-500" />
           <span>Fake Data Generator</span>
         </label>
       </div>
@@ -24,7 +24,14 @@
 </template>
 
 <script setup>
-// Component logic can be added here
+import { ref, defineExpose, watch } from 'vue';
+
+const selectedSource = ref('serial');
+
+// Expose the selected data source to parent components
+defineExpose({
+  getSelectedSource: () => selectedSource.value
+});
 </script>
 
 <style scoped>
