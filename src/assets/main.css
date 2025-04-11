@@ -1,0 +1,7 @@
+/* Import the global styles */
+@import './global.css';
+
+/* 
+This file is the main entry point for all CSS.
+It imports the global styles and can include any additional app-wide styles.
+*/
