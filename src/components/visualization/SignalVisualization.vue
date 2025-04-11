@@ -18,7 +18,7 @@
       </div>
     </div>
     
-    <SignalChart />
+    <SignalChart ref="signalChart" />
     
     <div class="grid grid-cols-4 gap-4">
       <ChannelStatCard 
@@ -145,5 +145,64 @@ import ChannelStatCard from './ChannelStatCard.vue';
 
 .gap-4 {
   gap: 1rem;
+}
+
+.bg-blue-500 {
+  background-color: rgb(59, 130, 246);
+}
+
+.bg-green-500 {
+  background-color: rgb(34, 197, 94);
+}
+
+.bg-yellow-500 {
+  background-color: rgb(234, 179, 8);
+}
+
+.bg-red-500 {
+  background-color: rgb(239, 68, 68);
+}
+
+.text-white {
+  color: white;
+}
+
+.py-2 {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.px-4 {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.rounded {
+  border-radius: 0.25rem;
+}
+
+.text-lg {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+
+.font-medium {
+  font-weight: 500;
+}
+
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+
+.block {
+  display: block;
+}
+
+.mb-1 {
+  margin-bottom: 0.25rem;
+}
+
+.w-full {
+  width: 100%;
 }
 </style>

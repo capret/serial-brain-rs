@@ -54,16 +54,16 @@ const closeWindow = async () => {
 </script>
 
 <style scoped>
+
 .header-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4rem 1rem;
+  padding: 1rem;
   background-image: linear-gradient(to right, rgb(99 27 255), rgb(70 7 208));
   color: white;
-  -webkit-app-region: drag; /* Makes the header draggable */
   position: relative;
-  height: 100px;
+  height: 150px;
   box-sizing: border-box;
 }
 
@@ -95,11 +95,8 @@ const closeWindow = async () => {
 
 .window-controls {
   display: flex;
-  position: absolute;
-  top: 0;
-  right: 0;
-  height: 46px;
   -webkit-app-region: no-drag; /* Make buttons clickable */
+  z-index: 10;
 }
 
 .control-btn {
