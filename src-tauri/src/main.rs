@@ -22,7 +22,7 @@ use tauri::Emitter;
 use tauri::{self, AppHandle, State}; // Import the Emitter trait to bring the `emit` method into scope.
 
 // Define a type alias for the eight channel data.
-type ChannelData = [u16; 8];
+type ChannelData = [f32; 8];
 
 #[derive(Debug, Deserialize)]
 struct FakeDataConfig {
@@ -119,9 +119,9 @@ fn connect_serial(
                                 let sum: u16 = channels.iter().sum();
                                 if sum % 256 == expected_checksum {
                                     if let Ok(data_array) = <[u16; 8]>::try_from(channels) {
-                                        state_cloned.add_data(data_array);
+                                        state_cloned.add_data(data_array.map(|x| x as f32));
                                         // Using emit (with the Emitter trait imported) to forward data to the front end.
-                                        let _ = app_handle_cloned.emit("serial_data", data_array);
+                                        let _ = app_handle_cloned.emit("serial_data", data_array.map(|x| x as f32));
                                     }
                                 } else {
                                     eprintln!(
@@ -193,11 +193,11 @@ fn start_fake_data(
     let handle = thread::spawn(move || {
         let mut rng = rand::thread_rng();
         let mut counter: f64 = 0.0;
-        let step = 0.1; // Phase increment per iteration
+        let step = 0.01; // Phase increment per iteration
         
         while running_flag.load(Ordering::SeqCst) {
             // Generate fake data based on the selected waveform
-            let mut fake_data = [0; 8];
+            let mut fake_data: [f32; 8] = [0.0; 8];
             
             for i in 0..channel_count {
                 let phase = counter + (i as f64 * 0.2); // Slight phase shift for each channel
@@ -207,11 +207,11 @@ fn start_fake_data(
                 let value = match waveform.as_str() {
                     "sine" => {
                         let sin_val = (phase * 2.0 * std::f64::consts::PI).sin();
-                        (sin_val * amplitude / 2.0 + amplitude / 2.0 + offset) as u16
+                        (sin_val * amplitude / 2.0 + amplitude / 2.0 + offset) as f32
                     },
                     "square" => {
                         let square_val = if (phase % 1.0) < 0.5 { 0.0 } else { 1.0 };
-                        (square_val * amplitude + offset) as u16
+                        (square_val * amplitude + offset) as f32
                     },
                     "triangle" => {
                         let tri_phase = phase % 1.0;
@@ -220,14 +220,14 @@ fn start_fake_data(
                         } else {
                             2.0 - tri_phase * 2.0
                         };
-                        (tri_val * amplitude + offset) as u16
+                        (tri_val * amplitude + offset) as f32
                     },
                     "sawtooth" => {
                         let saw_val = phase % 1.0;
-                        (saw_val * amplitude + offset) as u16
+                        (saw_val * amplitude + offset) as f32
                     },
-                    "random" => rng.gen_range(min_value as u16..=max_value as u16),
-                    _ => rng.gen_range(min_value as u16..=max_value as u16),
+                    "random" => rng.gen_range(min_value..=max_value) as f32,
+                    _ => rng.gen_range(min_value..=max_value) as f32,
                 };
                 
                 fake_data[i] = value;
@@ -235,7 +235,7 @@ fn start_fake_data(
             
             // Fill remaining channels with zeros if not all 8 channels are used
             for i in channel_count..8 {
-                fake_data[i] = 0;
+                fake_data[i] = 0.0;
             }
 
             state_clone.add_data(fake_data);

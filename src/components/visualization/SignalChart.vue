@@ -17,7 +17,7 @@ import { listen } from '@tauri-apps/api/event';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 
-const windowSize = ref(100);
+const windowSize = ref(1000);
 const displayedData = ref([]);
 
 // Reference for the chart container and uPlot instance.
@@ -41,7 +41,6 @@ const initialData = [[], [], [], [], [], [], [], [], []];
 
 // Define uPlot options and series definitions.
 const series = [
-  { label: "Index" }, // x-axis series
   { label: "Channel 1", stroke: channelColors[0] },
   { label: "Channel 2", stroke: channelColors[1] },
   { label: "Channel 3", stroke: channelColors[2] },
@@ -53,9 +52,8 @@ const series = [
 ];
 
 let uplotOptions = {
-  title: "Serial Data Channels",
-  width: 800, // Will be updated based on chartDiv width.
-  height: 420, // Chart height.
+  width: 800,
+  height: 420,
   scales: { x: { time: false }, y: {} },
   series,
   axes: [

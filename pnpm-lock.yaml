@@ -20,6 +20,9 @@ importers:
       vue:
         specifier: ^3.5.13
         version: 3.5.13(typescript@5.6.3)
+      webgl-plot:
+        specifier: ^0.7.2
+        version: 0.7.2
     devDependencies:
       '@tauri-apps/cli':
         specifier: ^2
@@ -580,6 +583,9 @@ packages:
       typescript:
         optional: true
 
+  webgl-plot@0.7.2:
+    resolution: {integrity: sha512-QYtRa0+8h2N4h3g8yqIht4sKQYOLrS8FjpbG6mVkFvB8No+vGfMeGHx32A39Z6fzOGTsVZqwOf/ZJjK2VJU/ow==}
+
 snapshots:
 
   '@babel/helper-string-parser@7.25.9': {}
@@ -1004,3 +1010,5 @@ snapshots:
       '@vue/shared': 3.5.13
     optionalDependencies:
       typescript: 5.6.3
+
+  webgl-plot@0.7.2: {}

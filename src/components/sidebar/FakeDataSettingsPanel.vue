@@ -15,7 +15,7 @@
       </div>
       <div>
         <label class="form-label">Frequency (Hz)</label>
-        <input type="number" v-model.number="config.frequency" placeholder="1" min="0.1" max="1000" step="0.1" class="form-input" />
+        <input type="number" v-model.number="config.frequency" placeholder="500" min="0.1" max="1000" step="0.1" class="form-input" />
       </div>
       <div>
         <label class="form-label">Number of Channels</label>
@@ -49,10 +49,10 @@ const isDataSourceFake = computed(() => {
 
 // Fake data configuration settings
 const config = ref({
-  minValue: -10,
-  maxValue: 10,
-  frequency: 5,
-  channelCount: 4,
+  minValue: -100,
+  maxValue: 100,
+  frequency: 500,
+  channelCount: 8,
   waveform: 'sine'
 });
 

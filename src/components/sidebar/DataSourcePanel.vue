@@ -24,9 +24,15 @@
 </template>
 
 <script setup>
-import { ref, defineExpose, watch } from 'vue';
+import { ref, defineExpose, watch, defineEmits } from 'vue';
 
 const selectedSource = ref('serial');
+const emit = defineEmits(['source-changed']);
+
+// Watch for changes in the selected source and emit the event
+watch(selectedSource, (newSource) => {
+  emit('source-changed', newSource);
+});
 
 // Expose the selected data source to parent components
 defineExpose({
