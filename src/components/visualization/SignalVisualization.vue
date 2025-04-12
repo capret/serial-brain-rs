@@ -3,18 +3,6 @@
     <div class="mb-4 flex justify-between items-center">
       <div>
         <h2 class="text-xl font-semibold">Signal Visualization</h2>
-        <p class="text-sm text-gray-500">Real-time multi-channel data plot</p>
-      </div>
-      <div class="flex space-x-2">
-        <button class="p-2 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors">
-          <span class="material-symbols-outlined">fullscreen</span>
-        </button>
-        <button class="p-2 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors">
-          <span class="material-symbols-outlined">file_download</span>
-        </button>
-        <button class="p-2 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors">
-          <span class="material-symbols-outlined">settings</span>
-        </button>
       </div>
     </div>
     

@@ -12,8 +12,11 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "plotly.js-dist": "^3.0.1",
+    "timechart": "^0.5.2",
     "uplot": "^1.6.32",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "webgl-plot": "^0.7.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

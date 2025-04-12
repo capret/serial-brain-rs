@@ -16,13 +16,22 @@ use std::{
 };
 
 use rand::Rng;
+use serde::Deserialize;
 use serialport;
-use serde_json;
 use tauri::Emitter;
 use tauri::{self, AppHandle, State}; // Import the Emitter trait to bring the `emit` method into scope.
 
 // Define a type alias for the eight channel data.
-type ChannelData = [u16; 8];
+type ChannelData = [f32; 8];
+
+#[derive(Debug, Deserialize)]
+struct FakeDataConfig {
+    min_value: i32,
+    max_value: i32,
+    frequency: f64,
+    channel_count: usize,
+    waveform: String,
+}
 
 /// Shared state for our serial connection.
 struct SerialState {
@@ -110,9 +119,9 @@ fn connect_serial(
                                 let sum: u16 = channels.iter().sum();
                                 if sum % 256 == expected_checksum {
                                     if let Ok(data_array) = <[u16; 8]>::try_from(channels) {
-                                        state_cloned.add_data(data_array);
+                                        state_cloned.add_data(data_array.map(|x| x as f32));
                                         // Using emit (with the Emitter trait imported) to forward data to the front end.
-                                        let _ = app_handle_cloned.emit("serial_data", data_array);
+                                        let _ = app_handle_cloned.emit("serial_data", data_array.map(|x| x as f32));
                                     }
                                 } else {
                                     eprintln!(
@@ -147,119 +156,110 @@ fn get_recent_data(n: usize, state: State<Arc<SerialState>>) -> Result<Vec<Chann
     Ok(state.get_data(n))
 }
 
-// Command to toggle the fake data stream
+// Command to start the fake data stream with configuration
 #[tauri::command]
 fn start_fake_data(
     app_handle: AppHandle,
+    config: FakeDataConfig,
     state: State<Arc<SerialState>>,
-    config: Option<serde_json::Value>,
 ) -> Result<bool, String> {
     let state_clone = state.inner().clone();
     let app_handle_clone = app_handle.clone();
-    let currently_running = state.fake_stream_running.load(Ordering::SeqCst);
-    let new_state;
-
-    if currently_running {
-        println!("Stopping fake data stream...");
+    
+    // If already running, stop it first
+    if state.fake_stream_running.load(Ordering::SeqCst) {
         state.fake_stream_running.store(false, Ordering::SeqCst);
         if let Some(handle) = state.fake_stream_handle.lock().unwrap().take() {
-            handle
-                .join()
-                .map_err(|_| "Failed to join fake stream thread".to_string())?;
+            let _ = handle.join();
         }
-        println!("Fake data stream stopped.");
-        new_state = false;
-    } else {
-        // Start the stream
-        println!("Starting fake data stream...");
-        state.fake_stream_running.store(true, Ordering::SeqCst);
-        let running_flag = state.fake_stream_running.clone();
-
-        // Parse configuration settings - extract values and convert to owned types
-        let min_value = config.as_ref().and_then(|c| c.get("minValue").and_then(|v| v.as_i64())).unwrap_or(-10);
-        let max_value = config.as_ref().and_then(|c| c.get("maxValue").and_then(|v| v.as_i64())).unwrap_or(10);
-        let frequency = config.as_ref().and_then(|c| c.get("frequency").and_then(|v| v.as_f64())).unwrap_or(5.0);
-        let channel_count = config.as_ref().and_then(|c| c.get("channelCount").and_then(|v| v.as_i64())).unwrap_or(4) as usize;
-        
-        // Extract waveform as String (owned type) instead of &str (reference)
-        let waveform_str = config.as_ref()
-            .and_then(|c| c.get("waveform").and_then(|v| v.as_str()))
-            .unwrap_or("random")
-            .to_string(); // Convert to owned String
-
-        println!("Fake data settings: min={}, max={}, freq={}, channels={}, waveform={}", 
-            min_value, max_value, frequency, channel_count, waveform_str);
-
-        // Calculate sleep duration based on frequency
-        let sleep_ms = (1000.0 / frequency) as u64;
-
-        let handle = thread::spawn(move || {
-            let mut rng = rand::thread_rng();
-            let mut t = 0.0; // Time variable for waveforms
-            let step = 0.1; // Time step
-
-            while running_flag.load(Ordering::SeqCst) {
-                // Generate fake data based on the selected waveform
-                let mut fake_data = [0u16; 8];
-
-                for i in 0..channel_count.min(8) {
-                    let phase_offset = (i as f64) * std::f64::consts::PI / 4.0; // Different phase for each channel
-                    let value = match waveform_str.as_str() {
-                        "sine" => {
-                            let amplitude = (max_value - min_value) as f64 / 2.0;
-                            let offset = min_value as f64 + amplitude;
-                            (amplitude * ((t + phase_offset) * std::f64::consts::PI * 2.0).sin() + offset) as u16
-                        },
-                        "square" => {
-                            let period = (t + phase_offset) % 1.0;
-                            if period < 0.5 { min_value as u16 } else { max_value as u16 }
-                        },
-                        "triangle" => {
-                            let period = (t + phase_offset) % 1.0;
-                            let triangle = if period < 0.5 { period * 2.0 } else { 2.0 - period * 2.0 };
-                            (min_value as f64 + triangle * (max_value - min_value) as f64) as u16
-                        },
-                        "sawtooth" => {
-                            let period = (t + phase_offset) % 1.0;
-                            (min_value as f64 + period * (max_value - min_value) as f64) as u16
-                        },
-                        _ => { // Random
-                            rng.gen_range(min_value as u16..=max_value as u16)
-                        }
-                    };
-                    
-                    fake_data[i] = value;
-                }
-
-                // Fill any unused channels with 0
-                for i in channel_count.min(8)..8 {
-                    fake_data[i] = 0;
-                }
-
-                state_clone.add_data(fake_data);
-                let _ = app_handle_clone.emit("serial_data", fake_data);
-                
-                // Update time variable
-                t += step;
-                
-                // Sleep based on frequency
-                thread::sleep(Duration::from_millis(1));
-            }
-            println!("Fake data stream thread finished.");
-        });
-
-        *state.fake_stream_handle.lock().unwrap() = Some(handle);
-        println!("Fake data stream started.");
-        new_state = true;
     }
-    Ok(new_state) // Return the new state
+    
+    // Start the stream with the provided configuration
+    println!("Starting fake data stream with config: {:?}", config);
+    state.fake_stream_running.store(true, Ordering::SeqCst);
+    let running_flag = state.fake_stream_running.clone();
+    
+    // Calculate sleep duration from frequency (in Hz)
+    let sleep_ms = (1000.0 / config.frequency).round() as u64;
+    
+    // Ensure channel count is valid (between 1 and 8)
+    let channel_count = config.channel_count.min(8).max(1);
+    
+    // Store config values for use in the thread
+    let min_value = config.min_value;
+    let max_value = config.max_value;
+    let waveform = config.waveform.clone();
+
+    let handle = thread::spawn(move || {
+        let mut rng = rand::thread_rng();
+        let mut counter: f64 = 0.0;
+        let step = 0.01; // Phase increment per iteration
+        
+        while running_flag.load(Ordering::SeqCst) {
+            // Generate fake data based on the selected waveform
+            let mut fake_data: [f32; 8] = [0.0; 8];
+            
+            for i in 0..channel_count {
+                let phase = counter + (i as f64 * 0.2); // Slight phase shift for each channel
+                let amplitude = (max_value - min_value) as f64;
+                let offset = min_value as f64;
+                
+                let value = match waveform.as_str() {
+                    "sine" => {
+                        let sin_val = (phase * 2.0 * std::f64::consts::PI).sin();
+                        (sin_val * amplitude / 2.0 + amplitude / 2.0 + offset) as f32
+                    },
+                    "square" => {
+                        let square_val = if (phase % 1.0) < 0.5 { 0.0 } else { 1.0 };
+                        (square_val * amplitude + offset) as f32
+                    },
+                    "triangle" => {
+                        let tri_phase = phase % 1.0;
+                        let tri_val = if tri_phase < 0.5 {
+                            tri_phase * 2.0
+                        } else {
+                            2.0 - tri_phase * 2.0
+                        };
+                        (tri_val * amplitude + offset) as f32
+                    },
+                    "sawtooth" => {
+                        let saw_val = phase % 1.0;
+                        (saw_val * amplitude + offset) as f32
+                    },
+                    "random" => rng.gen_range(min_value..=max_value) as f32,
+                    _ => rng.gen_range(min_value..=max_value) as f32,
+                };
+                
+                fake_data[i] = value;
+            }
+            
+            // Fill remaining channels with zeros if not all 8 channels are used
+            for i in channel_count..8 {
+                fake_data[i] = 0.0;
+            }
+
+            state_clone.add_data(fake_data);
+            let _ = app_handle_clone.emit("serial_data", fake_data);
+            thread::sleep(Duration::from_millis(sleep_ms));
+            
+            counter += step;
+            if counter >= 1.0 {
+                counter = 0.0;
+            }
+        }
+        println!("Fake data stream thread finished.");
+    });
+
+    *state.fake_stream_handle.lock().unwrap() = Some(handle);
+    println!("Fake data stream started.");
+    
+    Ok(true) // Return the new state
 }
 
-#[tauri::command] // be able to stop fake_data_stream from the front end
+#[tauri::command]
 fn stop_data_acquisition(state: State<Arc<SerialState>>) -> Result<(), String> {
     // Stop fake data stream if running
-    let fake_running = state.fake_stream_running.load(Ordering::SeqCst);
-    if fake_running {
+    if state.fake_stream_running.load(Ordering::SeqCst) {
         println!("Stopping fake data stream...");
         state.fake_stream_running.store(false, Ordering::SeqCst);
         if let Some(handle) = state.fake_stream_handle.lock().unwrap().take() {
@@ -270,13 +270,12 @@ fn stop_data_acquisition(state: State<Arc<SerialState>>) -> Result<(), String> {
         println!("Fake data stream stopped.");
     }
     
-    // Close serial connection if active
-    let mut outbound_tx = state.outbound_tx.lock().unwrap();
-    if outbound_tx.is_some() {
-        println!("Closing serial connection...");
-        *outbound_tx = None;
-        println!("Serial connection closed.");
-    }
+    // Close serial connection if exists (by setting the sender to None)
+    let mut outbound = state.outbound_tx.lock().unwrap();
+    *outbound = None;
+    
+    // Note: Proper cleanup of other acquisition types (e.g., TCP) would be added here
+    
     Ok(())
 }
 
@@ -302,7 +301,7 @@ fn main() {
             get_recent_data,
             get_available_ports,
             start_fake_data,
-            stop_data_acquisition,
+            stop_data_acquisition
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

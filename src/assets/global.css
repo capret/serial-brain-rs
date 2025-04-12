@@ -14,14 +14,15 @@
   color: white;
   padding-top: 0.75rem; /* py-3 */
   padding-bottom: 0.75rem;
-  border-radius: 0.375rem; /* rounded-md */
+  border-radius: 1rem; 
+  border: 0px solid #000000;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .btn-primary:hover {
-  background-color: rgb(97 27 248); /* hover:bg-primary-700 */
+  background-color: rgb(145, 94, 255); /* hover:bg-primary-700 */
 }
 
 .btn-secondary {
@@ -240,6 +241,8 @@ details > summary::-webkit-details-marker {
 .font-sans {
   font-family: 'Open Sans', ui-sans-serif, system-ui, sans-serif;
 }
+
+
 
 .rounded-lg {
   border-radius: 0.5rem;
