@@ -1,11 +1,25 @@
 <template>
   <div class="border rounded-md shadow-sm bg-white p-4 h-[500px] mb-4">
-    <div class="form-group horizontal mb-2">
-      <label for="windowSize">Display Window Size:</label>
-      <input id="windowSize" type="number" v-model.number="windowSize" min="1" max="5000" @change="refreshData" class="px-2 py-1 rounded border" />
-      <button class="btn ml-2 px-3 py-1 bg-blue-500 text-white rounded" @click="refreshData">Refresh Data</button>
+    <div class="chart-controls mb-2">
+      <div class="slider-container">
+        <label for="windowSize">Display Window Size: <span class="window-size-value">{{ windowSize }}</span></label>
+        <div class="slider-with-labels">
+          <span class="slider-min-label">100</span>
+          <input 
+            id="windowSize" 
+            type="range" 
+            v-model.number="windowSize" 
+            min="100" 
+            max="20000" 
+            step="100"
+            @change="refreshData" 
+            class="window-size-slider" 
+          />
+          <span class="slider-max-label">20000</span>
+        </div>
+      </div>
+      <button class="btn refresh-btn bg-blue-500 text-white rounded" @click="refreshData">Refresh Data</button>
     </div>
-    <!-- Responsive chart container -->
     <div ref="chartDiv" class="chart-container h-[420px]"></div>
   </div>
 </template>
@@ -16,6 +30,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+
 
 const windowSize = ref(1000);
 const displayedData = ref([]);
@@ -143,3 +158,93 @@ onBeforeUnmount(() => {
 // Expose refreshData to parent component
 defineExpose({ refreshData });
 </script>
+
+<style scoped>
+.chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.slider-container {
+  flex: 1;
+  min-width: 300px;
+}
+
+.window-size-value {
+  font-weight: bold;
+  color: #4a5568;
+  min-width: 3rem;
+  display: inline-block;
+}
+
+.slider-with-labels {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.window-size-slider {
+  flex: 1;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.window-size-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.window-size-slider::-webkit-slider-thumb:hover {
+  background: #2563eb;
+}
+
+.window-size-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.window-size-slider::-moz-range-thumb:hover {
+  background: #2563eb;
+}
+
+.slider-min-label, .slider-max-label {
+  font-size: 0.8rem;
+  color: #718096;
+  width: 3rem;
+  text-align: center;
+}
+
+.refresh-btn {
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.refresh-btn:hover {
+  background-color: #2563eb;
+}
+
+.chart-container {
+  width: 100%;
+  position: relative;
+}
+</style>

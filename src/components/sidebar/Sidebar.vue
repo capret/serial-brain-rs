@@ -1,13 +1,13 @@
 <template>
-  <div class="w-[300px] border-r border-gray-200 bg-gray-50 flex flex-col h-full">
+  <div class="sidebar-container border-r border-gray-200 bg-gray-50 flex flex-col h-full">
     <div class="p-4 overflow-y-auto flex-1">
       <h2 class="text-lg font-medium mb-4">Signal Configuration</h2>
       
       <!-- Data Source Selection Panel -->
       <DataSourcePanel ref="dataSourcePanel" @source-changed="onDataSourceChanged" />
       
-      <!-- Unified Data Source Settings Panel -->
-      <details class="panel" open>
+      <!-- Unified Data Source Settings Panel with Auto-scaling -->
+      <details class="panel auto-scale-panel" open>
         <summary class="panel-header">
           <span class="font-medium">Data Source Settings</span>
           <span class="material-symbols-outlined transition-transform group-open:rotate-180">expand_more</span>
@@ -281,8 +281,84 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.w-\[300px\] {
+/* Responsive form controls */
+.form-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.form-input, .form-select {
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid #e2e8f0;
+  background-color: white;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus, .form-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Panel styling with auto-scaling */
+.panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  background-color: white;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: #f8fafc;
+  cursor: pointer;
+  user-select: none;
+}
+
+.panel-body {
+  padding: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Space between form elements */
+.space-y-3 > * + * {
+  margin-top: 0.75rem;
+}
+
+.sidebar-container {
   width: 300px;
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .sidebar-container {
+    width: 250px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar-container {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid rgb(229 231 235);
+    height: auto;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+}
+
+.auto-scale-panel {
+  transition: all 0.3s ease;
 }
 
 .border-r {

@@ -4,17 +4,6 @@
       <div>
         <h2 class="text-xl font-semibold">Signal Visualization</h2>
       </div>
-      <!-- <div class="flex space-x-2">
-        <button class="p-2 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors">
-          <span class="material-symbols-outlined">fullscreen</span>
-        </button>
-        <button class="p-2 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors">
-          <span class="material-symbols-outlined">file_download</span>
-        </button>
-        <button class="p-2 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors">
-          <span class="material-symbols-outlined">settings</span>
-        </button>
-      </div> -->
     </div>
     
     <SignalChart ref="signalChart" />
