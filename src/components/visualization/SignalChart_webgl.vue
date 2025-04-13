@@ -34,20 +34,20 @@
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { WebglPlot, WebglLine, ColorRGBA } from 'webgl-plot';
+import {WebglPlot, WebglLine, ColorRGBA } from 'webgl-plot';
 
 // Reactive variables for window size and the latest data received
 const windowSize = ref(1000);
-const displayedData = ref([]); // Expected shape: Array of length = windowSize, each element: array of 8 channel values
+const displayedData = ref([]); // Expected data shape: an array with length = windowSize, where each element is an array of 8 channel values
 
 // Reference to the canvas element
 const plotCanvas = ref(null);
 
-// WebglPlot instance and a list for each channel’s line instance
+// WebglPlot instance and a list to hold each channel’s line instance
 let wglp = null;
 const lines = [];
 
-// Predefined colors for 8 channels
+// Predefined channel colors (in hex) for 8 channels.
 const channelColors = [
   "#FF6384",
   "#36A2EB",
@@ -59,7 +59,7 @@ const channelColors = [
   "#7CFFC4",
 ];
 
-// Helper to convert a hex color to a normalized ColorRGBA object
+// Helper: Convert a hex color to a normalized ColorRGBA object.
 function hexToRGBA(hex) {
   hex = hex.replace('#','');
   const bigint = parseInt(hex, 16);
@@ -69,12 +69,12 @@ function hexToRGBA(hex) {
   return new ColorRGBA(r / 255, g / 255, b / 255, 1);
 }
 
-// Initialize (or reinitialize) the WebGL‑Plot canvas and lines
+// Initialize (or reinitialize) the WebGL‑Plot canvas and lines.
 function initPlot() {
   const canvas = plotCanvas.value;
   if (!canvas) return;
   
-  // Account for devicePixelRatio in canvas dimensions
+  // Adjust canvas dimensions to account for the devicePixelRatio
   const devicePixelRatio = window.devicePixelRatio || 1;
   canvas.width = canvas.clientWidth * devicePixelRatio;
   canvas.height = canvas.clientHeight * devicePixelRatio;
@@ -85,19 +85,21 @@ function initPlot() {
   // Clear any previous lines if reinitializing
   lines.length = 0;
   
-  // Create one line per channel; use the current window size (number of points)
+  // Create one line per channel using the current window size for the number of points.
   const numPoints = windowSize.value;
   for (let i = 0; i < 8; i++) {
     const color = hexToRGBA(channelColors[i]);
+    // Create a WebglLine where the second parameter is the number of points.
     const line = new WebglLine(color, numPoints);
-    // Generate equally spaced x-values from -1 to 1
+    // Generate equally spaced x-values from -1 to 1.
     line.lineSpaceX(-1, 2 / numPoints);
     wglp.addLine(line);
     lines.push(line);
   }
 }
 
-// Retrieve data from the backend (expected to return an array of length n, each element being an array of 8 channel values)
+// Retrieve data from the backend. The backend should return an array of length "n"
+// where each element is an array of 8 channel values.
 async function refreshData() {
   try {
     const newData = await invoke('get_recent_data', { n: windowSize.value });
@@ -107,37 +109,16 @@ async function refreshData() {
   }
 }
 
-// Update each line’s y-values with normalized data based on the auto-scaled y‑axis.
-// This maps the raw value (based on computed min and max) to a normalized value in the range [-1, 1].
+// Update each line’s y-values with the latest data.
+// Assumes displayedData.value is an array of [n, 8]
 function updatePlot() {
   if (!displayedData.value || displayedData.value.length === 0) return;
-
-  // Calculate global minimum and maximum across all 1000 data points and channels
-  let yMin = Infinity,
-      yMax = -Infinity;
-  for (let i = 0; i < displayedData.value.length; i++) {
-    const dataPoint = displayedData.value[i];
-    for (let ch = 0; ch < 8; ch++) {
-      if (dataPoint[ch] < yMin) yMin = dataPoint[ch];
-      if (dataPoint[ch] > yMax) yMax = dataPoint[ch];
-    }
-  }
-  
-  // Ensure the range is not zero (avoid division by zero)
-  let range = yMax - yMin;
-  if (range === 0) {
-    range = 1;
-  }
-  
-  // Update the y-values for each channel, mapping them into the [-1, 1] range
   const n = displayedData.value.length;
   for (let i = 0; i < n; i++) {
-    const dataPoint = displayedData.value[i];
+    const point = displayedData.value[i];
+    // Loop over each channel (we expect 8 values per data point)
     for (let ch = 0; ch < 8; ch++) {
-      // Normalize the raw value to the [-1, 1] range:
-      // - yMin maps to -1 and yMax maps to 1.
-      // const normalizedY = ((dataPoint[ch] - yMin) / range) * 2 - 1;
-      lines[ch].setY(i, dataPoint[ch]);
+      lines[ch].setY(i, point[ch]);
     }
   }
 }
@@ -149,7 +130,7 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
-// Optionally throttle backend updates
+// Optionally throttle backend data updates
 let updateScheduled = false;
 function scheduleUpdate() {
   if (!updateScheduled) {
@@ -157,11 +138,11 @@ function scheduleUpdate() {
     setTimeout(() => {
       refreshData();
       updateScheduled = false;
-    }, 30);
+    }, 50);
   }
 }
 
-// Handle window resize by reinitializing the plot to fit new dimensions.
+// On window resize, reinitialize the plot to fit the new dimensions.
 function handleResize() {
   if (plotCanvas.value) {
     initPlot();
@@ -169,13 +150,13 @@ function handleResize() {
 }
 
 onMounted(async () => {
-  // Initialize the plot canvas and create lines
+  // Initialize the plot canvas and create the lines
   initPlot();
   
   // Load the initial data
   await refreshData();
   
-  // Start the animation loop
+  // Start the animation loop (dynamic updates)
   requestAnimationFrame(animate);
   
   // Listen for Tauri events (for example "serial_data") to trigger data refreshes.
@@ -183,25 +164,24 @@ onMounted(async () => {
     scheduleUpdate();
   });
   
-  // Update the plot on window resize.
+  // Update the plot on resize
   window.addEventListener("resize", handleResize);
 });
 
-// When windowSize changes (e.g., via the slider), reinitialize the plot and refresh data.
+// When windowSize changes (via slider), reinitialize the plot and refresh data.
 watch(windowSize, () => {
   initPlot();
   refreshData();
 });
 
-// Clean up the resize listener when the component unmounts.
+// Clean up the resize listener
 onBeforeUnmount(() => {
   window.removeEventListener("resize", handleResize);
 });
 
-// Expose refreshData so the parent component can trigger a refresh if needed.
+// Expose refreshData so that the parent component can trigger a refresh if needed.
 defineExpose({ refreshData });
 </script>
-
 
 <style scoped>
 .chart-controls {
@@ -290,7 +270,7 @@ defineExpose({ refreshData });
 /* The canvas fills the available space */
 .chart-container {
   width: 100%;
-  height: 400px;
+  height: 100%;
   display: block;
 }
 </style>

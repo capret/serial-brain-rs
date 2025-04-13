@@ -1,19 +1,18 @@
 <template>
-  <header class="header-container">
+  <header class="header-container" id="titlebar">
     <div class="title-area">
       <h1 class="text-2xl font-bold">Signal Realtime Plot</h1>
       <p class="text-sm opacity-80">Monitor and analyze multi-channel signals in real-time</p>
     </div>
-    
     <div class="window-controls">
-      <button @click="minimizeWindow" class="control-btn minimize" title="Minimize">
+      <button id="titlebar-minimize" class="control-btn minimize" title="Minimize">
         <span>—</span>
       </button>
-      <button @click="maximizeWindow" class="control-btn maximize" title="Maximize">
-        <span>□</span>
+      <button id="titlebar-maximize" class="control-btn maximize" title="Maximize">
+        <span>▢</span>
       </button>
-      <button @click="closeWindow" class="control-btn close" title="Close">
-        <span>×</span>
+      <button id="titlebar-close" class="control-btn close" title="Close">
+        <span>✕</span>
       </button>
     </div>
   </header>
@@ -22,49 +21,54 @@
 <script setup>
 // Import the Window API from Tauri
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { onMounted } from 'vue';
 const appWindow = getCurrentWindow();
-const minimizeWindow = async () => {
-  try {
-    await appWindow.minimize();
-  } catch (e) {
-    console.error('Failed to minimize window:', e);
-  }
-};
+// Use onMounted to set up the event listeners once the DOM is ready
+onMounted(() => {
+  // Set up the window controls
+  document.getElementById('titlebar-minimize')?.addEventListener('click', () => {
+    console.log('Minimize clicked');
+    appWindow.minimize();
+  });
 
-const maximizeWindow = async () => {
-  try {
-    const isMaximized = await appWindow.isMaximized();
-    if (isMaximized) {
-      await appWindow.unmaximize();
-    } else {
-      await appWindow.maximize();
+  document.getElementById('titlebar-maximize')?.addEventListener('click', () => {
+    console.log('Maximize clicked');
+    appWindow.toggleMaximize();
+  });
+
+  document.getElementById('titlebar-close')?.addEventListener('click', () => {
+    console.log('Close clicked');
+    appWindow.close();
+  });
+
+  document.getElementById('titlebar')?.addEventListener('mousedown', (e) => {
+    if (e.buttons === 1 && !e.target.closest('.window-controls')) {
+      if (e.detail === 2) {
+        appWindow.toggleMaximize();
+      } else {
+        appWindow.startDragging();
+      }
     }
-  } catch (e) {
-    console.error('Failed to toggle maximize window:', e);
-  }
-};
-
-const closeWindow = async () => {
-  try {
-    await appWindow.close();
-  } catch (e) {
-    console.error('Failed to close window:', e);
-  }
-};
+  });
+});
 </script>
 
 <style scoped>
-
 .header-container {
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  padding: 1rem 0 1rem 1rem;
   background-image: linear-gradient(to right, rgb(99 27 255), rgb(70 7 208));
   color: white;
   position: relative;
   height: 150px;
   box-sizing: border-box;
+  user-select: none;
+  -webkit-app-region: drag;
 }
 
 .title-area {
@@ -95,8 +99,10 @@ const closeWindow = async () => {
 
 .window-controls {
   display: flex;
-  -webkit-app-region: no-drag; /* Make buttons clickable */
-  z-index: 10;
+  position: absolute;
+  top: 0;
+  right: 0;
+  -webkit-app-region: no-drag;
 }
 
 .control-btn {
@@ -105,12 +111,14 @@ const closeWindow = async () => {
   justify-content: center;
   width: 46px;
   height: 46px;
+  padding: 0;
   border: none;
-  cursor: pointer;
-  font-size: 16px;
-  transition: background-color 0.15s;
-  color: white;
   background-color: transparent;
+  color: white;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
 }
 
 .minimize span {
@@ -119,7 +127,11 @@ const closeWindow = async () => {
 }
 
 .maximize span {
-  font-size: 18px;
+  font-size: 16px;
+}
+
+.close span {
+  font-size: 24px;
 }
 
 .minimize:hover {
@@ -132,9 +144,5 @@ const closeWindow = async () => {
 
 .close:hover {
   background-color: #E81123;
-}
-
-.close span {
-  font-size: 20px;
 }
 </style>
