@@ -91,7 +91,7 @@ function formatData(newData) {
   const xValues = new Array(n);
   const channels = Array.from({ length: 8 }, () => new Array(n));
   for (let i = 0; i < n; i++) {
-    xValues[i] = i + 1;
+    xValues[i] = i + 1;  // Sequential x-values starting from 1
     const point = newData[i];
     for (let c = 0; c < 8; c++) {
       channels[c][i] = point[c];
@@ -103,11 +103,54 @@ function formatData(newData) {
 // Refresh data from the backend and update the chart.
 async function refreshData() {
   try {
-    const newData = await invoke('get_recent_data', { n: windowSize.value });
+    // Remove the n parameter as backend now returns all data since last call
+    const newData = await invoke('get_recent_data');
     displayedData.value = newData;
     if (newData && newData.length > 0 && uplotInstance) {
-      const formatted = formatData(newData);
-      uplotInstance.setData(formatted);
+      // Process the data for uPlot and maintain a sliding window
+      const currentData = uplotInstance.data;
+      const formattedNewData = formatData(newData);
+      
+      // Only keep the latest windowSize.value data points
+      let combinedData;
+      if (currentData[0].length > 0) {
+        // If we have existing data in the chart
+        const existingDataLength = currentData[0].length;
+        const newDataLength = formattedNewData[0].length;
+        const totalLength = existingDataLength + newDataLength;
+        
+        // If combined data exceeds window size, keep only the most recent points
+        if (totalLength > windowSize.value) {
+          // Calculate how many points to keep from existing data
+          const keepFromExisting = Math.max(0, windowSize.value - newDataLength);
+          
+          // For each data series (x-axis + 8 channels)
+          combinedData = currentData.map((series, i) => {
+            // Take the most recent points from existing data
+            const keptExisting = keepFromExisting > 0 ? series.slice(-keepFromExisting) : [];
+            // Append all new data
+            return [...keptExisting, ...formattedNewData[i]];
+          });
+        } else {
+          // If combined data fits within window size, keep all
+          combinedData = currentData.map((series, i) => {
+            return [...series, ...formattedNewData[i]];
+          });
+        }
+      } else {
+        // If there's no existing data, just use the new data
+        combinedData = formattedNewData;
+      }
+      
+      // Update x-values to be sequential
+      if (combinedData[0].length > 0) {
+        for (let i = 0; i < combinedData[0].length; i++) {
+          combinedData[0][i] = i + 1;
+        }
+      }
+      
+      // Update the chart with the combined data
+      uplotInstance.setData(combinedData);
     }
   } catch (error) {
     console.error("Error retrieving data:", error);

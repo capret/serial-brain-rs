@@ -36,7 +36,9 @@ struct FakeDataConfig {
 /// Shared state for our serial connection.
 struct SerialState {
     outbound_tx: Mutex<Option<Sender<String>>>,
-    buffer: Mutex<VecDeque<ChannelData>>,
+    active_buffer: Mutex<VecDeque<ChannelData>>,
+    read_buffer: Mutex<VecDeque<ChannelData>>,
+    buffer_lock: Mutex<()>,
     fake_stream_running: Arc<AtomicBool>,
     fake_stream_handle: Mutex<Option<JoinHandle<()>>>,
 }
@@ -45,25 +47,46 @@ impl SerialState {
     fn new() -> Self {
         Self {
             outbound_tx: Mutex::new(None),
-            buffer: Mutex::new(VecDeque::with_capacity(50000)),
+            active_buffer: Mutex::new(VecDeque::with_capacity(50000)),
+            read_buffer: Mutex::new(VecDeque::with_capacity(50000)),
+            buffer_lock: Mutex::new(()),
             fake_stream_running: Arc::new(AtomicBool::new(false)),
             fake_stream_handle: Mutex::new(None),
         }
     }
 
     fn add_data(&self, data: ChannelData) {
-        let mut buf = self.buffer.lock().unwrap();
-        if buf.len() >= 50000 {
-            buf.pop_front();
+        // Acquire the lock to ensure consistency during writes
+        let _guard = self.buffer_lock.lock().unwrap();
+        
+        // Add data to both buffers to ensure no data loss
+        // Active buffer
+        let mut active_buf = self.active_buffer.lock().unwrap();
+        if active_buf.len() >= 50000 {
+            active_buf.pop_front();
         }
-        buf.push_back(data);
+        active_buf.push_back(data);
+        
+        // Read buffer
+        let mut read_buf = self.read_buffer.lock().unwrap();
+        if read_buf.len() >= 50000 {
+            read_buf.pop_front();
+        }
+        read_buf.push_back(data);
     }
 
-    fn get_data(&self, n: usize) -> Vec<ChannelData> {
-        let buf = self.buffer.lock().unwrap();
-        let mut collected: Vec<ChannelData> = buf.iter().rev().take(n).cloned().collect();
-        collected.reverse();
-        collected
+    fn get_data(&self) -> Vec<ChannelData> {
+        // Acquire the lock to prevent data modifications during reading
+        let _guard = self.buffer_lock.lock().unwrap();
+        
+        // Get read buffer and copy its contents
+        let mut read_buf = self.read_buffer.lock().unwrap();
+        let result: Vec<ChannelData> = read_buf.iter().cloned().collect();
+        
+        // Clear the read buffer after readings
+        read_buf.clear();
+        
+        result
     }
 }
 
@@ -152,8 +175,8 @@ fn send_serial(message: String, state: State<Arc<SerialState>>) -> Result<(), St
 }
 
 #[tauri::command]
-fn get_recent_data(n: usize, state: State<Arc<SerialState>>) -> Result<Vec<ChannelData>, String> {
-    Ok(state.get_data(n))
+fn get_recent_data(state: State<Arc<SerialState>>) -> Result<Vec<ChannelData>, String> {
+    Ok(state.get_data())
 }
 
 // Command to start the fake data stream with configuration

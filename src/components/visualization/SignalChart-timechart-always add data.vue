@@ -66,12 +66,18 @@ const initialSeries = channelColors.map((color, i) => ({
 const chartOptions = {
   series: initialSeries,
   // xRange: { min: 0, max: windowSize.value },
-  realTime: true,
+  // legend: false,
+  realTime: false,
   xRange: { min: 0, max: 1000 },
-  tooltip: { enabled: false },
+  tooltip: { enabled: true ,
+    xFormatter: (x) => new Date(x).toLocaleString([], 
+      {hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3}),
+  },
+  renderPaddingLeft: 45,
   zoom: {
     x: {
       autoRange: true,
+      minDomainExtent: 0,
     },
     y: {
       autoRange: true,
@@ -91,16 +97,9 @@ function initChart() {
 
     chartOptions.height = containerHeight;
     chartDiv.value.style.height = containerHeight + 'px';
-    // Let width be controlled by CSS (100%)
-    // chartOptions.realTime = true;
-    // Create the TimeChart instance
     timeChartInstance = new TimeChart(chartDiv.value, chartOptions);
-    // timeChartInstance.options.realTime = true;
-    // timeChartInstance.options.xRange = { min: 0, max: 2000 };
-    // timeChartInstance.update();
+
     console.log("X Range:", timeChartInstance.options.xRange);
-    // Handle window resize to make chart responsive
-    // window.addEventListener('resize', resizeChart);
   } else {
     console.error("Chart container element not found");
   }
@@ -110,31 +109,28 @@ function initChart() {
 function updateChartData(newData) {
   const n = newData.length;
   console.log("Updating chart data with", n, "points");
-  // channelDataArrays.forEach(array => {
-  //   while (array.length > 0) {
-  //     array.pop();
-  //   }
-  // });
-  // Add new data points
+  const maxSize = 3000;
   for (let i = 0; i < n; i++) {
     const point = newData[i];
     const index = global_index;
+
     for (let ch = 0; ch < Math.min(8, point.length); ch++) {
       channelDataArrays[ch].push({ x: index, y: point[ch] });
+      // if (channelDataArrays[ch].length > maxSize) {
+      //   channelDataArrays[ch].shift();
+      // }
     }
     global_index++;
   }
   
-
-
-  const maxSize = 25000;
+  
 
   // channelDataArrays.forEach(array => {
   //   if (array.length > maxSize) {
   //     console.log("Trimming array to", maxSize, "points");
   //     const excessPoints = array.length - maxSize;
   //     array.splice(0, excessPoints);
-  //     array.shift(excessPoints);
+  //     // array.shift(excessPoints);
 
   //   }
   // });
