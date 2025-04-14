@@ -6,49 +6,114 @@
       </div>
     </div>
     
-    <SignalChart ref="signalChart" />
+    <SignalChart 
+      ref="signalChart" 
+      @crosshair-move="handleCrosshairMove"
+    />
     
-    <div class="grid grid-cols-4 gap-4">
+    <div class="channel-card-grid">
       <ChannelStatCard 
-        title="Channel 1" 
-        currentValue="78.6" 
-        minValue="32.4" 
-        maxValue="96.3" 
-        avgValue="56.2"
-        colorClass="bg-blue-500" 
-      />
-      <ChannelStatCard 
-        title="Channel 2" 
-        currentValue="45.3" 
-        minValue="21.7" 
-        maxValue="65.7" 
-        avgValue="61.2"
-        colorClass="bg-green-500" 
-      />
-      <ChannelStatCard 
-        title="Channel 3" 
-        currentValue="82.1" 
-        minValue="45.6" 
-        maxValue="94.2" 
-        avgValue="70.3"
-        colorClass="bg-yellow-500" 
-      />
-      <ChannelStatCard 
-        title="Channel 4" 
-        currentValue="67.8" 
-        minValue="30.2" 
-        maxValue="75.8" 
-        avgValue="68.5"
-        colorClass="bg-red-500" 
+        v-for="(channel, index) in channelStats" 
+        :key="index"
+        :title="`Channel ${index + 1}`" 
+        :currentValue="formatValue(channel.current)" 
+        :minValue="formatValue(channel.min)" 
+        :maxValue="formatValue(channel.max)" 
+        :avgValue="formatValue(channel.avg)"
+        :colorClass="channelColors[index]" 
       />
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { listen } from '@tauri-apps/api/event';
 import SignalChart from './SignalChart.vue';
 import ChannelStatCard from './ChannelStatCard.vue';
 
+// Define state for channel statistics
+const channelStats = ref([
+  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
+  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
+  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
+  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
+  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
+  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
+  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
+  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 }
+]);
+
+// Channel color classes for visual differentiation
+const channelColors = [
+  'bg-channel-1', // #FF6384
+  'bg-channel-2', // #36A2EB
+  'bg-channel-3', // #FFCE56
+  'bg-channel-4', // #4BC0C0
+  'bg-channel-5', // #9966FF
+  'bg-channel-6', // #FF9F40
+  'bg-channel-7', // #E7E9ED
+  'bg-channel-8'  // #7CFFC4
+];
+
+// Format numeric values with appropriate precision
+function formatValue(value) {
+  return value.toFixed(1);
+}
+
+// Handle crosshair movement to update current values
+function handleCrosshairMove(data) {
+  if (data && data.dataValues) {
+    // Update current values from crosshair position
+    for (let i = 0; i < Math.min(data.dataValues.length, channelStats.value.length); i++) {
+      channelStats.value[i].current = data.dataValues[i];
+    }
+  }
+}
+
+// Update statistics for all channels when new data is received
+function updateChannelStats(data) {
+  if (!data || !Array.isArray(data) || data.length === 0) return;
+
+  // Update statistics for each channel
+  for (let i = 0; i < Math.min(data.length, channelStats.value.length); i++) {
+    const value = data[i];
+    const stats = channelStats.value[i];
+    
+    // Don't update current value here - it's now controlled by the crosshair
+    
+    // Update min/max
+    if (stats.count === 0 || value < stats.min) {
+      stats.min = value;
+    }
+    if (stats.count === 0 || value > stats.max) {
+      stats.max = value;
+    }
+    
+    // Update average
+    stats.sum += value;
+    stats.count += 1;
+    stats.avg = stats.sum / stats.count;
+  }
+}
+
+// Listen for serial data events
+let unlistenFn = null;
+
+onMounted(async () => {
+  unlistenFn = await listen('serial_data', (event) => {
+    // Event data is assumed to be an array of 8 channel values
+    if (event.payload) {
+      updateChannelStats(event.payload);
+    }
+  });
+});
+
+onBeforeUnmount(() => {
+  if (unlistenFn) {
+    unlistenFn();
+  }
+});
 </script>
 
 <style scoped>
@@ -123,16 +188,47 @@ import ChannelStatCard from './ChannelStatCard.vue';
   transition-duration: 150ms;
 }
 
-.grid {
-  display: grid;
-}
-
-.grid-cols-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.channel-card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .gap-4 {
   gap: 1rem;
+}
+
+/* Channel background colors matching the chart */
+.bg-channel-1 {
+  background-color: #FF6384;
+}
+
+.bg-channel-2 {
+  background-color: #36A2EB;
+}
+
+.bg-channel-3 {
+  background-color: #FFCE56;
+}
+
+.bg-channel-4 {
+  background-color: #4BC0C0;
+}
+
+.bg-channel-5 {
+  background-color: #9966FF;
+}
+
+.bg-channel-6 {
+  background-color: #FF9F40;
+}
+
+.bg-channel-7 {
+  background-color: #E7E9ED;
+}
+
+.bg-channel-8 {
+  background-color: #7CFFC4;
 }
 
 .bg-blue-500 {

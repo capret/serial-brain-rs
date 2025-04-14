@@ -9,16 +9,8 @@
         </label>
         <div class="slider-with-labels">
           <span class="slider-min-label">100</span>
-          <input 
-            id="windowSize" 
-            type="range" 
-            v-model.number="windowSize" 
-            min="100" 
-            max="20000" 
-            step="100"
-            @change="initPlot" 
-            class="window-size-slider" 
-          />
+          <input id="windowSize" type="range" v-model.number="windowSize" min="100" max="20000" step="100"
+            @change="initPlot" class="window-size-slider" />
           <span class="slider-max-label">20000</span>
         </div>
       </div>
@@ -43,14 +35,16 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { WebglPlot, WebglLine, ColorRGBA } from "webgl-plot";
 
+const emit = defineEmits(['crosshair-move']);
+
 /* ====================================================
    1. State and Plot Settings
    ==================================================== */
 const windowSize = ref(1000);
 const dataBuffer = ref([]);
 const MAX_BUFFER_SIZE = 50000;
-const yMin = ref(0);
-const yMax = ref(1000);
+const yMin = ref(-0.05); // Default min value with small negative offset
+const yMax = ref(1.05);  // Default max value with small positive offset
 const dataScale = ref(1);
 const dataOffset = ref(0);
 
@@ -72,6 +66,12 @@ let Rect = null;       // Zoom selection rectangle
 let zoomFlag = false;  // Indicates left-click zoom gesture active
 let cursorDownX = 0;   // X coordinate at mouse down (in current data coordinates)
 let initialX = 0;      // For touch events
+
+/* --- Crosshair variables --- */
+let crossXLine = null; // Horizontal crosshair line
+let crossYLine = null; // Vertical crosshair line
+let crossX = 0;        // Current X position of crosshair
+let crossY = 0;        // Current Y position of crosshair
 
 /* --- Axis configuration --- */
 const Y_AXIS_DIVISIONS = 8;  // Number of divisions for Y axis
@@ -98,7 +98,7 @@ function initAxisCanvas(canvas) {
   const devicePixelRatio = window.devicePixelRatio || 1;
   canvas.width = canvas.clientWidth * devicePixelRatio;
   canvas.height = canvas.clientHeight * devicePixelRatio;
-  
+
   const ctx2d = canvas.getContext("2d");
   if (ctx2d) {
     ctx2d.font = "12px Arial";
@@ -115,28 +115,28 @@ function initAxisCanvas(canvas) {
 function updateYAxis() {
   const canvas = yAxisCanvas.value;
   if (!canvas) return;
-  
+
   const ctx2d = initAxisCanvas(canvas);
   if (!ctx2d) return;
-  
+
   const width = canvas.width;
   const height = canvas.height;
   const divisions = Y_AXIS_DIVISIONS;
-  
+
   ctx2d.clearRect(0, 0, width, height);
-  
+
   for (let i = 0; i <= divisions; i++) {
     // Calculate the data value at this position
     const value = yMax.value - (i / divisions) * (yMax.value - yMin.value);
     // Calculate position - leave room for x-axis at bottom
     const y = (i / divisions) * (height - 20);
-    
+
     // Draw grid line
     ctx2d.beginPath();
     ctx2d.moveTo(width - 5, y);
     ctx2d.lineTo(width, y);
     ctx2d.stroke();
-    
+
     // Draw text label
     const formattedValue = value.toFixed(1);
     ctx2d.fillText(formattedValue, 2, y + 4);
@@ -149,36 +149,36 @@ function updateYAxis() {
 function updateXAxis() {
   const canvas = xAxisCanvas.value;
   if (!canvas) return;
-  
+
   const ctx2d = initAxisCanvas(canvas);
   if (!ctx2d) return;
-  
+
   const width = canvas.width;
   const height = canvas.height;
   const divisions = X_AXIS_DIVISIONS;
-  
+
   ctx2d.clearRect(0, 0, width, height);
-  
+
   // Calculate time values based on window size and sample rate
   // For simplicity, we'll use index values here
   // In a real app, you might want to use actual time or timestamps
   for (let i = 0; i <= divisions; i++) {
     const position = (i / divisions) * width;
-    
+
     // Calculate the x value at this position
     // Convert from screen position to data coordinates
     const screenX = (2 * position / width) - 1; // Convert to [-1, 1] range
     const dataX = (screenX - wglp?.gOffsetX || 0) / (wglp?.gScaleX || 1);
-    
+
     // Index in the data
     const index = Math.floor((dataX + 1) / 2 * windowSize.value);
-    
+
     // Draw tick
     ctx2d.beginPath();
     ctx2d.moveTo(position, 0);
     ctx2d.lineTo(position, 5);
     ctx2d.stroke();
-    
+
     // Draw label
     if (index >= 0 && index <= windowSize.value) {
       ctx2d.fillText(index.toString(), position - 10, 20);
@@ -196,15 +196,15 @@ function updateXAxis() {
 function initPlot() {
   const canvas = plotCanvas.value;
   if (!canvas) return;
-  
+
   const devicePixelRatio = window.devicePixelRatio || 1;
   canvas.width = canvas.clientWidth * devicePixelRatio;
   canvas.height = canvas.clientHeight * devicePixelRatio;
-  
+
   // Create a new WebGL‑Plot instance and clear previous lines.
   wglp = new WebglPlot(canvas);
   lines.length = 0;
-  
+
   // Create 8 data channels with preset colors.
   const numPoints = windowSize.value;
   const channelColors = [
@@ -218,12 +218,12 @@ function initPlot() {
     wglp.addLine(line);
     lines.push(line);
   }
-  
+
   // If historical data exists, fill the plot.
   if (dataBuffer.value.length > 0) {
     fillLinesWithExistingData();
   }
-  
+
   // ----- Add Interactive Overlay: Zoom Rectangle -----
   // Initially, the rectangle spans the default x-range and full y range.
   Rect = new WebglLine(new ColorRGBA(0.9, 0.9, 0.9, 1), 4);
@@ -232,7 +232,21 @@ function initPlot() {
   Rect.xy = new Float32Array([-0.5, yMin.value, -0.5, yMax.value, 0.5, yMax.value, 0.5, yMin.value]);
   Rect.visible = false;
   wglp.addLine(Rect);
+
+  // ----- Add Crosshair Lines -----
+  const crossColor = new ColorRGBA(0.1, 0.9, 0.1, 1); // Green color
+  crossXLine = new WebglLine(crossColor, 2);
+  crossYLine = new WebglLine(crossColor, 2);
   
+  // Initialize crosshair at center with correct vertical range
+  crossX = 0;
+  crossY = (yMin.value + yMax.value) / 2;
+  crossXLine.xy = new Float32Array([crossX, yMin.value, crossX, yMax.value]); // Vertical line spans full y-range
+  crossYLine.xy = new Float32Array([-1, crossY, 1, crossY]); // Horizontal line
+  
+  wglp.addLine(crossXLine);
+  wglp.addLine(crossYLine);
+
   // ----- Register Event Listeners (Left-Click and Touch Only) -----
   const canvasEl = plotCanvas.value;
   // Removed wheel and right-click events; also no cursor style change.
@@ -244,11 +258,11 @@ function initPlot() {
   canvasEl.addEventListener("mouseup", mouseUp);
   canvasEl.addEventListener("dblclick", dblClick);
   canvasEl.addEventListener("contextmenu", contextMenu);
-  
+
   if (!animationFrame) {
     animationFrame = requestAnimationFrame(animate);
   }
-  
+
   // Initialize and update axes
   updateYAxis();
   updateXAxis();
@@ -260,15 +274,15 @@ function initPlot() {
 function clearPlot() {
   // Clear the data buffer
   dataBuffer.value = [];
-  
+
   // Re-initialize the plot with empty data
   initPlot();
-  
+
   // Reset vertical scaling
-  yMin.value = 0;
-  yMax.value = 1000;
+  yMin.value = -0.05;
+  yMax.value = 1.05;
   updatePlotScale();
-  
+
   console.log("Plot cleared");
 }
 
@@ -309,10 +323,11 @@ async function refreshData() {
     if (newData && newData.length > 0) {
       addToDataBuffer(newData);
       addNewDataPoints(newData);
-      console.log(`Got ${newData.length} data points in ${fetchTime}ms`);
-    } else {
-      console.log(`No new data received (${fetchTime}ms)`);
+      // console.log(`Got ${newData.length} data points in ${fetchTime}ms`);
     }
+    // else {
+    //   console.log(`No new data received (${fetchTime}ms)`);
+    // }
   } catch (error) {
     console.error("Error retrieving data:", error);
   } finally {
@@ -362,9 +377,14 @@ function updatePlotScale() {
   for (let i = 0; i < lines.length; i++) {
     lines[i].offsetY = dataOffset.value * dataScale.value;
   }
-  
+
   // Update axis when scale changes
   updateYAxis();
+  
+  // Update the crosshair when scale changes to ensure it stays visible
+  if (crossXLine && crossYLine) {
+    updateCrosshair(crossX, crossY);
+  }
 }
 
 /**
@@ -387,6 +407,11 @@ function updateMinMax() {
   yMin.value = minVal - margin;
   yMax.value = maxVal + margin;
   updatePlotScale();
+  
+  // Make sure to update crosshair when min/max changes
+  if (crossXLine && crossYLine) {
+    updateCrosshair(crossX, crossY);
+  }
 }
 
 /**
@@ -410,7 +435,7 @@ function animate() {
 function scheduleUpdate() {
   if (updateScheduled) return;
   const now = Date.now();
-  const minTimeBetween = 30;
+  const minTimeBetween = 16;
   if (now - lastUpdateTime < minTimeBetween) {
     const waitTime = minTimeBetween - (now - lastUpdateTime);
     updateScheduled = true;
@@ -427,6 +452,86 @@ function scheduleUpdate() {
       lastUpdateTime = Date.now();
     }, 0);
   }
+}
+
+/**
+ * Get the data values for all channels at a specific x position
+ */
+ function getDataValuesAtPosition(x) {
+  // Return all zeros if there is no data or no lines
+  if (!dataBuffer.value || dataBuffer.value.length === 0 || !lines.length) {
+    return Array(8).fill(0);
+  }
+
+  // Get the slice of visible data
+  const visibleData = dataBuffer.value.slice(-windowSize.value);
+  if (visibleData.length === 0) {
+    return Array(8).fill(0);
+  }
+  if (!lines.length || !wglp) {
+    return Array(8).fill(0);
+  }
+
+  // Choose any line (all have the same numPoints)
+  const line = lines[0];
+  // Compute the canvas index (from 0 to windowSize-1) from x, where x is in [-1, 1]
+  let canvasIndex = Math.round(((x + 1) / 2) * (line.numPoints - 1));
+
+  // When the visible data does not fill the entire plot, compute the offset
+  const offset = Math.max(0, windowSize.value - visibleData.length);
+
+  // Check if we're outside the data range
+  if (canvasIndex < 0 || canvasIndex >= line.numPoints) {
+    return Array(8).fill(0); // Return zeros if out of range
+  }
+
+  // Map canvasIndex to an index into visibleData
+  let dataIndex;
+  if (canvasIndex < offset) {
+    // If before the actual data starts, return zeros
+    return Array(8).fill(0);
+  } else {
+    dataIndex = canvasIndex - offset;
+  }
+
+  // Ensure dataIndex is valid
+  if (dataIndex < 0 || dataIndex >= visibleData.length) {
+    return Array(8).fill(0);
+  }
+
+  // Build the result for each channel
+  const result = [];
+  for (let ch = 0; ch < 8; ch++) {
+    result.push(visibleData[dataIndex][ch]);
+  }
+  return result;
+}
+
+/**
+ * Update the position of the crosshair lines
+ */
+function updateCrosshair(x, y) {
+  if (!crossXLine || !crossYLine) return;
+  
+  // Store current position for reference
+  crossX = x;
+  crossY = y;
+  
+  // Update vertical line (constant x) - always span from yMin to yMax
+  crossXLine.xy = new Float32Array([x, yMin.value, x, yMax.value]);
+  
+  // Update horizontal line (constant y)
+  crossYLine.xy = new Float32Array([-1, y, 1, y]);
+  
+  // Get data values at the crosshair position
+  const dataValues = getDataValuesAtPosition(x);
+  
+  // Emit event with crosshair data
+  emit('crosshair-move', {
+    x: x,
+    y: y,
+    dataValues: dataValues
+  });
 }
 
 /* ====================================================
@@ -476,17 +581,32 @@ function mouseDown(e) {
 /**
  * Mouse move updates the zoom selection rectangle.
  * The x coordinate is converted to the current data coordinate.
- * The rectangle’s y coordinates are set to the current yMin and yMax.
+ * The rectangle's y coordinates are set to the current yMin and yMax.
  */
 function mouseMove(e) {
   e.preventDefault();
+  
+  // Get mouse position relative to canvas
+  const canvas = plotCanvas.value;
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  const boundingRect = canvas.getBoundingClientRect();
+  const relativeX = (e.clientX - boundingRect.left) * devicePixelRatio;
+  const relativeY = (e.clientY - boundingRect.top) * devicePixelRatio;
+  
+  // Convert to normalized coordinates (-1 to 1)
+  const rawX = 2 * (relativeX / canvas.width) - 1;
+  const rawY = 1 - 2 * (relativeY / canvas.height); // Flip Y coordinate
+  
+  // Convert to data coordinates
+  const dataX = (rawX - wglp?.gOffsetX || 0) / (wglp?.gScaleX || 1);
+  const dataY = (rawY - wglp?.gOffsetY || 0) / (wglp?.gScaleY || 1);
+  
+  // Update crosshair
+  updateCrosshair(dataX, dataY);
+  
+  // Continue with zoom rectangle if active
   if (zoomFlag && Rect) {
-    const canvas = plotCanvas.value;
-    const devicePixelRatio = window.devicePixelRatio || 1;
-    const boundingRect = canvas.getBoundingClientRect();
-    const relativeX = (e.clientX - boundingRect.left) * devicePixelRatio;
-    const rawX = 2 * (relativeX / canvas.width) - 1;
-    const currentDataX = (rawX - wglp.gOffsetX) / wglp.gScaleX;
+    const currentDataX = dataX;
     // Update rectangle to cover from cursorDownX to currentDataX and full y range.
     Rect.xy = new Float32Array([
       cursorDownX, yMin.value,
@@ -520,7 +640,7 @@ function mouseUp(e) {
       const mid = (cursorDownX + cursorUpX) / 2;
       wglp.gScaleX = newScale;
       wglp.gOffsetX = -mid * newScale;
-      
+
       // Update X-axis after zoom
       updateXAxis();
     }

@@ -1,5 +1,5 @@
 <template>
-  <div class="card">
+  <div class="card fixed-size-card">
     <div class="flex items-center mb-2">
       <span :class="['w-3 h-3 rounded-full mr-2', colorClass]"></span>
       <h3 class="font-medium">{{ title }}</h3>
@@ -43,6 +43,21 @@ defineProps({
 </script>
 
 <style scoped>
+.card {
+  padding: 1rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgb(229, 231, 235);
+  background-color: white;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.fixed-size-card {
+  width: 250px;
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
 .flex {
   display: flex;
 }
@@ -119,5 +134,38 @@ defineProps({
 
 .bg-red-500 {
   background-color: rgb(239 68 68);
+}
+
+/* Channel background colors matching the chart */
+.bg-channel-1 {
+  background-color: #FF6384;
+}
+
+.bg-channel-2 {
+  background-color: #36A2EB;
+}
+
+.bg-channel-3 {
+  background-color: #FFCE56;
+}
+
+.bg-channel-4 {
+  background-color: #4BC0C0;
+}
+
+.bg-channel-5 {
+  background-color: #9966FF;
+}
+
+.bg-channel-6 {
+  background-color: #FF9F40;
+}
+
+.bg-channel-7 {
+  background-color: #E7E9ED;
+}
+
+.bg-channel-8 {
+  background-color: #7CFFC4;
 }
 </style>
