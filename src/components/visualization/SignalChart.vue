@@ -43,7 +43,7 @@ const emit = defineEmits(['crosshair-move']);
 const windowSize = ref(1000);
 const dataBuffer = ref([]);
 const MAX_BUFFER_SIZE = 50000;
-const yMin = ref(-0.05); // Default min value with small negative offset
+const yMin = ref(-1); // Default min value with small negative offset
 const yMax = ref(1.05);  // Default max value with small positive offset
 const dataScale = ref(1);
 const dataOffset = ref(0);
@@ -234,7 +234,7 @@ function initPlot() {
   wglp.addLine(Rect);
 
   // ----- Add Crosshair Lines -----
-  const crossColor = new ColorRGBA(0.1, 0.9, 0.1, 1); // Green color
+  const crossColor = new ColorRGBA(0.9, 0.1, 0.1, 1); // Green color
   crossXLine = new WebglLine(crossColor, 2);
   crossYLine = new WebglLine(crossColor, 2);
   
@@ -279,8 +279,8 @@ function clearPlot() {
   initPlot();
 
   // Reset vertical scaling
-  yMin.value = -0.05;
-  yMax.value = 1.05;
+  yMin.value = -1;
+  yMax.value = 1;
   updatePlotScale();
 
   console.log("Plot cleared");
@@ -712,7 +712,7 @@ function handleResize() {
     initPlot();
     updateYAxis();
     updateXAxis();
-  }, 250);
+  }, 50);
 }
 
 onMounted(async () => {
