@@ -16,10 +16,11 @@
         "width": 1280,
         "height": 720,
         "resizable": true,
-        "decorations": true,
+        "decorations": false,
         "maximizable": true,
         "minimizable": true,
-        "closable": true
+        "closable": true,
+        "transparent": true
       }
     ],
     "security": {

@@ -17,9 +17,6 @@
         :key="index"
         :title="`Channel ${index + 1}`" 
         :currentValue="formatValue(channel.current)" 
-        :minValue="formatValue(channel.min)" 
-        :maxValue="formatValue(channel.max)" 
-        :avgValue="formatValue(channel.avg)"
         :colorClass="channelColors[index]" 
       />
     </div>
@@ -34,14 +31,14 @@ import ChannelStatCard from './ChannelStatCard.vue';
 
 // Define state for channel statistics
 const channelStats = ref([
-  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
-  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
-  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
-  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
-  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
-  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
-  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 },
-  { current: 0, min: 0, max: 0, avg: 0, sum: 0, count: 0 }
+  { current: 0 },
+  { current: 0 },
+  { current: 0 },
+  { current: 0 },
+  { current: 0 },
+  { current: 0 },
+  { current: 0 },
+  { current: 0 }
 ]);
 
 // Channel color classes for visual differentiation
@@ -75,25 +72,9 @@ function handleCrosshairMove(data) {
 function updateChannelStats(data) {
   if (!data || !Array.isArray(data) || data.length === 0) return;
 
-  // Update statistics for each channel
+  // Update current value for each channel
   for (let i = 0; i < Math.min(data.length, channelStats.value.length); i++) {
-    const value = data[i];
-    const stats = channelStats.value[i];
-    
-    // Don't update current value here - it's now controlled by the crosshair
-    
-    // Update min/max
-    if (stats.count === 0 || value < stats.min) {
-      stats.min = value;
-    }
-    if (stats.count === 0 || value > stats.max) {
-      stats.max = value;
-    }
-    
-    // Update average
-    stats.sum += value;
-    stats.count += 1;
-    stats.avg = stats.sum / stats.count;
+    channelStats.value[i].current = data[i];
   }
 }
 
@@ -124,7 +105,12 @@ onBeforeUnmount(() => {
 .p-6 {
   padding: 1.5rem;
 }
-
+.grid {
+  display: grid;
+}
+.grid-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .mb-4 {
   margin-bottom: 1rem;
 }
@@ -132,7 +118,9 @@ onBeforeUnmount(() => {
 .flex {
   display: flex;
 }
-
+.rounded-lg {
+  border-radius: 24px;
+}
 .justify-between {
   justify-content: space-between;
 }

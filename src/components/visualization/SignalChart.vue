@@ -126,9 +126,7 @@ function updateYAxis() {
   ctx2d.clearRect(0, 0, width, height);
 
   for (let i = 0; i <= divisions; i++) {
-    // Calculate the data value at this position
     const value = yMax.value - (i / divisions) * (yMax.value - yMin.value);
-    // Calculate position - leave room for x-axis at bottom
     const y = (i / divisions) * (height - 20);
 
     // Draw grid line
@@ -159,9 +157,6 @@ function updateXAxis() {
 
   ctx2d.clearRect(0, 0, width, height);
 
-  // Calculate time values based on window size and sample rate
-  // For simplicity, we'll use index values here
-  // In a real app, you might want to use actual time or timestamps
   for (let i = 0; i <= divisions; i++) {
     const position = (i / divisions) * width;
 
@@ -842,14 +837,12 @@ onBeforeUnmount(() => {
   top: 0;
   width: 40px;
   height: 100%;
-  background-color: #fff;
   border-right: 1px solid #ddd;
 }
 
 .x-axis-canvas {
   width: 100%;
   height: 40px;
-  background-color: #fff;
   border-top: 1px solid #ddd;
 }
 </style>
