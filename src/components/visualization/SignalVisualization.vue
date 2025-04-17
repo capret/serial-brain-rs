@@ -11,11 +11,11 @@
       @crosshair-move="handleCrosshairMove"
     />
     
-    <div class="channel-card-grid">
+    <div class="flex gap-4 ">
       <ChannelStatCard 
         v-for="(channel, index) in channelStats" 
         :key="index"
-        :title="`Channel ${index + 1}`" 
+        :channelTitle="`Channel ${index + 1}`" 
         :currentValue="formatValue(channel.current)" 
         :colorClass="channelColors[index]" 
       />
@@ -98,94 +98,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.flex-1 {
-  flex: 1 1 0%;
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-.grid {
-  display: grid;
-}
-.grid-cols-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.mb-4 {
-  margin-bottom: 1rem;
-}
-
-.flex {
-  display: flex;
-}
-.rounded-lg {
-  border-radius: 24px;
-}
-.justify-between {
-  justify-content: space-between;
-}
-
-.items-center {
-  align-items: center;
-}
-
-.text-xl {
-  font-size: 1.25rem;
-  line-height: 1.75rem;
-}
-
-.font-semibold {
-  font-weight: 600;
-}
-
-.text-sm {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.text-gray-500 {
-  color: rgb(107 114 128);
-}
-
-.space-x-2 > :not([hidden]) ~ :not([hidden]) {
-  margin-left: 0.5rem;
-}
-
-.p-2 {
-  padding: 0.5rem;
-}
-
-.rounded-md {
-  border-radius: 0.375rem;
-}
-
-.border {
-  border-width: 1px;
-}
-
-.border-gray-300 {
-  border-color: rgb(209 213 219);
-}
-
-.hover\:bg-gray-100:hover {
-  background-color: rgb(243 244 246);
-}
-
-.transition-colors {
-  transition-property: color, background-color, border-color;
-  transition-duration: 150ms;
-}
-
-.channel-card-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.gap-4 {
-  gap: 1rem;
-}
-
 /* Channel background colors matching the chart */
 .bg-channel-1 {
   background-color: #FF6384;
@@ -217,64 +129,5 @@ onBeforeUnmount(() => {
 
 .bg-channel-8 {
   background-color: #7CFFC4;
-}
-
-.bg-blue-500 {
-  background-color: rgb(59, 130, 246);
-}
-
-.bg-green-500 {
-  background-color: rgb(34, 197, 94);
-}
-
-.bg-yellow-500 {
-  background-color: rgb(234, 179, 8);
-}
-
-.bg-red-500 {
-  background-color: rgb(239, 68, 68);
-}
-
-.text-white {
-  color: white;
-}
-
-.py-2 {
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-}
-
-.px-4 {
-  padding-left: 1rem;
-  padding-right: 1rem;
-}
-
-.rounded {
-  border-radius: 0.25rem;
-}
-
-.text-lg {
-  font-size: 1.125rem;
-  line-height: 1.75rem;
-}
-
-.font-medium {
-  font-weight: 500;
-}
-
-.mb-2 {
-  margin-bottom: 0.5rem;
-}
-
-.block {
-  display: block;
-}
-
-.mb-1 {
-  margin-bottom: 0.25rem;
-}
-
-.w-full {
-  width: 100%;
 }
 </style>

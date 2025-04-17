@@ -3,7 +3,7 @@
     <div>
       <div class="flex items-center gap-2">
         <span :class="['w-3 h-3 rounded-full', colorClass]"></span>
-        <p class="text-sm text-gray-400 m-0">{{ title }}</p>
+        <p class="text-sm text-gray-400 m-0">{{ channelTitle }}</p>
       </div>
       <div class="pl-5">
         <p class="font-semibold m-0">{{ currentValue }}</p>
@@ -14,7 +14,7 @@
 
 <script setup>
 defineProps({
-  title: {
+  channelTitle: {
     type: String,
     required: true
   },
@@ -30,4 +30,5 @@ defineProps({
 </script>
 
 <style scoped>
+/* No custom styles needed */
 </style>

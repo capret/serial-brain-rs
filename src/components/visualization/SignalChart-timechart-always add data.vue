@@ -108,6 +108,7 @@ function initChart() {
 
 function updateChartData(newData) {
   const n = newData.length;
+  // newData is a list of lists, where each inner list contains the values for the 8 channels.
   console.log("Updating chart data with", n, "points");
   const maxSize = 3000;
   for (let i = 0; i < n; i++) {
