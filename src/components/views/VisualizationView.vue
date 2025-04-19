@@ -2,17 +2,30 @@
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
     <div class="flex justify-between items-start mb-6">
       <div>
-        <h2 class="text-3xl font-bold text-blue-400">Visualization</h2>
+        <h2 class="text-3xl font-bold text-blue-400">Signal Visualization</h2>
       </div>
       <div class="flex gap-3">
-        <button
-          class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+        <button @click="toggleRunning"
+          :disabled="isLaunchDisabled"
+          :class="[
+            'px-6 py-3 rounded-md font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg',
+            isLaunchDisabled ? 'bg-gray-500 opacity-50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+          ]"
+         >
+          <svg v-if="!isRunning" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
             class="feather feather-play">
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
           </svg>
-          Launch
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="6" y1="4" x2="6" y2="20"></line>
+            <line x1="18" y1="4" x2="18" y2="20"></line>
+          </svg>
+          {{ isRunning ? 'Pause' : 'Launch' }}
+        </button>
+        <button @click="clearPlot" class="px-6 py-3 rounded-md font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg bg-gray-600 hover:bg-gray-700 text-white">
+          Clear Plot
         </button>
         <details class="relative inline-block">
           <summary
@@ -37,12 +50,28 @@
       </div>
     </div>
     <div class="mb-6">
-      <h3 class="text-lg font-semibold mb-2">Display Window:</h3>
-      <SignalVisualization />
+      <SignalVisualization ref="viz" :running="isRunning" />
     </div>
   </div>
 </template>
 
 <script setup>
 import SignalVisualization from '../visualization/SignalVisualization.vue';
+import { ref, computed } from 'vue';
+import { isRunning, connectionStatus } from '../../store/appState';
+
+// ref to child component for clearing
+const viz = ref(null);
+/**
+ * Invoke clearPlot exposed by SignalVisualization
+ */
+function clearPlot() {
+  viz.value?.clearPlot();
+}
+
+function toggleRunning() {
+  isRunning.value = !isRunning.value;
+}
+
+const isLaunchDisabled = computed(() => connectionStatus.value !== 'connected');
 </script>

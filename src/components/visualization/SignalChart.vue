@@ -1,450 +1,736 @@
 <template>
-  <div class="border rounded-md shadow-sm bg-white p-4 h-[500px] mb-4">
-    <!-- Chart Controls -->
-    <div class="chart-controls mb-2">
-      <div class="slider-container">
-        <label for="windowSize">
-          Display Window Size:
-          <span class="window-size-value">{{ windowSize }}</span>
-        </label>
-        <div class="slider-with-labels">
-          <span class="slider-min-label">100</span>
-          <input
-            id="windowSize"
-            type="range"
-            v-model.number="windowSize"
-            min="100"
-            max="20000"
-            step="100"
-            @change="initPlot"
-            class="window-size-slider"
-          />
-          <span class="slider-max-label">20000</span>
-        </div>
+  <!-- Chart Controls moved above plot area -->
+  <div class="mb-2 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex-1 min-w-[300px]">
+      <label for="windowSize">
+        Display Window Size:
+        <span class="font-bold  w-12 inline-block">{{ windowSize }}</span>
+      </label>
+      <div class="flex items-center gap-2 mt-1">
+        <span class="text-xs w-12 text-center">500</span>
+        <input id="windowSize" type="range" v-model.number="windowSize" min="500" max="20000" step="500"
+          @change="initPlot" class="w-full h-1 bg-gray-200 rounded-lg accent-blue-500" />
+        <span class="text-xs w-12 text-center">20000</span>
       </div>
-      <button class="btn refresh-btn bg-blue-500 text-white rounded" @click="clearPlot">
-        Clear Plot
-      </button>
     </div>
-    <!-- Y-Axis Canvas -->
-    <div class="chart-visualization-container">
-      <canvas ref="yAxisCanvas" class="y-axis-canvas"></canvas>
-      <!-- WebGL‑Plot Canvas -->
-      <canvas ref="plotCanvas" class="chart-container h-[420px]"></canvas>
+  </div>
+  <div class="border rounded-md shadow-sm bg-white p-4 h-[500px] mb-4">
+    <div class="relative">
+      <canvas ref="yAxisCanvas" class="absolute left-0 top-0 h-full w-[40px] border-r border-gray-200"></canvas>
+      <canvas ref="plotCanvas" class="w-full h-[420px] block"></canvas>
+      <canvas ref="xAxisCanvas" class="w-full h-10 border-t border-gray-200"></canvas>
     </div>
-    <!-- X-Axis Canvas -->
-    <canvas ref="xAxisCanvas" class="x-axis-canvas"></canvas>
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from "vue";
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { WebglPlot, WebglLine, ColorRGBA } from "webgl-plot";
+import { chartDataBuffer } from '../../store/appState';
+import { channelColors, channelVisibility } from './channelSettings';
 
-const emit = defineEmits(['crosshair-move']);
+const emit = defineEmits<{
+  (event: 'crosshair-move', payload: { x: number; y: number; dataValues: number[] }): void;
+}>();
+
+const props = defineProps<{ running: boolean }>();
+
+let fetchIntervalId: number | null = null;
+let resizeTimeout: number | null = null;
 
 /* ====================================================
    1. State and Plot Settings
    ==================================================== */
-const windowSize = ref(1000);
-const dataBuffer = ref([]);
-const MAX_BUFFER_SIZE = 50000;
-const yMin = ref(-1);
-const yMax = ref(1.05);
-const dataScale = ref(1);
-const dataOffset = ref(0);
+const windowSize = ref<number>(1000);
+const dataBuffer = chartDataBuffer;
+const MAX_BUFFER_SIZE = 20000;
+const yMin = ref<number>(-1); // Default min value with small negative offset
+const yMax = ref<number>(1.05);  // Default max value with small positive offset
+const dataScale = ref<number>(1);
+const dataOffset = ref<number>(0);
 
-const plotCanvas = ref(null);
-const xAxisCanvas = ref(null);
-const yAxisCanvas = ref(null);
-let wglp = null;
-const lines = [];
+const plotCanvas = ref<HTMLCanvasElement | null>(null);
+const xAxisCanvas = ref<HTMLCanvasElement | null>(null);
+const yAxisCanvas = ref<HTMLCanvasElement | null>(null);
+let wglp: WebglPlot | null = null;
+const lines: WebglLine[] = [];
 
-let fpsCounter = 0;
-let fpsControl = 1;
-let animationFrame = null;
-let dataUpdatePending = false;
-let updateScheduled = false;
-let lastUpdateTime = 0;
+let fpsCounter: number = 0;
+let fpsControl: number = 1;
+let animationFrame: number | null = null;
+let dataUpdatePending: boolean = false;
+let lastUpdateTime: number = 0;
+let crosshairLastUpdateTime: number = 0; // Timestamp of last crosshair update
+const CROSSHAIR_THROTTLE_MS = 10; // Throttle interval in ms
 
-/* Crosshair & Zoom variables */
-let Rect = null;
-let zoomFlag = false;
-let cursorDownX = 0;
-let initialX = 0;
-let crossXLine = null;
-let crossYLine = null;
-let crossX = 0;
-let crossY = 0;
+let Rect: WebglLine | null = null;       // Zoom selection rectangle
+let zoomFlag: boolean = false;  // Indicates left-click zoom gesture active
+let cursorDownX: number = 0;   // X coordinate at mouse down (in current data coordinates)
 
-/* Axis config */
-const Y_AXIS_DIVISIONS = 8;
-const X_AXIS_DIVISIONS = 10;
+let crossXLine: WebglLine | null = null; // Horizontal crosshair line
+let crossYLine: WebglLine | null = null; // Vertical crosshair line
+let crossX: number = 0;        // Current X position of crosshair
+let crossY: number = 0;        // Current Y position of crosshair
+
+/* --- Axis configuration --- */
+const Y_AXIS_DIVISIONS = 8;  // Number of divisions for Y axis
+const X_AXIS_DIVISIONS = 10; // Number of divisions for X axis
 
 /* ====================================================
    2. Utility Functions
    ==================================================== */
-function hexToRGBA(hex) {
+/** Convert a hex color string (e.g. "#FF6384") to a normalized ColorRGBA. */
+function hexToRGBA(hex: string): ColorRGBA {
   hex = hex.replace("#", "");
   const bigint = parseInt(hex, 16);
-  return new ColorRGBA(
-    ((bigint >> 16) & 255) / 255,
-    ((bigint >> 8) & 255) / 255,
-    (bigint & 255) / 255,
-    1
-  );
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return new ColorRGBA(r / 255, g / 255, b / 255, 1);
 }
 
-function initAxisCanvas(canvas) {
+/**
+ * Initialize axis canvas with proper scaling and return the 2D context
+ */
+function initAxisCanvas(canvas: HTMLCanvasElement | null): CanvasRenderingContext2D | null {
   if (!canvas) return null;
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = canvas.clientWidth * dpr;
-  canvas.height = canvas.clientHeight * dpr;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.font = "12px Arial";
-    ctx.fillStyle = "#4a5568";
-    ctx.strokeStyle = "#cbd5e0";
-    ctx.lineWidth = 1;
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * devicePixelRatio;
+  canvas.height = canvas.clientHeight * devicePixelRatio;
+
+  const ctx2d = canvas.getContext("2d");
+  if (ctx2d) {
+    ctx2d.font = "12px Arial";
+    ctx2d.textBaseline = "middle";
+    ctx2d.textAlign = "left";
+    ctx2d.fillStyle = "#4a5568"; // Dark gray text
+    ctx2d.strokeStyle = "#cbd5e0"; // Light gray lines
+    ctx2d.lineWidth = 1;
   }
-  return ctx;
+  return ctx2d;
 }
 
-function updateYAxis() {
+/**
+ * Update Y-axis labels based on current scale and offset
+ */
+function updateYAxis(): void {
   const canvas = yAxisCanvas.value;
-  const ctx = initAxisCanvas(canvas);
-  if (!ctx) return;
-  const { width, height } = canvas;
-  ctx.clearRect(0, 0, width, height);
-  for (let i = 0; i <= Y_AXIS_DIVISIONS; i++) {
-    const value = yMax.value - (i / Y_AXIS_DIVISIONS) * (yMax.value - yMin.value);
-    const y = (i / Y_AXIS_DIVISIONS) * (height - 20);
-    ctx.beginPath();
-    ctx.moveTo(width - 5, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-    ctx.fillText(value.toFixed(1), 2, y + 4);
+  if (!canvas) return;
+
+  const ctx2d = initAxisCanvas(canvas);
+  if (!ctx2d) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const divisions = Y_AXIS_DIVISIONS;
+
+  ctx2d.clearRect(0, 0, width, height);
+
+  for (let i = 0; i <= divisions; i++) {
+    const value = yMax.value - (i / divisions) * (yMax.value - yMin.value);
+    const y = (i / divisions) * (height - 1);
+
+    ctx2d.beginPath();
+    ctx2d.moveTo(width - 5, y);
+    ctx2d.lineTo(width, y);
+    ctx2d.stroke();
+
+    const formattedValue = value.toFixed(1);
+    ctx2d.fillText(formattedValue, 4, y);
   }
 }
 
-function updateXAxis() {
+/**
+ * Update X-axis labels based on current scale and offset
+ */
+function updateXAxis(): void {
   const canvas = xAxisCanvas.value;
-  const ctx = initAxisCanvas(canvas);
-  if (!ctx || !wglp) return;
-  const { width, height } = canvas;
-  ctx.clearRect(0, 0, width, height);
-  for (let i = 0; i <= X_AXIS_DIVISIONS; i++) {
-    const pos = (i / X_AXIS_DIVISIONS) * width;
-    ctx.beginPath();
-    ctx.moveTo(pos, 0);
-    ctx.lineTo(pos, 5);
-    ctx.stroke();
-    const screenX = (2 * pos / width) - 1;
-    const dataX = (screenX - wglp.gOffsetX) / wglp.gScaleX;
-    const idx = Math.floor((dataX + 1) / 2 * windowSize.value);
-    if (idx >= 0 && idx <= windowSize.value) {
-      ctx.fillText(idx.toString(), pos - 10, 20);
+  if (!canvas) return;
+
+  const ctx2d = initAxisCanvas(canvas);
+  if (!ctx2d) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const divisions = X_AXIS_DIVISIONS;
+
+  ctx2d.clearRect(0, 0, width, height);
+
+  for (let i = 0; i <= divisions; i++) {
+    const position = (i / divisions) * width;
+
+    const screenX = (2 * position / width) - 1; // Convert to [-1, 1] range
+    const dataX = (screenX - wglp!.gOffsetX || 0) / (wglp!.gScaleX || 1);
+
+    const index = Math.floor((dataX + 1) / 2 * windowSize.value);
+
+    ctx2d.beginPath();
+    ctx2d.moveTo(position, 0);
+    ctx2d.lineTo(position, 5);
+    ctx2d.stroke();
+
+    if (index >= 0 && index <= windowSize.value) {
+      ctx2d.fillText(index.toString(), position - 10, 20);
     }
   }
 }
 
 /* ====================================================
-   3. Plot Init & Data Handling
+   3. Plot Initialization & Data Handling
    ==================================================== */
-function initPlot() {
+/**
+ * Initialize the WebGL‑Plot instance, set up plot lines,
+ * add the zoom selection rectangle, and register event listeners.
+ */
+function initPlot(): void {
   const canvas = plotCanvas.value;
   if (!canvas) return;
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = canvas.clientWidth * dpr;
-  canvas.height = canvas.clientHeight * dpr;
+
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * devicePixelRatio;
+  canvas.height = canvas.clientHeight * devicePixelRatio;
 
   wglp = new WebglPlot(canvas);
   lines.length = 0;
-
-  // create 8 lines
-  const colors = ["#FF6384","#36A2EB","#FFCE56","#4BC0C0","#9966FF","#FF9F40","#E7E9ED","#7CFFC4"];
-  for (let i = 0; i < 8; i++) {
-    const ln = new WebglLine(hexToRGBA(colors[i]), windowSize.value);
-    ln.arrangeX();
-    wglp.addLine(ln);
-    lines.push(ln);
+  
+  const numPoints = windowSize.value;
+  for (let i = 0; i < channelColors.length; i++) {
+    const color = hexToRGBA(channelColors[i]);
+    const line = new WebglLine(color, numPoints);
+    line.arrangeX();
+    // apply saved visibility state
+    line.visible = channelVisibility[i];
+    
+    wglp.addLine(line);
+    lines.push(line);
   }
 
-  // fill old data
-  if (dataBuffer.value.length) fillLinesWithExistingData();
+  if (dataBuffer.length > 0) {
+    fillLinesWithExistingData();
+  }
 
-  // zoom rect
-  Rect = new WebglLine(new ColorRGBA(0.9,0.9,0.9,1),4);
+  Rect = new WebglLine(new ColorRGBA(0.486, 1, 0.769, 0.1), 4);
   Rect.loop = true;
+  Rect.xy = new Float32Array([-0.5, yMin.value, -0.5, yMax.value, 0.5, yMax.value, 0.5, yMin.value]);
   Rect.visible = false;
   wglp.addLine(Rect);
 
-  // crosshairs
-  const crossC = new ColorRGBA(0.9,0.1,0.1,1);
-  crossXLine = new WebglLine(crossC,2);
-  crossYLine = new WebglLine(crossC,2);
+  const crossColor = new ColorRGBA(0.9, 0.1, 0.1, 1); // Green color
+  crossXLine = new WebglLine(crossColor, 2);
+  crossYLine = new WebglLine(crossColor, 2);
+
   crossX = 0;
-  crossY = (yMin.value + yMax.value)/2;
-  crossXLine.xy = new Float32Array([crossX, yMin.value, crossX, yMax.value]);
-  crossYLine.xy = new Float32Array([-1, crossY, 1, crossY]);
+  crossY = (yMin.value + yMax.value) / 2;
+  crossXLine.xy = new Float32Array([crossX, yMin.value, crossX, yMax.value]); // Vertical line spans full y-range
+  crossYLine.xy = new Float32Array([-1, crossY, 1, crossY]); // Horizontal line
+
   wglp.addLine(crossXLine);
   wglp.addLine(crossYLine);
 
-  // events
-  const cEl = canvas;
-  cEl.addEventListener("mousedown", mouseDown);
-  cEl.addEventListener("mousemove", mouseMove);
-  cEl.addEventListener("mouseup", mouseUp);
-  cEl.addEventListener("dblclick", dblClick);
-  cEl.addEventListener("contextmenu", contextMenu);
-  cEl.addEventListener("touchstart", touchStart);
-  cEl.addEventListener("touchmove", touchMove);
-  cEl.addEventListener("touchend", touchEnd);
+  const canvasEl = canvas;
+  canvasEl.addEventListener("touchstart", touchStart);
+  canvasEl.addEventListener("touchmove", touchMove);
+  canvasEl.addEventListener("touchend", touchEnd);
+  canvasEl.addEventListener("mousedown", mouseDown);
+  canvasEl.addEventListener("mousemove", mouseMove);
+  canvasEl.addEventListener("mouseup", mouseUp);
+  canvasEl.addEventListener("dblclick", dblClick);
+  canvasEl.addEventListener("contextmenu", contextMenu);
 
-  if (!animationFrame) animationFrame = requestAnimationFrame(animate);
+  if (!animationFrame) {
+    animationFrame = requestAnimationFrame(animate);
+  }
+
   updateYAxis();
   updateXAxis();
 }
 
-function clearPlot() {
-  dataBuffer.value = [];
+/**
+ * Clear the data buffer and reset the plot visualization.
+ */
+function clearPlot(): void {
+  dataBuffer.length = 0;
+
   initPlot();
+
   yMin.value = -1;
   yMax.value = 1;
   updatePlotScale();
+
   console.log("Plot cleared");
 }
 
-function fillLinesWithExistingData() {
-  const disp = dataBuffer.value.slice(-windowSize.value);
-  if (!lines.length || !disp.length) return;
+/**
+ * Populate plot lines with buffered data.
+ */
+function fillLinesWithExistingData(): void {
+  if (!lines.length || !dataBuffer.length) return;
+  const displayData = dataBuffer.slice(-windowSize.value);
   updateMinMax();
-  const offset = Math.max(0, windowSize.value - disp.length);
-  for (let ch=0; ch<lines.length; ch++) {
-    const line = lines[ch];
-    const first = disp.length ? disp[0][ch] : 0;
-    for (let i=0; i<offset; i++) line.setY(i, first);
-    for (let i=0; i<disp.length; i++) line.setY(offset+i, disp[i][ch]);
+  const offsetPoints = Math.max(0, windowSize.value - displayData.length);
+  for (let ch = 0; ch < 8 && ch < lines.length; ch++) {
+    if (offsetPoints > 0) {
+      const firstPoint = displayData.length > 0 ? displayData[0][ch] : 0;
+      for (let i = 0; i < offsetPoints; i++) {
+        lines[ch].setY(i, firstPoint);
+      }
+    }
+    for (let i = 0; i < displayData.length; i++) {
+      lines[ch].setY(offsetPoints + i, displayData[i][ch]);
+    }
   }
 }
 
 /**
- * Refresh data without blocking the UI
+ * Refresh data from the backend and update the plot.
  */
-function refreshData() {
+function refreshData(): void {
+  // Bail if component inactive or not initialized
+  if (!isActive || !wglp) return;
+  if (!props.running) return;
   if (dataUpdatePending) {
     console.log("Skipping data fetch – another fetch is in progress");
     return;
   }
   dataUpdatePending = true;
   const startTime = Date.now();
-
-  invoke("get_recent_data")
+  invoke<number[][]>("get_recent_data")
     .then((newData) => {
       const fetchTime = Date.now() - startTime;
-      if (newData && newData.length) {
+      if (newData && newData.length > 0) {
         addToDataBuffer(newData);
         addNewDataPoints(newData);
       }
     })
-    .catch((err) => {
-      console.error("Error retrieving data:", err);
+    .catch((error) => {
+      console.error("Error retrieving data:", error);
     })
     .finally(() => {
       dataUpdatePending = false;
     });
 }
 
-function addToDataBuffer(newData) {
-  dataBuffer.value = [...dataBuffer.value, ...newData];
-  if (dataBuffer.value.length > MAX_BUFFER_SIZE) {
-    dataBuffer.value = dataBuffer.value.slice(-MAX_BUFFER_SIZE);
+/**
+ * Append new data to the persistent data buffer.
+ */
+function addToDataBuffer(newData: number[][]): void {
+  if (!newData || newData.length === 0) return;
+  dataBuffer.push(...newData);
+  if (dataBuffer.length > MAX_BUFFER_SIZE) {
+    // Trim oldest entries to keep buffer size
+    dataBuffer.splice(0, dataBuffer.length - MAX_BUFFER_SIZE);
   }
 }
 
-function addNewDataPoints(newData) {
-  if (!newData.length || !lines.length) return;
-  if (Math.random()<0.1) updateMinMax();
-  const rawArrays = newData[0].map((_,ch) => {
-    const arr = new Float32Array(newData.length);
-    for (let i=0; i<newData.length; i++) arr[i] = newData[i][ch];
-    return arr;
-  });
-  lines.forEach((ln,ch) => ln.shiftAdd(rawArrays[ch]));
+/**
+ * Add new data points to the plot (via shiftAdd) and update vertical scaling.
+ */
+function addNewDataPoints(newData: number[][]): void {
+  if (!newData || newData.length === 0 || !lines.length) return;
+  const rawData = [];
+  for (let ch = 0; ch < 8; ch++) {
+    rawData[ch] = new Float32Array(newData.length);
+    for (let i = 0; i < newData.length; i++) {
+      rawData[ch][i] = newData[i][ch];
+    }
+  }
+  for (let ch = 0; ch < 8 && ch < lines.length; ch++) {
+    lines[ch].shiftAdd(rawData[ch]);
+  }
+  updateMinMax();
   updatePlotScale();
+  // updateCrosshair(crossX, crossY);
 }
 
-function updatePlotScale() {
+/**
+ * Update the vertical scaling of the plot.
+ */
+function updatePlotScale(): void {
   if (!wglp) return;
   const range = Math.max(0.001, yMax.value - yMin.value);
   dataScale.value = 2 / range;
   dataOffset.value = -(yMin.value + yMax.value) / 2;
+  // Apply global world-to-clip transform
   wglp.gScaleY = dataScale.value;
-  lines.forEach(ln => ln.offsetY = dataOffset.value * dataScale.value);
+  wglp.gOffsetY = dataOffset.value * dataScale.value;
   updateYAxis();
-  if (crossXLine && crossYLine) updateCrosshair(crossX, crossY);
+
+  if (crossXLine && crossYLine) {
+    updateCrosshair(crossX, crossY);
+  }
 }
 
-function updateMinMax() {
-  const visible = dataBuffer.value.slice(-windowSize.value);
-  if (!visible.length) return;
-  let minV = Infinity, maxV = -Infinity;
-  visible.forEach(pt => pt.forEach(v => {
-    minV = Math.min(minV, v);
-    maxV = Math.max(maxV, v);
-  }));
-  const m = Math.max(0.001, maxV - minV) * 0.05;
-  yMin.value = minV - m;
-  yMax.value = maxV + m;
+/**
+ * Compute yMin and yMax from the visible data.
+ */
+function updateMinMax(): void {
+  if (!dataBuffer.length) return;
+  const visibleData = dataBuffer.slice(-windowSize.value);
+  let minVal = Infinity;
+  let maxVal = -Infinity;
+  for (let i = 0; i < visibleData.length; i++) {
+    const point = visibleData[i];
+    for (let ch = 0; ch < 8; ch++) {
+      minVal = Math.min(minVal, point[ch]);
+      maxVal = Math.max(maxVal, point[ch]);
+    }
+  }
+  const range = Math.max(0.001, maxVal - minVal);
+  const margin = range * 0.05;
+  yMin.value = minVal - margin;
+  yMax.value = maxVal + margin;
   updatePlotScale();
 }
 
-/* Animation & throttling */
-function animate() {
+/**
+ * Animation loop to continuously update the plot.
+ */
+function animate(): void {
+  if (!isActive) return; // stop if component inactive
   if (fpsCounter === 0 && wglp) {
+    if (props.running) {
+      refreshData();
+    }
     wglp.update();
-    if (Math.random()<0.1) updateXAxis();
+    if (Math.random() < 0.1) {
+      updateXAxis();
+    }
   }
   fpsCounter = (fpsCounter + 1) % fpsControl;
   animationFrame = requestAnimationFrame(animate);
 }
 
-function scheduleUpdate() {
-  if (updateScheduled) return;
-  const now = Date.now();
-  const delta = 16;
-  const wait = Math.max(0, delta - (now - lastUpdateTime));
-  updateScheduled = true;
-  setTimeout(() => {
-    refreshData();
-    lastUpdateTime = Date.now();
-    updateScheduled = false;
-  }, wait);
+/**
+ * Throttle data refresh to prevent rapid firing.
+ */
+// function scheduleUpdate(): void {
+//   if (!props.running) return;
+//   if (updateScheduled) return;
+//   const now = Date.now();
+//   const minTimeBetween = 30;
+//   if (now - lastUpdateTime < minTimeBetween) {
+//     const waitTime = minTimeBetween - (now - lastUpdateTime);
+//     updateScheduled = true;
+//     setTimeout(() => {
+//       refreshData();
+//       updateScheduled = false;
+//       lastUpdateTime = Date.now();
+//     }, waitTime);
+//   } else {
+//     updateScheduled = true;
+//     setTimeout(() => {
+//       refreshData();
+//       updateScheduled = false;
+//       lastUpdateTime = Date.now();
+//     }, 0);
+//   }
+// }
+
+/**
+ * Get the data values for all channels at a specific x position
+ */
+function getDataValuesAtPosition(x: number): number[] {
+  if (!dataBuffer.length || !lines.length) {
+    return Array(8).fill(0);
+  }
+
+  const visibleData = dataBuffer.slice(-windowSize.value);
+  if (visibleData.length === 0) {
+    return Array(8).fill(0);
+  }
+  if (!lines.length || !wglp) {
+    return Array(8).fill(0);
+  }
+
+  const line = lines[0];
+  let canvasIndex = Math.round(((x + 1) / 2) * (line.numPoints - 1));
+
+  const offset = Math.max(0, windowSize.value - visibleData.length);
+
+  if (canvasIndex < 0 || canvasIndex >= line.numPoints) {
+    return Array(8).fill(0); // Return zeros if out of range
+  }
+
+  let dataIndex;
+  if (canvasIndex < offset) {
+    return Array(8).fill(0);
+  } else {
+    dataIndex = canvasIndex - offset;
+  }
+
+  if (dataIndex < 0 || dataIndex >= visibleData.length) {
+    return Array(8).fill(0);
+  }
+
+  const result = [];
+  for (let ch = 0; ch < 8; ch++) {
+    result.push(visibleData[dataIndex][ch]);
+  }
+  return result;
 }
 
-/* Crosshair & events (dblClick, mouseDown, mouseMove, mouseUp, touchStart, touchMove, touchEnd, contextMenu) */
-// …reuse all your existing event handler definitions here…
+/**
+ * Update the position of the crosshair lines
+ */
+function updateCrosshair(x: number, y: number): void {
+  if (!crossXLine || !crossYLine) return;
+
+  crossX = x;
+  crossY = y;
+
+  // Vertical line spans data y-range at world x
+  crossXLine.xy = new Float32Array([x, yMin.value, x, yMax.value]);
+  crossYLine.xy = new Float32Array([-1, y, 1, y]);
+
+  const dataValues = getDataValuesAtPosition(x);
+  // console.log(yMin.value, yMax.value, y)
+  emit('crosshair-move', {
+    x: x,
+    y: y,
+    dataValues: dataValues
+  });
+}
+
+/**
+ * Set color of a specific channel line without reinitializing the plot.
+ */
+function setChannelColor(index: number, colorHex: string): void {
+  if (index < 0 || index >= lines.length || !lines[index]) return;
+  lines[index].color = hexToRGBA(colorHex);
+}
+
+/**
+ * Toggle visibility of a specific channel line.
+ */
+function setChannelVisibility(index: number, visible: boolean): void {
+  if (index < 0 || index >= lines.length || !lines[index]) return;
+  lines[index].visible = visible;
+}
 
 /* ====================================================
-   5. Lifecycle & Resize
+   4. Interactive Event Handlers (Left‑Click Zoom & Touch)
    ==================================================== */
-function handleResize() {
-  if (window.resizeTimeout) clearTimeout(window.resizeTimeout);
-  window.resizeTimeout = setTimeout(() => {
+
+/**
+ * Convert mouse or touch event to data coordinates
+ */
+function getPointerDataCoords(e: MouseEvent | TouchEvent): { dataX: number; dataY?: number } {
+  const canvas = plotCanvas.value!;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+  const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+  const relX = (clientX - rect.left) * dpr;
+  const rawX = 2 * (relX / canvas.width) - 1;
+  const dataX = (rawX - wglp!.gOffsetX || 0) / (wglp!.gScaleX || 1);
+  let dataY;
+  if (!('touches' in e)) {
+    const relY = (clientY - rect.top) * dpr;
+    const rawY = 1 - 2 * (relY / canvas.height);
+    dataY = (rawY - wglp!.gOffsetY) / (wglp!.gScaleY || 1);
+  }
+  return { dataX, dataY };
+}
+
+/**
+ * On double‑click, reset the x‑axis zoom and remove the selection rectangle.
+ */
+function dblClick(e: MouseEvent): void {
+  e.preventDefault();
+  if (wglp) { wglp.gScaleX = 1; wglp.gOffsetX = 0; }
+  if (Rect) Rect.visible = false;
+}
+
+/**
+ * Prevent the context menu from appearing.
+ */
+function contextMenu(e: MouseEvent): void {
+  e.preventDefault();
+}
+
+/**
+ * Mouse down (only left button) initiates a zoom selection.
+ * The raw mouse coordinate is converted into the current data coordinate.
+ */
+function mouseDown(e: MouseEvent): void {
+  e.preventDefault();
+  if (e.button === 0) {
+    zoomFlag = true;
+    const { dataX } = getPointerDataCoords(e);
+    cursorDownX = dataX;
+    if (Rect) Rect.visible = true;
+  }
+}
+
+/**
+ * Touch start initiates a zoom selection.
+ * The raw touch coordinate is converted into the current data coordinate.
+ */
+function touchStart(e: TouchEvent): void {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    zoomFlag = true;
+    const { dataX } = getPointerDataCoords(e);
+    cursorDownX = dataX;
+    if (Rect) Rect.visible = true;
+  }
+}
+
+/**
+ * Mouse move updates the zoom selection rectangle.
+ * The x coordinate is converted to the current data coordinate.
+ * The rectangle's y coordinates are set to the current yMin and yMax.
+ */
+function mouseMove(e: MouseEvent): void {
+  e.preventDefault();
+  const { dataX, dataY } = getPointerDataCoords(e);
+  const now = Date.now();
+  if (dataY !== undefined && now - crosshairLastUpdateTime >= CROSSHAIR_THROTTLE_MS) {
+    updateCrosshair(dataX, dataY);
+    crosshairLastUpdateTime = now;
+  }
+  if (zoomFlag && Rect) {
+    Rect.xy = new Float32Array([
+      cursorDownX, yMin.value,
+      cursorDownX, yMax.value,
+      dataX, yMax.value,
+      dataX, yMin.value,
+    ]);
+    Rect.visible = true;
+  }
+}
+
+/**
+ * Touch move updates the zoom selection rectangle.
+ * The x coordinate is converted to the current data coordinate.
+ * The rectangle's y coordinates are set to the current yMin and yMax.
+ */
+function touchMove(e: TouchEvent): void {
+  e.preventDefault();
+  if (zoomFlag && Rect) {
+    const { dataX } = getPointerDataCoords(e);
+    Rect.xy = new Float32Array([
+      cursorDownX, yMin.value,
+      cursorDownX, yMax.value,
+      dataX, yMax.value,
+      dataX, yMin.value,
+    ]);
+    Rect.visible = true;
+    // (Rect as WebglLine).color = new ColorRGBA(255, 0, 0, 0.5);
+  }
+}
+
+/**
+ * Mouse up completes the zoom selection.
+ * The final x coordinate is converted to data coordinate, and then
+ * the new x‑scale and x‑offset are calculated so that the selected
+ * region spans the full x‑axis.
+ */
+function mouseUp(e: MouseEvent): void {
+  e.preventDefault();
+  if (zoomFlag) {
+    const { dataX: cursorUpX } = getPointerDataCoords(e);
+    const selectionWidth = Math.abs(cursorUpX - cursorDownX);
+    if (selectionWidth > 0) {
+      const newScale = 2 / selectionWidth;
+      const mid = (cursorDownX + cursorUpX) / 2;
+      wglp!.gScaleX = newScale;
+      wglp!.gOffsetX = -mid * newScale;
+      updateXAxis();
+    }
+    zoomFlag = false;
+    if (Rect) Rect.visible = false;
+  }
+}
+
+/**
+ * Touch end completes the zoom selection.
+ * The final x coordinate is converted to data coordinate, and then
+ * the new x‑scale and x‑offset are calculated so that the selected
+ * region spans the full x‑axis.
+ */
+function touchEnd(e: TouchEvent): void {
+  e.preventDefault();
+  if (zoomFlag) {
+    zoomFlag = false;
+    if (Rect) Rect.visible = false;
+  }
+}
+
+/* ====================================================
+   5. Lifecycle and Resize Handling
+   ==================================================== */
+function handleResize(): void {
+  if (!plotCanvas.value) return;
+  if (resizeTimeout) clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
     initPlot();
     updateYAxis();
     updateXAxis();
   }, 50);
 }
 
+watch(() => props.running, (newVal) => {
+  if (newVal) {
+    // scheduleUpdate();
+    fetchIntervalId = setInterval(() => refreshData(), 100);
+  } else if (fetchIntervalId) {
+    clearInterval(fetchIntervalId);
+    fetchIntervalId = null;
+  }
+}, { immediate: true });
+
 onMounted(() => {
   initPlot();
-  refreshData();
   lastUpdateTime = Date.now();
-  listen("serial_data", () => scheduleUpdate());
   window.addEventListener("resize", handleResize);
 });
 
+watch(windowSize, () => {
+  const currentBuffer = [...dataBuffer];
+  initPlot();
+  dataBuffer.length = 0;
+  dataBuffer.push(...currentBuffer);
+  updateMinMax();
+});
+
+let isActive = true;
 onBeforeUnmount(() => {
-  if (animationFrame) cancelAnimationFrame(animationFrame);
+  isActive = false;
+  if (animationFrame) {
+    cancelAnimationFrame(animationFrame);
+    animationFrame = null;
+  }
+  window.removeEventListener("resize", handleResize);
+  if (fetchIntervalId) {
+    clearInterval(fetchIntervalId);
+    fetchIntervalId = null;
+  }
+});
+
+onActivated(() => {
+  initPlot();
+  lastUpdateTime = Date.now();
+  window.addEventListener("resize", handleResize);
+  if (props.running) {
+    fetchIntervalId = setInterval(() => refreshData(), 100);
+  }
+});
+
+onDeactivated(() => {
+  isActive = false;
+  if (fetchIntervalId) {
+    clearInterval(fetchIntervalId);
+    fetchIntervalId = null;
+  }
+  if (animationFrame) {
+    cancelAnimationFrame(animationFrame);
+    animationFrame = null;
+  }
   window.removeEventListener("resize", handleResize);
 });
 
-watch(windowSize, () => {
-  const buf = [...dataBuffer.value];
-  initPlot();
-  dataBuffer.value = buf;
-});
+// Expose initPlot and setChannelColor for parent ref
+defineExpose({ initPlot, setChannelColor, setChannelVisibility, clearPlot });
 </script>
-
-<style scoped>
-.chart-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.slider-container {
-  flex: 1;
-  min-width: 300px;
-}
-
-.window-size-value {
-  font-weight: bold;
-  color: #4a5568;
-  min-width: 3rem;
-  display: inline-block;
-}
-
-.slider-with-labels {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-}
-
-.window-size-slider {
-  flex: 1;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 4px;
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.window-size-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  background: #3b82f6;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.window-size-slider::-webkit-slider-thumb:hover {
-  background: #2563eb;
-}
-
-.window-size-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  background: #3b82f6;
-  border-radius: 50%;
-  cursor: pointer;
-  border: none;
-  transition: background 0.2s;
-}
-
-.window-size-slider::-moz-range-thumb:hover {
-  background: #2563eb;
-}
-
-.slider-min-label, .slider-max-label {
-  font-size: 0.8rem;
-  color: #718096;
-  width: 3rem;
-  text-align: center;
-}
-
-.refresh-btn {
-  padding: 0.5rem 1rem;
-  font-weight: 500;
-  transition: background-color 0.2s;
-}
-
-.refresh-btn:hover {
-  background-color: #2563eb;
-}
-
-.chart-container {
-  width: 100%;
-  position: relative;
-}
-</style>

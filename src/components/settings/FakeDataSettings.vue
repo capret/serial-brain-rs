@@ -64,9 +64,7 @@
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
           <span class="text-sm">Fake data is purely for testing and development purposes.</span>
-          <div>
-            <canvas ref="previewCanvas" class="h-80 bg-amber-400"></canvas>
-          </div>
+
         </div>
       </div>
     </div>
