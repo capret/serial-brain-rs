@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
+  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 flex flex-col h-full">
     <div class="flex justify-between items-start mb-6">
       <div>
         <h2 class="text-3xl font-bold text-blue-400">Signal Configuration</h2>
@@ -63,9 +63,9 @@
     </div>
     
     <!-- Settings Container with Fixed Height -->
-    <div class="mb-6">
+    <div class="mb-6 flex flex-col flex-grow">
       <h3 class="text-lg font-semibold mb-4">Source Settings</h3>
-      <div class="bg-gray-700 rounded-lg min-h-[400px] relative overflow-hidden">
+      <div class="bg-gray-700 rounded-lg flex flex-col flex-grow relative overflow-hidden">
         <!-- Load the appropriate settings component based on selectedDataSource -->
         <SerialSettings v-show="selectedDataSource === 'serial'" 
                        :settings="serialSettings" 
@@ -93,7 +93,7 @@ import FakeDataSettings from '../settings/FakeDataSettings.vue';
 
 import { computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { connectionStatus } from '../../store/appState';
+import { connectionStatus } from '../../store/appState.js';
 
 const props = defineProps({
   selectedDataSource: {
@@ -157,8 +157,10 @@ function handleConnectionToggle() {
     if (props.selectedDataSource === 'serial') {
       cmd = invoke('connect_serial', {
         port: props.serialSettings.port,
-        baud_rate: props.serialSettings.baudRate,
-        stop_bits: props.serialSettings.stopBits
+        baudRate: props.serialSettings.baudRate,
+        stopBits: props.serialSettings.stopBits,
+        parity: props.serialSettings.parity,
+        dataBits: props.serialSettings.dataBits
       });
     } else if (props.selectedDataSource === 'fake') {
       cmd = invoke('start_fake_data', {

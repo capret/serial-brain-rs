@@ -49,7 +49,7 @@
         </details>
       </div>
     </div>
-    <div class="mb-6">
+    <div class="mb-2">
       <SignalVisualization ref="viz" :running="isRunning" />
     </div>
   </div>

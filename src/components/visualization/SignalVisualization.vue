@@ -1,17 +1,10 @@
 <template>
   <div class="flex-1 p-6">
-    <div class="mb-4 flex justify-between items-center">
-      <!-- <div>
-        <h2 class="text-xl font-semibold">Signal Visualization</h2>
-      </div> -->
-    </div>
-    
     <SignalChart 
       ref="signalChart" 
       :running="isRunning"
       @crosshair-move="handleCrosshairMove"
     />
-    
     <div class="flex flex-wrap gap-4 ">
       <ChannelStatCard
         v-for="(channel, index) in channelStats"

@@ -14,11 +14,12 @@
       </div>
     </div>
   </div>
-  <div class="border rounded-md shadow-sm bg-white p-4 h-[500px] mb-4">
-    <div class="relative">
-      <canvas ref="yAxisCanvas" class="absolute left-0 top-0 h-full w-[40px] border-r border-gray-200"></canvas>
-      <canvas ref="plotCanvas" class="w-full h-[420px] block"></canvas>
-      <canvas ref="xAxisCanvas" class="w-full h-10 border-t border-gray-200"></canvas>
+  <div class="border rounded-md shadow-sm bg-gray-800 p-4 mb-4">
+    <div class="grid" :style="{ gridTemplateColumns: '40px 1fr', gridTemplateRows: plotHeight + 'px 40px' }">
+      <canvas ref="yAxisCanvas" class="border-r border-gray-200" :style="{ width: '40px', height: plotHeight + 'px' }"></canvas>
+      <canvas ref="plotCanvas" class="w-full" :style="{ height: plotHeight + 'px' }"></canvas>
+      <div class="w-full"></div>
+      <canvas ref="xAxisCanvas" class="border-t border-gray-200 w-full" style="height:40px"></canvas>
     </div>
   </div>
 </template>
@@ -77,6 +78,8 @@ let crossY: number = 0;        // Current Y position of crosshair
 const Y_AXIS_DIVISIONS = 8;  // Number of divisions for Y axis
 const X_AXIS_DIVISIONS = 10; // Number of divisions for X axis
 
+const plotHeight = ref<number>(Math.max(300, window.innerHeight * 0.5));
+
 /* ====================================================
    2. Utility Functions
    ==================================================== */
@@ -104,9 +107,9 @@ function initAxisCanvas(canvas: HTMLCanvasElement | null): CanvasRenderingContex
     ctx2d.font = "12px Arial";
     ctx2d.textBaseline = "middle";
     ctx2d.textAlign = "left";
-    ctx2d.fillStyle = "#4a5568"; // Dark gray text
+    ctx2d.fillStyle = "#cbd5e0"; // Dark gray text
     ctx2d.strokeStyle = "#cbd5e0"; // Light gray lines
-    ctx2d.lineWidth = 1;
+    ctx2d.lineWidth = 2;
   }
   return ctx2d;
 }
@@ -661,7 +664,12 @@ function touchEnd(e: TouchEvent): void {
 /* ====================================================
    5. Lifecycle and Resize Handling
    ==================================================== */
+function updatePlotHeight(): void {
+  plotHeight.value = Math.max(300, window.innerHeight * 0.6);
+}
+
 function handleResize(): void {
+  updatePlotHeight();
   if (!plotCanvas.value) return;
   if (resizeTimeout) clearTimeout(resizeTimeout);
   resizeTimeout = setTimeout(() => {

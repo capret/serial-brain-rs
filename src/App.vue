@@ -103,8 +103,12 @@ const selectedDataSource = ref('fake'); // Options: 'serial', 'tcp', 'fake'
 // Settings for different signal sources
 const serialSettings = ref({
   port: '',
-  baudRate: 115200,
+  baudRate: 460800,
   stopBits: 1,
+  parity: 'none',
+  dataBits: 8,
+  serialInfo: '',      // store serial text info
+  serialInfoBuffer: [], // buffer for recent serial info lines
   availablePorts: [],
   sendData: '',
   sendEndFlag: '\n'
@@ -203,4 +207,3 @@ onMounted(() => {
   background-color: rgb(45, 55, 72) !important;
 }
 </style>
-
