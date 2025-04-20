@@ -78,7 +78,7 @@ let crossY: number = 0;        // Current Y position of crosshair
 const Y_AXIS_DIVISIONS = 8;  // Number of divisions for Y axis
 const X_AXIS_DIVISIONS = 10; // Number of divisions for X axis
 
-const plotHeight = ref<number>(Math.max(300, window.innerHeight * 0.5));
+const plotHeight = ref<number>(Math.max(300, window.innerHeight * 0.4));
 
 /* ====================================================
    2. Utility Functions
@@ -665,7 +665,7 @@ function touchEnd(e: TouchEvent): void {
    5. Lifecycle and Resize Handling
    ==================================================== */
 function updatePlotHeight(): void {
-  plotHeight.value = Math.max(300, window.innerHeight * 0.6);
+  plotHeight.value = Math.max(300, window.innerHeight * 0.4);
 }
 
 function handleResize(): void {
