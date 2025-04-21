@@ -61,7 +61,7 @@ let fpsCounter: number = 0;
 let fpsControl: number = 1;
 let animationFrame: number | null = null;
 let dataUpdatePending: boolean = false;
-let lastUpdateTime: number = 0;
+// let lastUpdateTime: number = 0;
 let crosshairLastUpdateTime: number = 0; // Timestamp of last crosshair update
 const CROSSHAIR_THROTTLE_MS = 10; // Throttle interval in ms
 
@@ -297,10 +297,10 @@ function refreshData(): void {
     return;
   }
   dataUpdatePending = true;
-  const startTime = Date.now();
+  // const startTime = Date.now();
   invoke<number[][]>("get_recent_data")
     .then((newData) => {
-      const fetchTime = Date.now() - startTime;
+      // const fetchTime = Date.now() - startTime;
       if (newData && newData.length > 0) {
         addToDataBuffer(newData);
         addNewDataPoints(newData);
@@ -691,7 +691,7 @@ watch(() => props.running, (newVal) => {
 
 onMounted(() => {
   initPlot();
-  lastUpdateTime = Date.now();
+  // lastUpdateTime = Date.now();
   window.addEventListener("resize", handleResize);
 });
 
@@ -719,7 +719,7 @@ onBeforeUnmount(() => {
 
 onActivated(() => {
   initPlot();
-  lastUpdateTime = Date.now();
+  // lastUpdateTime = Date.now();
   window.addEventListener("resize", handleResize);
   if (props.running) {
     fetchIntervalId = setInterval(() => refreshData(), 100);
