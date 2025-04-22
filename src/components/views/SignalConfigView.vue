@@ -1,16 +1,16 @@
 <template>
-  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 flex flex-col h-full">
-    <div class="flex justify-between items-start mb-6">
-      <div>
+  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 flex flex-col">
+    <div class="flex flex-wrap justify-between items-start mb-6">
+      <div class="max-[800px]:w-full">
         <h2 class="text-3xl font-bold text-blue-400">Signal Configuration</h2>
       </div>
-      <div class="flex gap-3">
+      <div class="flex gap-3 max-[800px]:w-full max-[800px]:mt-4">
         <button
           @click="handleConnectionToggle"
           :disabled="isDisabled"
           :class="[
             buttonClass,
-            'px-6 py-3 rounded-md font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg',
+            'px-6 py-3 rounded-md font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg max-[800px]:w-full',
             { 'opacity-50 cursor-not-allowed': isDisabled }
           ]"
         >
@@ -26,10 +26,10 @@
     <!-- Data Source Selection Panel -->
     <div class="mb-6">
       <h3 class="text-lg font-semibold mb-4">Select Data Source</h3>
-      <div class="grid grid-cols-3 gap-4">
+      <div class="flex flex-wrap gap-4">
         <div 
           @click="onDataSourceChanged('serial')"
-          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02]"
+          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02] max-[800px]:w-full"
           :class="{'border-2 border-blue-500': selectedDataSource === 'serial'}"
         >
           <div>
@@ -40,7 +40,7 @@
         
         <div 
           @click="onDataSourceChanged('tcp')"
-          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02]"
+          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02] max-[800px]:w-full"
           :class="{'border-2 border-blue-500': selectedDataSource === 'tcp'}"
         >
           <div>
@@ -51,7 +51,7 @@
         
         <div 
           @click="onDataSourceChanged('fake')"
-          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02]"
+          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02] max-[800px]:w-full"
           :class="{'border-2 border-blue-500': selectedDataSource === 'fake'}"
         >
           <div>
@@ -65,21 +65,21 @@
     <!-- Settings Container with Fixed Height -->
     <div class="mb-6 flex flex-col flex-grow">
       <h3 class="text-lg font-semibold mb-4">Source Settings</h3>
-      <div class="bg-gray-700 rounded-lg flex flex-col flex-grow relative overflow-hidden">
+      <div class="bg-gray-700 rounded-lg flex flex-col flex-grow overflow-y-auto">
         <!-- Load the appropriate settings component based on selectedDataSource -->
         <SerialSettings v-show="selectedDataSource === 'serial'" 
                        :settings="serialSettings" 
-                       class="p-4 space-y-4 absolute inset-0 transition-opacity duration-300 overflow-y-auto"
+                       class="p-4 space-y-4 transition-opacity duration-300"
                        :class="{'opacity-100 z-10': selectedDataSource === 'serial', 'opacity-0 z-0': selectedDataSource !== 'serial'}" />
         
         <TCPSettings v-show="selectedDataSource === 'tcp'" 
                     :settings="tcpSettings" 
-                    class="p-4 space-y-4 absolute inset-0 transition-opacity duration-300 overflow-y-auto"
+                    class="p-4 space-y-4 transition-opacity duration-300"
                     :class="{'opacity-100 z-10': selectedDataSource === 'tcp', 'opacity-0 z-0': selectedDataSource !== 'tcp'}" />
         
         <FakeDataSettings v-show="selectedDataSource === 'fake'" 
                          :settings="fakeDataSettings" 
-                         class="p-4 space-y-4 absolute inset-0 transition-opacity duration-300 overflow-y-auto"
+                         class="p-4 space-y-4 transition-opacity duration-300"
                          :class="{'opacity-100 z-10': selectedDataSource === 'fake', 'opacity-0 z-0': selectedDataSource !== 'fake'}" />
       </div>
     </div>

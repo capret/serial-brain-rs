@@ -1,12 +1,12 @@
 <template>
   <div id="main" class="flex flex-col h-screen w-screen overflow-hidden">
     <div
-      class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg shadow-2xl p-8 font-sans text-white flex flex-col flex-grow overflow-hidden" style="border-radius: 0.5rem;">
+      class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg shadow-2xl p-8 max-[800px]:px-0 font-sans text-white flex flex-col flex-grow overflow-hidden" style="border-radius: 0.5rem;">
       <AppHeader />
-      <div class="flex gap-8 flex-grow h-full overflow-hidden">
+      <div class="flex gap-8 flex-grow h-full overflow-hidden max-[800px]:flex-col">
         <!-- Sidebar Component -->
         <AppSidebar v-model:activeView="activeView" />
-        <div class="flex-grow space-y-6 overflow-y-auto h-full pr-2 max-h-full pb-4" style="min-height: 0;">
+        <div class="flex-grow space-y-6 overflow-y-auto h-full  max-h-full pb-4" style="min-height: 0;">
           <!-- View Components -->
           <VisualizationView v-if="activeView === 'visualization'" />
           <SignalConfigView v-if="activeView === 'signal'" :selected-data-source="selectedDataSource"
@@ -38,7 +38,6 @@ import FilterConfigView from './components/views/FilterConfigView.vue';
 import RecordingView from './components/views/RecordingView.vue';
 import AppHeader from './components/AppHeader.vue';
 
-const appWindow = getCurrentWindow();
 
 // State for tracking which content is shown in the right panel
 const activeView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder'
@@ -92,37 +91,6 @@ onMounted(() => {
       height: '100vh'
     });
   }
-
-  // Set up the window controls
-  document.getElementById('titlebar-minimize')?.addEventListener('click', () => {
-    console.log('Minimize clicked');
-    appWindow.minimize();
-  });
-
-  document.getElementById('titlebar-maximize')?.addEventListener('click', () => {
-    console.log('Maximize clicked');
-    appWindow.toggleMaximize();
-  });
-
-  document.getElementById('titlebar-close')?.addEventListener('click', () => {
-    console.log('Close clicked');
-    appWindow.close();
-  });
-
-  document.getElementById('titlebar')?.addEventListener('mousedown', (e) => {
-    // If the target is a button, exit without dragging.
-    if (e.target.closest('button')) return;
-
-    if (e.buttons === 1) {
-      if (e.detail === 2) {
-        console.log('Toggle maximize clicked');
-        appWindow.toggleMaximize();
-      } else {
-        console.log('Dragging');
-        appWindow.startDragging();
-      }
-    }
-  });
 });
 </script>
 
@@ -134,4 +102,12 @@ onMounted(() => {
   user-select: none;
 }
 
+</style>
+
+<style>
+/* Transparent scrollbar for right content */
+#main .overflow-y-auto::-webkit-scrollbar { width: 8px; height: 8px; }
+#main .overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
+#main .overflow-y-auto::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.2); border-radius: 4px; }
+#main .overflow-y-auto::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,0.3); }
 </style>

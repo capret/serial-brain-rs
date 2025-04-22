@@ -1,10 +1,10 @@
 <template>
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
-    <div class="flex justify-between items-start mb-6">
+    <div class="flex flex-wrap justify-between items-start mb-6">
       <div>
         <h2 class="text-3xl font-bold text-blue-400">Signal Visualization</h2>
       </div>
-      <div class="flex gap-3">
+      <div class="flex flex-wrap items-center gap-3 max-[800px]:mt-4">
         <button @click="toggleRunning"
           :disabled="isLaunchDisabled"
           :class="[
