@@ -1,48 +1,77 @@
 <template>
-  <header class="header-container" id="titlebar">
-    <div class="title-area">
-      <h1 class="text-2xl font-bold">Signal Realtime Plot</h1>
-      <p class="text-sm opacity-80">Monitor and analyze multi-channel signals in real-time</p>
+  <header class="flex justify-between items-center mb-8" id="titlebar">
+    <h1 class="text-3xl font-bold tracking-tight">
+      Serial<span class="text-blue-400">Brain</span>
+    </h1>
+    <div class="flex items-center gap-3 z-10">
+      <button class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md flex items-center gap-2 transition-all duration-300 transform hover:scale-105">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          class="feather feather-refresh-cw">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        Refresh
+      </button>
+      <button class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-md flex items-center gap-2 transition-all duration-300 transform hover:scale-105">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          class="feather feather-settings">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+          </path>
+        </svg>
+        Settings
+      </button>
     </div>
-    <div class="window-controls">
-      <button id="titlebar-minimize" class="control-btn minimize" title="Minimize">
-        <span>—</span>
-      </button>
-      <button id="titlebar-maximize" class="control-btn maximize" title="Maximize">
-        <span>▢</span>
-      </button>
-      <button id="titlebar-close" class="control-btn close" title="Close">
-        <span>✕</span>
-      </button>
+    <div>
+      <div class="flex items-center gap-2 ml-2">
+        <button id="titlebar-minimize"
+          class="titlebar-button text-gray-400 hover:text-white p-1 transition-colors duration-200">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+        <button id="titlebar-maximize"
+          class="titlebar-button text-gray-400 hover:text-white p-1 transition-colors duration-200">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          </svg>
+        </button>
+        <button id="titlebar-close"
+          class="titlebar-button text-gray-400 hover:text-white p-1 transition-colors duration-200">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
 </template>
 
 <script setup>
-// Import the Window API from Tauri
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { onMounted } from 'vue';
 const appWindow = getCurrentWindow();
-// Use onMounted to set up the event listeners once the DOM is ready
+
 onMounted(() => {
-  // Set up the window controls
   document.getElementById('titlebar-minimize')?.addEventListener('click', () => {
-    console.log('Minimize clicked');
     appWindow.minimize();
   });
-
   document.getElementById('titlebar-maximize')?.addEventListener('click', () => {
-    console.log('Maximize clicked');
     appWindow.toggleMaximize();
   });
-
   document.getElementById('titlebar-close')?.addEventListener('click', () => {
-    console.log('Close clicked');
     appWindow.close();
   });
-
   document.getElementById('titlebar')?.addEventListener('mousedown', (e) => {
-    if (e.buttons === 1 && !e.target.closest('.window-controls')) {
+    if (e.target.closest('button')) return;
+    if (e.buttons === 1) {
       if (e.detail === 2) {
         appWindow.toggleMaximize();
       } else {
@@ -52,97 +81,3 @@ onMounted(() => {
   });
 });
 </script>
-
-<style scoped>
-.header-container {
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 0 1rem 1rem;
-  background-image: linear-gradient(to right, rgb(99 27 255), rgb(70 7 208));
-  color: white;
-  position: relative;
-  height: 150px;
-  box-sizing: border-box;
-  user-select: none;
-  -webkit-app-region: drag;
-}
-
-.title-area {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  max-width: calc(100% - 140px); /* Leave space for window controls */
-}
-
-.text-2xl {
-  font-size: 1.6rem;
-  line-height: 2.1rem;
-  font-weight: 700;
-}
-
-.text-sm {
-  font-size: 0.95rem;
-  line-height: 1.35rem;
-}
-
-.opacity-80 {
-  opacity: 0.8;
-}
-
-.font-bold {
-  font-weight: 700;
-}
-
-.window-controls {
-  display: flex;
-  position: absolute;
-  top: 0;
-  right: 0;
-  -webkit-app-region: no-drag;
-}
-
-.control-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  padding: 0;
-  border: none;
-  background-color: transparent;
-  color: white;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-}
-
-.minimize span {
-  margin-top: -8px;
-  font-weight: bold;
-}
-
-.maximize span {
-  font-size: 16px;
-}
-
-.close span {
-  font-size: 24px;
-}
-
-.minimize:hover {
-  background-color: rgba(255, 255, 255, 0.15);
-}
-
-.maximize:hover {
-  background-color: rgba(255, 255, 255, 0.15);
-}
-
-.close:hover {
-  background-color: #E81123;
-}
-</style>

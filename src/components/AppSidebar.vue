@@ -1,0 +1,85 @@
+<template>
+  <div :class="[collapsed ? 'w-16 px-2 py-5' : 'w-60 p-5', 'flex flex-col flex-shrink-0 bg-gray-800 bg-opacity-60 rounded-lg overflow-y-auto']">
+    <button @click="collapsed = !collapsed" :class="['mb-4 text-white focus:outline-none block', collapsed ? 'mx-auto' : 'mx-0']">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+
+    <div class="space-y-3">
+      <div @click="setActiveView('visualization')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+        activeView === 'visualization'
+          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
+          : 'bg-gray-700 hover:bg-gray-600']">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          <h3 v-if="!collapsed" class="font-bold">Visualization</h3>
+        </div>
+      </div>
+
+      <div @click="setActiveView('filters')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+        activeView === 'filters'
+          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
+          : 'bg-gray-700 hover:bg-gray-600']">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+          </svg>
+          <h3 v-if="!collapsed" class="font-bold">Filters</h3>
+        </div>
+      </div>
+
+      <div @click="setActiveView('folder')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+        activeView === 'folder'
+          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
+          : 'bg-gray-700 hover:bg-gray-600']">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <h3 v-if="!collapsed" class="font-bold">Recording</h3>
+        </div>
+      </div>
+    </div>
+    <div class="mt-auto">
+      <div @click="setActiveView('signal')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+        activeView === 'signal'
+          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
+          : 'bg-gray-700 hover:bg-gray-600']">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          class="feather feather-settings">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+          </path>
+        </svg>
+          <h3 v-if="!collapsed" class="font-bold">Settings</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+
+const props = defineProps({
+  activeView: {
+    type: String,
+    required: true
+  }
+});
+
+const emit = defineEmits(['update:activeView']);
+const collapsed = ref(false);
+
+function setActiveView(view) {
+  emit('update:activeView', view);
+}
+</script>
