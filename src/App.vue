@@ -1,19 +1,20 @@
 <template>
   <div id="main" class="flex flex-col h-screen w-screen overflow-hidden">
     <div
-      class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg shadow-2xl p-8 max-[800px]:px-0 font-sans text-white flex flex-col flex-grow overflow-hidden" style="border-radius: 0.5rem;">
+      class="bg-gradient-to-br from-gray-900 to-gray-800 px-6 rounded-lg shadow-2xl  max-[800px]:px-0 font-sans text-white flex flex-col flex-grow overflow-hidden" style="border-radius: 0.5rem;">
       <AppHeader />
       <div class="flex gap-8 flex-grow h-full overflow-hidden max-[800px]:flex-col">
         <!-- Sidebar Component -->
-        <AppSidebar v-model:activeView="activeView" />
-        <div class="flex-grow space-y-6 overflow-y-auto h-full  max-h-full pb-4" style="min-height: 0;">
-          <!-- View Components -->
-          <VisualizationView v-if="activeView === 'visualization'" />
-          <SignalConfigView v-if="activeView === 'signal'" :selected-data-source="selectedDataSource"
-            :serial-settings="serialSettings" :tcp-settings="tcpSettings" :fake-data-settings="fakeDataSettings"
-            @data-source-changed="onDataSourceChanged" />
-          <FilterConfigView v-if="activeView === 'filters'" />
-          <RecordingView v-if="activeView === 'folder'" />
+        <AppSidebar v-model:activeView="primaryView" v-model:additionalViews="additionalViews" />
+        <div class="flex-grow overflow-y-auto space-y-6 h-full pb-4" style="min-height: 0;">
+          <!-- Primary View -->
+          <VisualizationView v-if="primaryView === 'visualization'" />
+          <SignalConfigView v-if="primaryView === 'signal'" :selected-data-source="selectedDataSource" :serial-settings="serialSettings" :tcp-settings="tcpSettings" :fake-data-settings="fakeDataSettings" @data-source-changed="onDataSourceChanged" />
+          <FilterConfigView v-if="primaryView === 'filters'" />
+          <RecordingView v-if="primaryView === 'folder'" />
+          <!-- Additional Views (only in visualization) -->
+          <FilterConfigView v-if="primaryView === 'visualization' && additionalViews.includes('filters')" />
+          <RecordingView v-if="primaryView === 'visualization' && additionalViews.includes('folder')" />
         </div>
       </div>
     </div>
@@ -39,8 +40,9 @@ import RecordingView from './components/views/RecordingView.vue';
 import AppHeader from './components/AppHeader.vue';
 
 
-// State for tracking which content is shown in the right panel
-const activeView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder'
+// State for primary view and appended additional views (in visualization)
+const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder'
+const additionalViews = ref([]); // list of appended views when in visualization
 
 // Signal source state
 const selectedDataSource = ref('fake'); // Options: 'serial', 'tcp', 'fake'
@@ -106,7 +108,7 @@ onMounted(() => {
 
 <style>
 /* Transparent scrollbar for right content */
-#main .overflow-y-auto::-webkit-scrollbar { width: 8px; height: 8px; }
+#main .overflow-y-auto::-webkit-scrollbar { width: 5px; height: 5px; }
 #main .overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
 #main .overflow-y-auto::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.2); border-radius: 4px; }
 #main .overflow-y-auto::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,0.3); }

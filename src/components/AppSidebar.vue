@@ -20,8 +20,8 @@
         </div>
       </div>
 
-      <div @click="setActiveView('filters')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
-        activeView === 'filters'
+      <div @mousedown="handleClick('filters', $event)" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+        (activeView === 'filters' || (activeView === 'visualization' && additionalViews.includes('filters')))
           ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
           : 'bg-gray-700 hover:bg-gray-600']">
         <div class="flex items-center gap-2">
@@ -33,8 +33,8 @@
         </div>
       </div>
 
-      <div @click="setActiveView('folder')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
-        activeView === 'folder'
+      <div @mousedown="handleClick('folder', $event)" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+        (activeView === 'folder' || (activeView === 'visualization' && additionalViews.includes('folder')))
           ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
           : 'bg-gray-700 hover:bg-gray-600']">
         <div class="flex items-center gap-2">
@@ -73,13 +73,46 @@ const props = defineProps({
   activeView: {
     type: String,
     required: true
+  },
+  additionalViews: {
+    type: Array,
+    default: () => []
   }
 });
 
-const emit = defineEmits(['update:activeView']);
+const emit = defineEmits(['update:activeView', 'update:additionalViews']);
 const collapsed = ref(false);
+let clickTimer = null;
 
 function setActiveView(view) {
   emit('update:activeView', view);
+}
+
+function setAdditionalViews(view) {
+  const list = props.additionalViews;
+  const next = list.includes(view)
+    ? list.filter(v => v !== view)
+    : [...list, view];
+  emit('update:additionalViews', next);
+}
+
+function handleClick(view, e) {
+  e.preventDefault();
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+  }
+  if (e.detail === 1) {
+    clickTimer = setTimeout(() => {
+      setActiveView(view);
+      clickTimer = null;
+    }, 250);
+  } else if (e.detail === 2) {
+    if (props.activeView === 'visualization') {
+      setAdditionalViews(view);
+    } else {
+      setActiveView(view);
+    }
+  }
 }
 </script>

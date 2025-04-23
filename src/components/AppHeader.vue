@@ -1,10 +1,10 @@
 <template>
-  <header class="flex justify-between items-center mb-8" id="titlebar">
+  <header class="flex justify-between items-center py-8 px-6 max-[800px]:px-4" id="titlebar">
     <h1 class="text-3xl font-bold tracking-tight">
       Serial<span class="text-blue-400">Brain</span>
     </h1>
     <div>
-      <div class="flex items-center gap-2 ml-2">
+      <div class="flex items-center gap-2 ml-2 max-[800px]:hidden">
         <button id="titlebar-minimize"
           class="titlebar-button text-gray-400 hover:text-white p-1 transition-colors duration-200">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
@@ -39,13 +39,17 @@ import { onMounted } from 'vue';
 
 onMounted(() => {
   const appWindow = getCurrentWindow();
+  console.log("AppHeader mounted")
   document.getElementById('titlebar-minimize')?.addEventListener('click', () => {
+    console.log("Minimize")
     appWindow.minimize();
   });
   document.getElementById('titlebar-maximize')?.addEventListener('click', () => {
+    console.log("Maximize")
     appWindow.toggleMaximize();
   });
   document.getElementById('titlebar-close')?.addEventListener('click', () => {
+    console.log("Close")
     appWindow.close();
   });
   document.getElementById('titlebar')?.addEventListener('mousedown', (e) => {

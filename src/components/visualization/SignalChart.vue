@@ -22,7 +22,7 @@
       </div>
     </div>
   </div>
-  <div class="rounded-md shadow-sm bg-gray-900 p-4 mb-4">
+  <div class="rounded-md shadow-sm bg-gray-900 p-4 pb-0 my-6">
     <div
       ref="plotGrid"
       class="grid"
@@ -33,18 +33,18 @@
     >
       <canvas
         ref="yAxisCanvas"
-        class="border-r border-gray-200"
+        class="border-r border-gray-200 block"
         :style="{ width: '40px', height: plotHeight + 'px' }"
       ></canvas>
       <canvas
         ref="plotCanvas"
-        class="w-full"
+        class="w-full block"
         :style="{ height: plotHeight + 'px' }"
       ></canvas>
       <div class="w-full"></div>
       <canvas
         ref="xAxisCanvas"
-        class="border-t border-gray-200 w-full"
+        class="border-t border-gray-200 w-full block"
         style="height:40px"
       ></canvas>
     </div>
@@ -118,7 +118,7 @@ let animationFrame: number | null = null;
 let fetchIntervalId: number | null = null;
 let dataUpdatePending = false;
 let fpsCounter = 0;
-let fpsControl = 1;
+let fpsControl = 3;
 let isActive = true;
 
 /* Interaction helpers */
@@ -416,6 +416,7 @@ function refreshData() {
       if (newData?.length) {
         addToDataBuffer(newData);
         addNewDataPoints(newData);
+        console.log('Data length:', newData.length);
       }
     })
     .catch(err => console.error('Error retrieving data:', err))
@@ -469,6 +470,11 @@ onMounted(async () => {
   recalcPlotHeight();
   initPlot();
   window.addEventListener('resize', handleResize);
+  // ensure correct layout after first paint
+  requestAnimationFrame(() => {
+    recalcPlotHeight();
+    initPlot();
+  });
 });
 function handleResize() {
   recalcPlotHeight();
@@ -487,6 +493,11 @@ onActivated(() => {
   initPlot();
   window.addEventListener('resize', handleResize);
   if (props.running) fetchIntervalId = setInterval(refreshData, 100);
+  // ensure correct layout after activation
+  requestAnimationFrame(() => {
+    // recalcPlotHeight();
+    initPlot();
+  });
 });
 onDeactivated(() => {
   isActive = false;

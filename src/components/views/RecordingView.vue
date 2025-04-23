@@ -1,12 +1,12 @@
 <template>
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
-    <div class="flex justify-between items-start mb-6">
-      <div>
+    <div class="flex flex-wrap justify-between items-start mb-6">
+      <div class="max-[800px]:w-full">
         <h2 class="text-3xl font-bold text-blue-400">Recording Setup</h2>
       </div>
-      <div class="flex gap-3">
+      <div class="flex gap-3 max-[800px]:w-full max-[800px]:mt-4">
         <button
-          class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg">
+          class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md font-semibold flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg max-[800px]:w-full">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
