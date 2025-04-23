@@ -6,7 +6,7 @@
       <div class="flex gap-8 flex-grow h-full overflow-hidden max-[800px]:flex-col">
         <!-- Sidebar Component -->
         <AppSidebar v-model:activeView="primaryView" v-model:additionalViews="additionalViews" />
-        <div class="flex-grow overflow-y-auto space-y-6 h-full pb-4" style="min-height: 0;">
+        <div class="flex-grow overflow-y-auto space-y-6 h-full pb-4 max-[800px]:pb-16" style="min-height: 0;">
           <!-- Primary View -->
           <VisualizationView v-if="primaryView === 'visualization'" />
           <SignalConfigView v-if="primaryView === 'signal'" :selected-data-source="selectedDataSource" :serial-settings="serialSettings" :tcp-settings="tcpSettings" :fake-data-settings="fakeDataSettings" @data-source-changed="onDataSourceChanged" />

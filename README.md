@@ -14,3 +14,22 @@ Since TypeScript cannot handle type information for `.vue` imports, they are shi
 2. Reload the VS Code window by running `Developer: Reload Window` from the command palette.
 
 You can learn more about Take Over mode [here](https://github.com/johnsoncodehk/volar/discussions/471).
+
+## Env Settings for Android
+```powershell
+# for android build
+$Env:PROJECT_DIR = "C:\Users\capre\serial-brain-rs\src-tauri\gen\android"
+$Env:LIBCLANG_PATH = "C:\Users\capre\scoop\apps\llvm\current\bin"
+$Env:OPENCV_LINK_LIBS = "opencv_calib3d,opencv_features2d,opencv_imgproc,opencv_video,opencv_flann,opencv_core,tegra_hal,tbb,ittnotify,z"
+$Env:OPENCV_LINK_PATHS = "$PROJECT_DIR\ext\OpenCV-android-sdk\sdk\native\staticlibs\arm64-v8a,$PROJECT_DIR\ext\OpenCV-android-sdk\sdk\native\3rdparty\libs\arm64-v8a"
+$Env:OPENCV_INCLUDE_PATHS = "$PROJECT_DIR\ext\OpenCV-android-sdk\sdk\native\jni\include"
+```
+
+## Env Settings for Windows Dev
+```powershell
+# for windows build
+$Env:LIBCLANG_PATH = "C:\Users\capre\scoop\apps\llvm\current\bin"
+$Env:OPENCV_LINK_LIBS = "opencv_world4110"
+$Env:OPENCV_LINK_PATHS = "C:\Users\capre\Downloads\opencv\build\x64\vc16\lib"
+$Env:OPENCV_INCLUDE_PATHS = "C:\Users\capre\Downloads\opencv\build\include\opencv2"
+```

@@ -1,5 +1,5 @@
 <template>
-  <div :class="[collapsed ? 'w-16 px-2 py-5' : 'w-60 p-5', 'flex flex-col flex-shrink-0 bg-gray-800 bg-opacity-60 rounded-lg overflow-y-auto max-[800px]:fixed max-[800px]:bottom-0 max-[800px]:left-0 max-[800px]:flex-row max-[800px]:items-center max-[800px]:z-50 max-[800px]:shadow-[0_-4px_6px_0_rgba(0,0,0,0.1)]', 'max-[800px]:w-full max-[800px]:px-8 max-[800px]:py-5']">
+  <div :class="[collapsed ? 'w-16 px-2 py-5' : 'w-60 p-5', 'flex flex-col flex-shrink-0 bg-gray-800 bg-opacity-60 rounded-lg overflow-y-auto max-[800px]:fixed max-[800px]:bottom-0 max-[800px]:left-0 max-[800px]:flex-row max-[800px]:items-center max-[800px]:z-50 max-[800px]:shadow-[0_-4px_6px_0_rgba(0,0,0,0.1)]', 'max-[800px]:w-full max-[800px]:px-8 max-[800px]:py-4']">
     <button @click="collapsed = !collapsed" :class="['mb-4 text-white focus:outline-none block max-[800px]:hidden', collapsed ? 'mx-auto' : 'mx-0']">
       <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 6h16M4 12h16M4 18h16" />

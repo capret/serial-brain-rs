@@ -1,5 +1,5 @@
 <template>
-  <div class="relative w-28 h-12">
+  <div class="relative flex-1 min-w-[7rem] h-12">
     <!-- Color rectangle, left-aligned -->
     <div class="absolute left-0 w-3 h-9 rounded-xl transition-all duration-200 ease-in-out hover:h-12 top-1/2 -translate-y-1/2">
       <input
@@ -18,7 +18,7 @@
     <!-- Content rectangle, right-aligned and overlapping -->
     <div
       @click="onToggleVisibility"
-      class="absolute top-0 right-0 w-24 h-12 rounded-lg flex flex-col justify-center px-3 cursor-pointer z-10 transition-transform duration-200 hover:scale-95"
+      class="absolute top-0 left-5 right-0 h-12 rounded-lg flex flex-col justify-center px-3 cursor-pointer z-10 transition-transform duration-200 hover:scale-95"
       :class="props.visible ? 'bg-gray-700' : 'bg-gray-900'"
     >
       <p class="text-xs text-gray-400 m-0 truncate">{{ channelTitle }}</p>

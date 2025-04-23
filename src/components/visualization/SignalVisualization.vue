@@ -5,7 +5,7 @@
       :running="isRunning"
       @crosshair-move="handleCrosshairMove"
     />
-    <div class="flex flex-wrap gap-4 ">
+    <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));">
       <ChannelStatCard
         v-for="(channel, index) in channelStats"
         :key="index"
