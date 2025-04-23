@@ -9,7 +9,8 @@ use std::{
 use tauri::{AppHandle, Emitter};
 use rand::Rng;
 use serialport::{SerialPort, StopBits, Parity, DataBits};
-use crate::{SerialState, FakeDataConfig};
+use crate::state::SerialState;
+use crate::types::FakeDataConfig;
 use encoding_rs::GBK;
 
 // Packet header and length
