@@ -18,6 +18,8 @@ pub struct SerialState {
     pub buffer_lock: Mutex<()> ,
     pub fake_stream_running: Arc<AtomicBool>,
     pub fake_stream_handle: Mutex<Option<JoinHandle<()>>>,
+    pub stream_running: Arc<AtomicBool>,
+    pub stream_handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl SerialState {
@@ -29,6 +31,8 @@ impl SerialState {
             buffer_lock: Mutex::new(()),
             fake_stream_running: Arc::new(AtomicBool::new(false)),
             fake_stream_handle: Mutex::new(None),
+            stream_running: Arc::new(AtomicBool::new(false)),
+            stream_handle: Mutex::new(None),
         }
     }
 

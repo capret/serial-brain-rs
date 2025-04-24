@@ -82,12 +82,12 @@ function onToggleVisibility(index: number) {
 let unlistenFn: any = null;
 
 onMounted(async () => {
-  unlistenFn = await listen('serial_data', (event: any) => {
-    // Update stats only when running
-    if (event.payload && isRunning.value) {
-      updateChannelStats(event.payload);
-    }
-  });
+  // unlistenFn = await listen('serial_data', (event: any) => {
+  //   // Update stats only when running
+  //   if (event.payload && isRunning.value) {
+  //     updateChannelStats(event.payload);
+  //   }
+  // });
 });
 
 onBeforeUnmount(() => {

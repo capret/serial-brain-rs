@@ -1,20 +1,32 @@
 <template>
   <div id="main" class="flex flex-col h-screen w-screen overflow-hidden">
     <div
-      class="bg-gradient-to-br from-gray-900 to-gray-800 px-6 rounded-lg shadow-2xl  max-[800px]:px-0 font-sans text-white flex flex-col flex-grow overflow-hidden" style="border-radius: 0.5rem;">
+      class="bg-gradient-to-br from-gray-900 to-gray-800 px-6 rounded-lg shadow-2xl max-[800px]:px-0 font-sans text-white flex flex-col flex-grow overflow-hidden" style="border-radius: 0.5rem;">
       <AppHeader />
       <div class="flex gap-8 flex-grow h-full overflow-hidden max-[800px]:flex-col">
         <!-- Sidebar Component -->
-        <AppSidebar v-model:activeView="primaryView" v-model:additionalViews="additionalViews" />
-        <div class="flex-grow overflow-y-auto space-y-6 h-full pb-4 max-[800px]:pb-16" style="min-height: 0;">
+        <AppSidebar v-model:activeView="primaryView" v-model:additionalViews="additionalViews" :class="[
+            collapsed ? 'w-16 px-2 py-5' : 'w-60 p-5',
+            'mb-5 max-[800px]:mb-0',
+            'border border-gray-700',
+            'shadow-inner',
+            'flex flex-col flex-shrink-0 bg-gray-800 bg-opacity-60 rounded-lg overflow-y-auto',
+            'max-[800px]:fixed max-[800px]:bottom-0 max-[800px]:left-0',
+            'max-[800px]:flex-row max-[800px]:items-center max-[800px]:z-50',
+            'max-[800px]:shadow-[0_-4px_6px_0_rgba(0,0,0,0.1)]',
+            'max-[800px]:w-full max-[800px]:px-8 max-[800px]:py-4'
+          ]" />
+        <div class="flex-grow overflow-y-auto space-y-6 h-full mb-5 pb-4 max-[800px]:pb-16" style="min-height: 0;">
           <!-- Primary View -->
-          <VisualizationView v-if="primaryView === 'visualization'" />
-          <SignalConfigView v-if="primaryView === 'signal'" :selected-data-source="selectedDataSource" :serial-settings="serialSettings" :tcp-settings="tcpSettings" :fake-data-settings="fakeDataSettings" @data-source-changed="onDataSourceChanged" />
-          <FilterConfigView v-if="primaryView === 'filters'" />
-          <RecordingView v-if="primaryView === 'folder'" />
+          <VisualizationView v-if="primaryView === 'visualization'" class="view"/>
+          <SignalConfigView v-if="primaryView === 'signal'" class="view" :selected-data-source="selectedDataSource" :serial-settings="serialSettings" :tcp-settings="tcpSettings" :fake-data-settings="fakeDataSettings" @data-source-changed="onDataSourceChanged" />
+          <FilterConfigView v-if="primaryView === 'filters'" class="view" />
+          <RecordingView v-if="primaryView === 'folder'" class="view" />
+          <StreamingView v-if="primaryView === 'streaming'" class="view" />
           <!-- Additional Views (only in visualization) -->
-          <FilterConfigView v-if="primaryView === 'visualization' && additionalViews.includes('filters')" />
-          <RecordingView v-if="primaryView === 'visualization' && additionalViews.includes('folder')" />
+          <StreamingView v-if="primaryView === 'visualization' && additionalViews.includes('streaming')" class="view" />
+          <FilterConfigView v-if="primaryView === 'visualization' && additionalViews.includes('filters')" class="view" />
+          <RecordingView v-if="primaryView === 'visualization' && additionalViews.includes('folder')" class="view" />
         </div>
       </div>
     </div>
@@ -37,11 +49,12 @@ import VisualizationView from './components/views/VisualizationView.vue';
 import SignalConfigView from './components/views/SignalConfigView.vue';
 import FilterConfigView from './components/views/FilterConfigView.vue';
 import RecordingView from './components/views/RecordingView.vue';
+import StreamingView from './components/views/StreamingView.vue';
 import AppHeader from './components/AppHeader.vue';
 
 
 // State for primary view and appended additional views (in visualization)
-const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder'
+const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder', 'streaming'
 const additionalViews = ref([]); // list of appended views when in visualization
 
 // Signal source state

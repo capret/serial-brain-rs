@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+@layer components {
+    .view {
+      border-color: var(--color-gray-700);
+      border-width: 1px;
+      border-style: var(--tw-border-style);
+      box-shadow: var(--shadow-xl);
+    }
+  }
