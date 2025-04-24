@@ -22,13 +22,13 @@
       </div>
     </div>
   </div>
-  <div class="rounded-md shadow-sm bg-gray-900 p-4 pb-0 my-6">
+  <div class="rounded-md shadow-sm bg-gray-900 p-4 my-6">
     <div
       ref="plotGrid"
       class="grid"
       :style="{
         gridTemplateColumns: '40px 1fr',
-        gridTemplateRows: plotHeight + 'px 40px',
+        gridTemplateRows: plotHeight + 'px 20px',
       }"
     >
       <canvas
@@ -45,7 +45,7 @@
       <canvas
         ref="xAxisCanvas"
         class="border-t border-gray-200 w-full block"
-        style="height:40px"
+        style="height:20px"
       ></canvas>
     </div>
   </div>
@@ -81,7 +81,7 @@ const plotGrid = ref<HTMLDivElement | null>(null);
 const plotHeight = ref<number>(300); // include axis + plot
 function recalcPlotHeight(): void {
   const width = plotGrid.value?.clientWidth ?? 600;
-  plotHeight.value = width / 2;
+  plotHeight.value = width / 3;
 }
 
 /* ====================================================

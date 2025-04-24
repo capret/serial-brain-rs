@@ -183,7 +183,7 @@ pub fn start_streaming(
         let url = path.clone();
         let handle = thread::spawn(move || {
             // build HTTP client with timeout
-            let client = match Client::builder().timeout(Duration::from_secs(10)).build() {
+            let client = match Client::builder().timeout(Duration::from_secs(1)).build() {
                 Ok(c) => c,
                 Err(e) => { let _ = app_clone.emit("stream_error", Arc::new(e.to_string())); return; }
             };

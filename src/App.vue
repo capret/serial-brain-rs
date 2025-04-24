@@ -5,18 +5,16 @@
       <AppHeader />
       <div class="flex gap-8 flex-grow h-full overflow-hidden max-[800px]:flex-col">
         <!-- Sidebar Component -->
-        <AppSidebar v-model:activeView="primaryView" v-model:additionalViews="additionalViews" :class="[
+        <AppSidebar v-model:activeView="primaryView" v-model:additionalViews="additionalViews" v-model:collapsed="collapsed" :class="[
             collapsed ? 'w-16 px-2 py-5' : 'w-60 p-5',
-            'mb-5 max-[800px]:mb-0',
-            'border border-gray-700',
-            'shadow-inner',
-            'flex flex-col flex-shrink-0 bg-gray-800 bg-opacity-60 rounded-lg overflow-y-auto',
+            'mb-5 border border-gray-700 shadow-inner rounded-lg overflow-y-auto',
+            'flex flex-col flex-shrink-0 bg-gray-800 bg-opacity-60',
             'max-[800px]:fixed max-[800px]:bottom-0 max-[800px]:left-0',
             'max-[800px]:flex-row max-[800px]:items-center max-[800px]:z-50',
-            'max-[800px]:shadow-[0_-4px_6px_0_rgba(0,0,0,0.1)]',
+            'max-[800px]:shadow-[0_-4px_6px_0_rgba(0,0,0,0.1)] max-[800px]:mb-0',
             'max-[800px]:w-full max-[800px]:px-8 max-[800px]:py-4'
           ]" />
-        <div class="flex-grow overflow-y-auto space-y-6 h-full mb-5 pb-4 max-[800px]:pb-16" style="min-height: 0;">
+        <div class="flex-grow overflow-y-auto space-y-6 h-full pb-4 max-[800px]:pb-16 max-[800px]:mx-2" style="min-height: 0;">
           <!-- Primary View -->
           <VisualizationView v-if="primaryView === 'visualization'" class="view"/>
           <SignalConfigView v-if="primaryView === 'signal'" class="view" :selected-data-source="selectedDataSource" :serial-settings="serialSettings" :tcp-settings="tcpSettings" :fake-data-settings="fakeDataSettings" @data-source-changed="onDataSourceChanged" />
@@ -56,6 +54,7 @@ import AppHeader from './components/AppHeader.vue';
 // State for primary view and appended additional views (in visualization)
 const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder', 'streaming'
 const additionalViews = ref([]); // list of appended views when in visualization
+const collapsed = ref(false);
 
 // Signal source state
 const selectedDataSource = ref('fake'); // Options: 'serial', 'tcp', 'fake'
