@@ -355,74 +355,92 @@ pub fn start_recording(
                     }
                 }
                 
-                // Get the current data
-                let data = state_clone.get_data();
-                let now = SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap_or_else(|_| Duration::from_secs(0));
+                // Get data from the recording buffer with timestamps
+                let timestamped_data = state_clone.get_recording_data();
+                if timestamped_data.is_empty() {
+                    // If no new data, sleep a bit and try again
+                    thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
                 
                 // Record the data based on format
                 let mut recording_file = state_clone.recording_file.lock().unwrap();
                 if let Some((ref mut file, ref format)) = *recording_file {
                     match format.as_str() {
                         "csv" => {
-                            // CSV: timestamp,val1,val2,...
-                            let mut line = format!("{}", now.as_millis());
-                            for channel_data in &data {
+                            // Process each data point with its timestamp
+                            for (timestamp, channel_data) in &timestamped_data {
+                                // Convert timestamp to milliseconds
+                                let timestamp_ms = timestamp
+                                    .duration_since(SystemTime::UNIX_EPOCH)
+                                    .unwrap_or_else(|_| Duration::from_secs(0))
+                                    .as_millis();
+                                    
+                                // CSV: timestamp,val1,val2,...
+                                let mut line = format!("{}", timestamp_ms);
                                 // Each channel_data is an array of 8 f32 values
                                 for &value in channel_data.iter() {
                                     line.push_str(&format!(",{}", value));
                                 }
-                            }
-                            if let Err(e) = writeln!(file, "{}", line) {
-                                eprintln!("Error writing to CSV file: {}", e);
-                                break;
+                                if let Err(e) = writeln!(file, "{}", line) {
+                                    eprintln!("Error writing to CSV file: {}", e);
+                                    break;
+                                }
                             }
                         },
                         "json" => {
-                            // JSON: array of objects with timestamp and values
-                            // Convert 2D array to flattened Vec for JSON serialization
-                            let mut values = Vec::new();
-                            for channel_data in &data {
+                            // Process each data point with its timestamp
+                            for (timestamp, channel_data) in &timestamped_data {
+                                // Convert timestamp to milliseconds
+                                let timestamp_ms = timestamp
+                                    .duration_since(SystemTime::UNIX_EPOCH)
+                                    .unwrap_or_else(|_| Duration::from_secs(0))
+                                    .as_millis();
+                                                    
+                                // Convert data to flattened Vec for JSON serialization
+                                let mut values = Vec::new();
                                 for &value in channel_data.iter() {
                                     values.push(value);
                                 }
-                            }
-                            
-                            let json_entry = format!("{}{{\
-                                    \"timestamp\": {},\
-                                    \"values\": {:?}\
-                                    }}",
-                                if first_json_entry { "" } else { "," },
-                                now.as_millis(),
-                                values
-                            );
-                            first_json_entry = false;
-                            
-                            if let Err(e) = file.write_all(json_entry.as_bytes()) {
-                                eprintln!("Error writing to JSON file: {}", e);
-                                break;
+                                                    
+                                let json_entry = format!("{}{{\"timestamp\": {},\"values\": {}}}",
+                                    if first_json_entry { "" } else { "," },
+                                    timestamp_ms,
+                                    serde_json::to_string(&values).unwrap()
+                                );
+                                first_json_entry = false;
+                                                    
+                                if let Err(e) = file.write_all(json_entry.as_bytes()) {
+                                    eprintln!("Error writing to JSON file: {}", e);
+                                    break;
+                                }
                             }
                         },
                         "binary" => {
-                            // Binary: timestamp (8 bytes) + number of values (4 bytes) + values (8 bytes each)
-                            let timestamp = now.as_millis() as u64;
-                            let num_values = data.len() as u32;
-                            
-                            // Write timestamp
-                            if let Err(e) = file.write_all(&timestamp.to_le_bytes()) {
-                                eprintln!("Error writing timestamp to binary file: {}", e);
-                                break;
-                            }
-                            
-                            // Write number of values
-                            if let Err(e) = file.write_all(&num_values.to_le_bytes()) {
-                                eprintln!("Error writing value count to binary file: {}", e);
-                                break;
-                            }
-                            
-                            // Write each value
-                            for channel_data in &data {
+                            // Process each data point with its timestamp
+                            for (timestamp, channel_data) in &timestamped_data {
+                                // Convert timestamp to milliseconds
+                                let timestamp_ms = timestamp
+                                    .duration_since(SystemTime::UNIX_EPOCH)
+                                    .unwrap_or_else(|_| Duration::from_secs(0))
+                                    .as_millis() as u64;
+                                    
+                                // Calculate number of values
+                                let num_values = channel_data.len() as u32;
+                                
+                                // Write timestamp
+                                if let Err(e) = file.write_all(&timestamp_ms.to_le_bytes()) {
+                                    eprintln!("Error writing timestamp to binary file: {}", e);
+                                    break;
+                                }
+                                
+                                // Write number of values
+                                if let Err(e) = file.write_all(&num_values.to_le_bytes()) {
+                                    eprintln!("Error writing value count to binary file: {}", e);
+                                    break;
+                                }
+                                
+                                // Write each value
                                 for &value in channel_data.iter() {
                                     let value_f64 = value as f64;
                                     if let Err(e) = file.write_all(&value_f64.to_le_bytes()) {
@@ -436,8 +454,8 @@ pub fn start_recording(
                     }
                 }
                 
-                // Sleep to avoid hammering the CPU
-                thread::sleep(Duration::from_millis(50));
+                // Sleep a shorter time to check for new data more frequently
+                thread::sleep(Duration::from_millis(5));
             }
             
             // Finalize the recording
