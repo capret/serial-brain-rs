@@ -22,24 +22,52 @@
       </select>
     </div>
     
-    <div class="flex items-center py-2 mb-2">
-      <input 
-        type="checkbox" 
-        id="auto-reconnect" 
-        class="mr-2 w-4 h-4" 
-        v-model="tcpSettings.autoReconnect"
-      />
-      <label for="auto-reconnect" class="text-sm select-none">Keep trying to reconnect if connection fails</label>
-    </div>
+    <!-- Auto-reconnect removed as the system is always in listening mode -->
+
     
-    <div v-if="tcpSettings.autoReconnect" class="mt-2 bg-gray-900 p-3 rounded text-xs">
-      <div class="text-yellow-400 mb-1" v-if="tcpSettings.isReconnecting">
-        Attempting to reconnect... ({{ tcpSettings.reconnectAttempts }} attempts)
+    <!-- Connection status and status messages -->
+    <div class="mt-4 bg-gray-900 p-3 rounded">
+      <h4 class="text-sm font-medium mb-2">Connection Status:</h4>
+      
+      <!-- Auto-reconnect status removed as the system is always in listening mode -->
+
+      
+      <!-- Connection state indicator -->
+      <div class="flex items-center mb-2">
+        <div class="w-3 h-3 rounded-full mr-2" 
+          :class="{
+            'bg-green-500': tcpSettings.isConnected && hasClientConnected,
+            'bg-yellow-500': tcpSettings.isConnected && !hasClientConnected,
+            'bg-red-500': !tcpSettings.isConnected
+          }"></div>
+        <span class="text-xs">
+          <span v-if="tcpSettings.isConnected && hasClientConnected">Client connected</span>
+          <span v-else-if="tcpSettings.isConnected && !hasClientConnected">Listening for connections</span>
+          <span v-else>Not connected</span>
+        </span>
       </div>
-      <div v-else-if="tcpSettings.isConnected" class="text-green-400">
-        Connected successfully
+      
+      <!-- Current Host:Port display -->
+      <div class="text-xs mb-2" v-if="tcpSettings.isConnected">
+        <span class="text-gray-400">Configured endpoint: </span>
+        <span class="text-blue-400">{{ tcpSettings.host }}:{{ tcpSettings.port }}</span>
       </div>
-      <div v-if="tcpSettings.lastError" class="text-red-400 text-xs mt-1">
+      
+      <!-- Socket status messages -->
+      <div class="text-xs h-32 overflow-y-auto bg-gray-800 p-2 rounded">
+        <div v-for="(message, index) in socketMessages" :key="index" 
+          :class="{
+            'text-green-400': message.includes('Connected from') || message.includes('successful'),
+            'text-yellow-400': message.includes('listening'),
+            'text-red-400': message.includes('failed') || message.includes('disconnected'),
+            'mb-1': true
+          }">
+          {{ message }}
+        </div>
+      </div>
+      
+      <!-- Error display -->
+      <div v-if="tcpSettings.lastError" class="text-red-400 text-xs mt-2">
         {{ tcpSettings.lastError }}
       </div>
     </div>
@@ -47,5 +75,42 @@
 </template>
 
 <script setup>
-import { tcpSettings } from '../../store/appState';
+import { tcpSettings, socketMessages, hasClientConnected, addSocketMessage } from '../../store/appState';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { listen } from '@tauri-apps/api/event';
+
+// Set up listener for socket status events
+let unlistenSocketStatus;
+
+// Reset connection state when port changes
+watch(() => tcpSettings.port, (newPort, oldPort) => {
+  if (newPort !== oldPort && oldPort !== 0) {
+    console.log(`Port changed from ${oldPort} to ${newPort}, resetting connection state`);
+    tcpSettings.resetConnectionState();
+    tcpSettings.lastPort = newPort;
+    // No need to handle reconnection since the system is always listening
+  }
+});
+
+// Reset connection state when host changes
+watch(() => tcpSettings.host, (newHost, oldHost) => {
+  if (newHost !== oldHost && oldHost !== '') {
+    console.log(`Host changed from ${oldHost} to ${newHost}, resetting connection state`);
+    tcpSettings.resetConnectionState();
+  }
+});
+
+onMounted(async () => {
+  // Set up socket status event listener
+  unlistenSocketStatus = await listen('socket_status', (event) => {
+    // Use the global function to add messages
+    addSocketMessage(event.payload);
+  });
+});
+
+onUnmounted(() => {
+  if (unlistenSocketStatus) {
+    unlistenSocketStatus();
+  }
+});
 </script>

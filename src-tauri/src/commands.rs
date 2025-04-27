@@ -61,6 +61,9 @@ pub fn connect_socket(
     port: u16,
     state: State<Arc<SerialState>>,
 ) -> Result<(), String> {
+    // Send a clear status message to reset UI state
+    let _ = app_handle.emit("socket_status", format!("[SOCKET] Attempting to connect to {}:{}", host, port));
+    
     if state.signal_stream_running.load(Ordering::SeqCst) {
         state.signal_stream_running.store(false, Ordering::SeqCst);
         if let Some(handle) = state.signal_stream_handle.lock().unwrap().take() {
@@ -69,7 +72,9 @@ pub fn connect_socket(
     }
 
     // Create the reader but don't set it up yet - setup will be done in reader_loop
-    let reader = SocketBinaryReader::new(host.clone(), port);
+    // Pass the app_handle to the reader so it can emit socket status events
+    let reader = SocketBinaryReader::new(host.clone(), port)
+        .with_app_handle(app_handle.clone());
     state.signal_stream_running.store(true, Ordering::SeqCst);
     let running_flag = state.signal_stream_running.clone();
     let state_inner = state.inner().clone();

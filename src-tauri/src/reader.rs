@@ -118,6 +118,7 @@ pub struct SocketBinaryReader {
     listener: Option<TcpListener>,
     stream: Option<TcpStream>,
     accepted: bool,
+    app: Option<AppHandle>,
 }
 
 impl SocketBinaryReader {
@@ -128,7 +129,14 @@ impl SocketBinaryReader {
             listener: None,
             stream: None,
             accepted: false,
+            app: None,
         }
+    }
+    
+    // Set the app handle for emitting events
+    pub fn with_app_handle(mut self, app_handle: AppHandle) -> Self {
+        self.app = Some(app_handle);
+        self
     }
 }
 
@@ -147,7 +155,8 @@ impl DataReader for SocketBinaryReader {
             .map_err(|e| format!("Failed to set non-blocking mode: {}", e))?;
             
         self.listener = Some(listener);
-        println!("[SOCKET] Bound to {}:{} and listening", self.host, self.port);
+        let bind_msg = format!("[SOCKET] Bound to {}:{} and listening", self.host, self.port);
+        println!("{}", bind_msg);
         
         // Don't wait for client in setup - we'll accept in read_data
         self.accepted = false;
@@ -162,7 +171,12 @@ impl DataReader for SocketBinaryReader {
             if let Some(listener) = &self.listener {
                 match listener.accept() {
                     Ok((stream, addr)) => {
-                        println!("[SOCKET] Connected from {}", addr);
+                        let addr_str = format!("[SOCKET] Connected from {}", addr);
+                        println!("{}", addr_str);
+                        // Emit socket status event to frontend
+                        if let Some(app) = &self.app {
+                            let _ = app.emit("socket_status", addr_str.clone());
+                        }
                         // Set non-blocking mode
                         stream.set_nonblocking(true)
                             .map_err(|e| format!("Failed to set client non-blocking: {}", e))?;
@@ -189,7 +203,11 @@ impl DataReader for SocketBinaryReader {
                 Ok(n) if n > 0 => out.extend_from_slice(&buf[..n]),
                 Ok(0) => {
                     // Connection closed by peer
-                    println!("[SOCKET] Client disconnected");
+                    let disconnect_msg = "[SOCKET] Client disconnected";
+                    println!("{}", disconnect_msg);
+                    if let Some(app) = &self.app {
+                        let _ = app.emit("socket_status", disconnect_msg.to_string());
+                    }
                     self.stream = None;
                     self.accepted = false;
                 }
@@ -343,10 +361,17 @@ pub fn reader_loop<R: DataReader + Send + 'static>(
     state: Arc<SerialState>,
     app: AppHandle,
 ) {
+    let app_clone = app.clone();
     match rd.setup() {
-        Ok(_) => println!("[READER-LOOP] Setup successful"),
+        Ok(_) => {
+            let msg = "[READER-LOOP] Setup successful";
+            println!("{}", msg);
+            let _ = app_clone.emit("socket_status", msg.to_string());
+        },
         Err(e) => {
-            println!("[READER-LOOP] Setup failed: {}", e);
+            let error_msg = format!("[READER-LOOP] Setup failed: {}", e);
+            println!("{}", error_msg);
+            let _ = app_clone.emit("socket_status", error_msg);
             return;
         }
     }

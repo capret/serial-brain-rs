@@ -5,6 +5,36 @@ export const connectionStatus = ref<string>('disconnected');
 export const isRunning = ref<boolean>(false);
 export const chartDataBuffer = reactive<number[][]>([]);
 
+// Socket status messages (for global access across pages)
+export const socketMessages = reactive<string[]>([]);
+export const hasClientConnected = ref<boolean>(false);
+
+// Add a message to socket status log
+export function addSocketMessage(message: string) {
+  socketMessages.push(message);
+  
+  // Keep maximum of 50 messages
+  if (socketMessages.length > 50) {
+    socketMessages.shift();
+  }
+  
+  // Update client connection status based on message content
+  if (message.includes('Connected from')) {
+    hasClientConnected.value = true;
+  } else if (message.includes('Client disconnected')) {
+    hasClientConnected.value = false;
+  } else if (message.includes('Setup successful') && !message.includes('Connected from')) {
+    // If setup is successful but no client is connected yet
+    hasClientConnected.value = false;
+  }
+}
+
+// Clear socket messages
+export function clearSocketMessages() {
+  socketMessages.length = 0;
+  hasClientConnected.value = false;
+}
+
 // TCP Connection Settings
 export const tcpSettings = reactive({
   // Connection settings
@@ -22,12 +52,20 @@ export const tcpSettings = reactive({
   // Connection status
   isConnected: false,
   lastError: '',
+  lastPort: 0,  // Track the last port used for connection
   
   // Methods
   reset() {
     this.isReconnecting = false;
     this.reconnectAttempts = 0;
     this.lastError = '';
+  },
+  
+  // Reset connection state when changing ports
+  resetConnectionState() {
+    clearSocketMessages();
+    hasClientConnected.value = false;
+    this.isConnected = false;
   }
 });
 
