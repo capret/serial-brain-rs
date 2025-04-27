@@ -1,6 +1,6 @@
 <template>
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
-    <h2 class="text-3xl font-bold text-blue-400 mb-4">Streaming</h2>
+    <h2 class="text-3xl font-bold text-blue-400 mb-4">Camera Streaming</h2>
     <div class="flex flex-wrap gap-6">
       <div class="flex flex-col items-center flex-1 min-w-[320px]">
         <canvas ref="canvas" :width="w" :height="h" class="border rounded-md"></canvas>

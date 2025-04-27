@@ -65,14 +65,14 @@
       </div>
       <div class="bg-gray-800 p-4 rounded text-white flex flex-col flex-1  h-[300px]">
         <h4 class="text-md font-medium mb-2">Serial Info</h4>
-        <pre class="overflow-auto flex-1">{{ settings.serialInfoBuffer.length ? settings.serialInfoBuffer.join('\n') : 'No serial info.' }}</pre>
+        <pre ref="infoRef" class="overflow-auto flex-1">{{ settings.serialInfoBuffer.length ? settings.serialInfoBuffer.join('\n') : 'No serial info.' }}</pre>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted, ref, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
@@ -83,6 +83,9 @@ const props = defineProps({
   }
 });
 
+// Reference to the serial info container for auto-scrolling
+const infoRef = ref<HTMLElement | null>(null);
+
 function refreshPorts() {
   invoke('get_available_ports')
     .then((ports) => { props.settings.availablePorts = ports; })
@@ -92,11 +95,26 @@ function refreshPorts() {
 onMounted(() => {
   refreshPorts();
   // listen for text info from backend
-  listen<string>('serial_info', event => {
-    props.settings.serialInfoBuffer.push(event.payload);
-    if (props.settings.serialInfoBuffer.length > 1000) {
-      props.settings.serialInfoBuffer.splice(0, props.settings.serialInfoBuffer.length - 1000);
+  const cleanup = listen<string>('serial_info', event => {
+    // Only add non-empty messages
+    if (event.payload && event.payload.trim().length > 0) {
+      props.settings.serialInfoBuffer.push(event.payload);
+      // Limit the buffer size to prevent memory issues
+      if (props.settings.serialInfoBuffer.length > 1000) {
+        props.settings.serialInfoBuffer.splice(0, props.settings.serialInfoBuffer.length - 1000);
+      }
+      // Auto-scroll to bottom when new content is added
+      nextTick(() => {
+        if (infoRef.value) {
+          infoRef.value.scrollTop = infoRef.value.scrollHeight;
+        }
+      });
     }
+  });
+  
+  // Cleanup listener when component is unmounted
+  onUnmounted(() => {
+    cleanup.then(unlisten => unlisten());
   });
 });
 </script>

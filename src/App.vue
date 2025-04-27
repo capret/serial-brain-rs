@@ -41,6 +41,7 @@ document.documentElement.style.padding = '0';
 // Import the Window API from Tauri
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { onMounted, ref } from 'vue';
+import { serialSettings, tcpSettings, fakeDataSettings } from './store/appState';
 // Import components
 import AppSidebar from './components/AppSidebar.vue';
 import VisualizationView from './components/views/VisualizationView.vue';
@@ -59,33 +60,12 @@ const collapsed = ref(false);
 // Signal source state
 const selectedDataSource = ref('fake'); // Options: 'serial', 'tcp', 'fake'
 
-// Settings for different signal sources
-const serialSettings = ref({
-  port: '',
-  baudRate: 460800,
-  stopBits: 1,
-  parity: 'none',
-  dataBits: 8,
-  serialInfo: '',      // store serial text info
-  serialInfoBuffer: [], // buffer for recent serial info lines
-  availablePorts: [],
-  sendData: '',
-  sendEndFlag: '\n'
-});
-
-const tcpSettings = ref({
-  host: 'localhost',
-  port: 1234,
-  protocol: 'tcp'
-});
-
-const fakeDataSettings = ref({
-  minValue: -100,
-  maxValue: 100,
-  frequency: 500,
-  channelCount: 8,
-  waveform: 'sine'
-});
+// Additional serial settings not in central state
+serialSettings.serialInfo = '';
+serialSettings.serialInfoBuffer = [];
+serialSettings.availablePorts = [];
+serialSettings.sendData = '';
+serialSettings.sendEndFlag = '\n';
 
 // Function to handle data source change
 function onDataSourceChanged(source) {

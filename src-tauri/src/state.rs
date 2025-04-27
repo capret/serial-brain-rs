@@ -16,10 +16,10 @@ pub struct SerialState {
     pub active_buffer: Mutex<VecDeque<ChannelData>>,
     pub read_buffer: Mutex<VecDeque<ChannelData>>,
     pub buffer_lock: Mutex<()> ,
-    pub fake_stream_running: Arc<AtomicBool>,
-    pub fake_stream_handle: Mutex<Option<JoinHandle<()>>>,
-    pub stream_running: Arc<AtomicBool>,
-    pub stream_handle: Mutex<Option<JoinHandle<()>>>,
+    pub signal_stream_running: Arc<AtomicBool>,
+    pub signal_stream_handle: Mutex<Option<JoinHandle<()>>>,
+    pub camera_stream_running: Arc<AtomicBool>,
+    pub camera_stream_handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl SerialState {
@@ -29,10 +29,10 @@ impl SerialState {
             active_buffer: Mutex::new(VecDeque::with_capacity(2000)),
             read_buffer: Mutex::new(VecDeque::with_capacity(2000)),
             buffer_lock: Mutex::new(()),
-            fake_stream_running: Arc::new(AtomicBool::new(false)),
-            fake_stream_handle: Mutex::new(None),
-            stream_running: Arc::new(AtomicBool::new(false)),
-            stream_handle: Mutex::new(None),
+            signal_stream_running: Arc::new(AtomicBool::new(false)),
+            signal_stream_handle: Mutex::new(None),
+            camera_stream_running: Arc::new(AtomicBool::new(false)),
+            camera_stream_handle: Mutex::new(None),
         }
     }
 

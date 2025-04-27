@@ -13,12 +13,12 @@
           type="range"
           v-model.number="windowSize"
           min="500"
-          max="20000"
+          :max="MAX_BUFFER_SIZE"
           step="500"
           @change="initPlot"
           class="w-full h-1 bg-gray-200 rounded-lg accent-blue-500"
         />
-        <span class="text-xs w-12 text-center">20000</span>
+        <span class="text-xs w-12 text-center">{{ MAX_BUFFER_SIZE }}</span>
       </div>
     </div>
   </div>
@@ -115,10 +115,9 @@ let crossYLine: WebglLine | null = null;
 
 /* Runtime control */
 let animationFrame: number | null = null;
-let fetchIntervalId: number | null = null;
 let dataUpdatePending = false;
 let fpsCounter = 0;
-let fpsControl = 3;
+let fpsControl = 1;
 let isActive = true;
 
 /* Interaction helpers */
@@ -401,7 +400,7 @@ function animate() {
   if (fpsCounter === 0 && wglp) {
     if (props.running) refreshData();
     wglp.update();
-    if (Math.random() < 0.1) updateXAxis();
+    // if (Math.random() < 0.1) updateXAxis();
   }
   fpsCounter = (fpsCounter + 1) % fpsControl;
   animationFrame = requestAnimationFrame(animate);
@@ -444,66 +443,56 @@ function clearPlot() {
 /* ====================================================
    6. Lifecycle
    ==================================================== */
-watch(
-  () => props.running,
-  val => {
-    if (val) {
-      refreshData();
-      fetchIntervalId = setInterval(refreshData, 100);
-    } else if (fetchIntervalId) {
-      clearInterval(fetchIntervalId);
-      fetchIntervalId = null;
-    }
-  },
-  { immediate: true },
-);
 watch(windowSize, () => {
+  handleResize();
+});
+
+let resizeTimeout: number | null = null;
+function scheduleResize(): void {
+  if (resizeTimeout !== null) clearTimeout(resizeTimeout);
+  resizeTimeout = window.setTimeout(() => {
+    handleResize();
+    resizeTimeout = null;
+  }, 10);
+}
+function handleResize() {
   const cache = [...dataBuffer];
   initPlot();
   dataBuffer.length = 0;
   dataBuffer.push(...cache);
   updateMinMax();
-});
+}
 
 onMounted(async () => {
   await nextTick();
   recalcPlotHeight();
   initPlot();
-  window.addEventListener('resize', handleResize);
+  window.addEventListener('resize', scheduleResize);
   // ensure correct layout after first paint
   requestAnimationFrame(() => {
     recalcPlotHeight();
     initPlot();
   });
 });
-function handleResize() {
-  recalcPlotHeight();
-  initPlot();
-}
-
 onBeforeUnmount(() => {
   isActive = false;
   if (animationFrame) cancelAnimationFrame(animationFrame);
-  if (fetchIntervalId) clearInterval(fetchIntervalId);
-  window.removeEventListener('resize', handleResize);
+
+  window.removeEventListener('resize', scheduleResize);
+  if (resizeTimeout !== null) clearTimeout(resizeTimeout);
 });
 onActivated(() => {
   isActive = true;
   recalcPlotHeight();
   initPlot();
-  window.addEventListener('resize', handleResize);
-  if (props.running) fetchIntervalId = setInterval(refreshData, 100);
-  // ensure correct layout after activation
-  requestAnimationFrame(() => {
-    // recalcPlotHeight();
-    initPlot();
-  });
+  window.addEventListener('resize', scheduleResize);
+
 });
 onDeactivated(() => {
   isActive = false;
   if (animationFrame) cancelAnimationFrame(animationFrame);
-  if (fetchIntervalId) clearInterval(fetchIntervalId);
-  window.removeEventListener('resize', handleResize);
+  window.removeEventListener('resize', scheduleResize);
+  if (resizeTimeout !== null) clearTimeout(resizeTimeout);
 });
 
 defineExpose({ initPlot, setChannelColor, setChannelVisibility, clearPlot });

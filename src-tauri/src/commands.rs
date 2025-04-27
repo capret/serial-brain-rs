@@ -8,7 +8,7 @@ use image::{ImageBuffer, Rgb, codecs::png::PngEncoder, ColorType, ImageEncoder};
 use rand::{thread_rng, Rng};
 use crate::state::SerialState;
 use crate::types::{ChannelData, FakeDataConfig};
-use crate::reader::{SerialBinaryReader, SocketBinaryReader, FakeBinaryReader, reader_loop};
+use crate::reader::{SerialBinaryReader, SocketBinaryReader, FakeBinaryReader, reader_loop, DataReader};
 use reqwest::blocking::Client;
 use std::io::{BufRead, BufReader, Read};
 use std::time::Duration;
@@ -27,9 +27,9 @@ pub fn connect_serial(
     data_bits: u8,
     state: State<Arc<SerialState>>,
 ) -> Result<(), String> {
-    if state.fake_stream_running.load(Ordering::SeqCst) {
-        state.fake_stream_running.store(false, Ordering::SeqCst);
-        if let Some(handle) = state.fake_stream_handle.lock().unwrap().take() {
+    if state.signal_stream_running.load(Ordering::SeqCst) {
+        state.signal_stream_running.store(false, Ordering::SeqCst);
+        if let Some(handle) = state.signal_stream_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
     }
@@ -38,14 +38,14 @@ pub fn connect_serial(
     *state.outbound_tx.lock().unwrap() = Some(tx);
 
     let reader = SerialBinaryReader::new(port.clone(), baud_rate, stop_bits, parity, data_bits, rx);
-    state.fake_stream_running.store(true, Ordering::SeqCst);
-    let running_flag = state.fake_stream_running.clone();
+    state.signal_stream_running.store(true, Ordering::SeqCst);
+    let running_flag = state.signal_stream_running.clone();
     let state_inner = state.inner().clone();
     let app_clone = app_handle.clone();
     let handle = thread::spawn(move || {
         reader_loop(reader, running_flag, state_inner, app_clone);
     });
-    *state.fake_stream_handle.lock().unwrap() = Some(handle);
+    *state.signal_stream_handle.lock().unwrap() = Some(handle);
 
     Ok(())
 }
@@ -57,22 +57,26 @@ pub fn connect_socket(
     port: u16,
     state: State<Arc<SerialState>>,
 ) -> Result<(), String> {
-    if state.fake_stream_running.load(Ordering::SeqCst) {
-        state.fake_stream_running.store(false, Ordering::SeqCst);
-        if let Some(handle) = state.fake_stream_handle.lock().unwrap().take() {
+    if state.signal_stream_running.load(Ordering::SeqCst) {
+        state.signal_stream_running.store(false, Ordering::SeqCst);
+        if let Some(handle) = state.signal_stream_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
     }
 
-    let reader = SocketBinaryReader::new(host.clone(), port);
-    state.fake_stream_running.store(true, Ordering::SeqCst);
-    let running_flag = state.fake_stream_running.clone();
+    let mut reader = SocketBinaryReader::new(host.clone(), port);
+    // Try setup to detect connection timeout
+    if let Err(e) = reader.setup() {
+        return Err(e);
+    }
+    state.signal_stream_running.store(true, Ordering::SeqCst);
+    let running_flag = state.signal_stream_running.clone();
     let state_inner = state.inner().clone();
     let app_clone = app_handle.clone();
     let handle = thread::spawn(move || {
         reader_loop(reader, running_flag, state_inner, app_clone);
     });
-    *state.fake_stream_handle.lock().unwrap() = Some(handle);
+    *state.signal_stream_handle.lock().unwrap() = Some(handle);
 
     Ok(())
 }
@@ -103,22 +107,22 @@ pub fn start_fake_data(
     config: FakeDataConfig,
     state: State<Arc<SerialState>>,
 ) -> Result<bool, String> {
-    if state.fake_stream_running.load(Ordering::SeqCst) {
-        state.fake_stream_running.store(false, Ordering::SeqCst);
-        if let Some(handle) = state.fake_stream_handle.lock().unwrap().take() {
+    if state.signal_stream_running.load(Ordering::SeqCst) {
+        state.signal_stream_running.store(false, Ordering::SeqCst);
+        if let Some(handle) = state.signal_stream_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
     }
 
     let reader = FakeBinaryReader::new(config.clone());
-    state.fake_stream_running.store(true, Ordering::SeqCst);
-    let running_flag = state.fake_stream_running.clone();
+    state.signal_stream_running.store(true, Ordering::SeqCst);
+    let running_flag = state.signal_stream_running.clone();
     let state_inner = state.inner().clone();
     let app_clone = app_handle.clone();
     let handle = thread::spawn(move || {
         reader_loop(reader, running_flag, state_inner, app_clone);
     });
-    *state.fake_stream_handle.lock().unwrap() = Some(handle);
+    *state.signal_stream_handle.lock().unwrap() = Some(handle);
 
     Ok(true)
 }
@@ -127,9 +131,9 @@ pub fn start_fake_data(
 pub fn stop_data_acquisition(
     state: State<Arc<SerialState>>,
 ) -> Result<(), String> {
-    if state.fake_stream_running.load(Ordering::SeqCst) {
-        state.fake_stream_running.store(false, Ordering::SeqCst);
-        if let Some(handle) = state.fake_stream_handle.lock().unwrap().take() {
+    if state.signal_stream_running.load(Ordering::SeqCst) {
+        state.signal_stream_running.store(false, Ordering::SeqCst);
+        if let Some(handle) = state.signal_stream_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
     }
@@ -153,15 +157,15 @@ pub fn start_streaming(
     state: State<Arc<SerialState>>,
 ) -> Result<(), String> {
     // stop any existing stream and wait for it to finish
-    if state.stream_running.load(Ordering::SeqCst) {
-        state.stream_running.store(false, Ordering::SeqCst);
-        if let Some(handle) = state.stream_handle.lock().unwrap().take() {
+    if state.camera_stream_running.load(Ordering::SeqCst) {
+        state.camera_stream_running.store(false, Ordering::SeqCst);
+        if let Some(handle) = state.camera_stream_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
     }
     if fake {
-        state.stream_running.store(true, Ordering::SeqCst);
-        let running = state.stream_running.clone();
+        state.camera_stream_running.store(true, Ordering::SeqCst);
+        let running = state.camera_stream_running.clone();
         let app_clone = app_handle.clone();
         let handle = thread::spawn(move || {
             let mut rng = thread_rng();
@@ -175,10 +179,10 @@ pub fn start_streaming(
                 std::thread::sleep(Duration::from_millis(33));
             }
         });
-        *state.stream_handle.lock().unwrap() = Some(handle);
+        *state.camera_stream_handle.lock().unwrap() = Some(handle);
     } else {
-        state.stream_running.store(true, Ordering::SeqCst);
-        let _running = state.stream_running.clone();
+        state.camera_stream_running.store(true, Ordering::SeqCst);
+        let _running = state.camera_stream_running.clone();
         let app_clone = app_handle.clone();
         let url = path.clone();
         let handle = thread::spawn(move || {
@@ -230,7 +234,7 @@ pub fn start_streaming(
                 }
             }
         });
-        *state.stream_handle.lock().unwrap() = Some(handle);
+        *state.camera_stream_handle.lock().unwrap() = Some(handle);
     }
     Ok(())
 }
@@ -239,9 +243,9 @@ pub fn start_streaming(
 pub fn stop_streaming(
     state: State<Arc<SerialState>>,
 ) -> Result<(), String> {
-    if state.stream_running.load(Ordering::SeqCst) {
-        state.stream_running.store(false, Ordering::SeqCst);
-        if let Some(handle) = state.stream_handle.lock().unwrap().take() {
+    if state.camera_stream_running.load(Ordering::SeqCst) {
+        state.camera_stream_running.store(false, Ordering::SeqCst);
+        if let Some(handle) = state.camera_stream_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
     }

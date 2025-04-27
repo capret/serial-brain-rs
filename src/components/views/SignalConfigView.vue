@@ -91,25 +91,13 @@ import SerialSettings from '../settings/SerialSettings.vue';
 import TCPSettings from '../settings/TCPSettings.vue';
 import FakeDataSettings from '../settings/FakeDataSettings.vue';
 
-import { computed } from 'vue';
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { connectionStatus } from '../../store/appState.js';
+import { connectionStatus, tcpSettings, serialSettings, fakeDataSettings } from '../../store/appState.ts';
 
 const props = defineProps({
   selectedDataSource: {
     type: String,
-    required: true
-  },
-  serialSettings: {
-    type: Object,
-    required: true
-  },
-  tcpSettings: {
-    type: Object,
-    required: true
-  },
-  fakeDataSettings: {
-    type: Object,
     required: true
   }
 });
@@ -145,43 +133,137 @@ const buttonClass = computed(() => {
 // Disable while connecting
 const isDisabled = computed(() => connectionStatus.value === 'connecting');
 
+// Reconnection timer reference
+const reconnectTimer = ref(null);
+
+// Function to connect to TCP socket
+function connectToTcpSocket() {
+  return invoke('connect_socket', {
+    host: tcpSettings.host,
+    port: tcpSettings.port
+  });
+}
+
+// Function to attempt reconnection
+async function attemptReconnect() {
+  if (!tcpSettings.autoReconnect || connectionStatus.value === 'connected') {
+    stopReconnecting();
+    return;
+  }
+  
+  tcpSettings.isReconnecting = true;
+  tcpSettings.reconnectAttempts++;
+  
+  try {
+    await connectToTcpSocket();
+    connectionStatus.value = 'connected';
+    tcpSettings.isConnected = true;
+    tcpSettings.lastError = '';
+    stopReconnecting();
+  } catch (error) {
+    tcpSettings.lastError = error.toString();
+    connectionStatus.value = 'failed';
+    tcpSettings.isConnected = false;
+    
+    // Schedule next attempt if auto-reconnect is still enabled
+    if (tcpSettings.autoReconnect) {
+      reconnectTimer.value = setTimeout(attemptReconnect, tcpSettings.reconnectInterval);
+    }
+  }
+}
+
+// Function to stop reconnection attempts
+function stopReconnecting() {
+  tcpSettings.isReconnecting = false;
+  if (reconnectTimer.value) {
+    clearTimeout(reconnectTimer.value);
+    reconnectTimer.value = null;
+  }
+}
+
+// Watch for changes in the auto-reconnect setting
+watch(() => tcpSettings.autoReconnect, (newValue) => {
+  // Only stop reconnecting if the setting is turned off
+  if (!newValue) {
+    stopReconnecting();
+  }
+  // Do NOT automatically trigger reconnection when the setting is turned on
+  // Only reconnect when the user manually clicks the connect button
+});
+
+// Clean up on component unmount
+onUnmounted(() => {
+  stopReconnecting();
+});
+
 // Toggle connection/disconnection
 function handleConnectionToggle() {
   if (connectionStatus.value === 'connected') {
     invoke('stop_data_acquisition')
-      .then(() => { connectionStatus.value = 'disconnected'; })
-      .catch(() => { connectionStatus.value = 'failed'; });
+      .then(() => { 
+        connectionStatus.value = 'disconnected'; 
+        tcpSettings.isConnected = false;
+        stopReconnecting();
+      })
+      .catch(() => { 
+        connectionStatus.value = 'failed'; 
+        tcpSettings.isConnected = false;
+      });
   } else {
     connectionStatus.value = 'connecting';
     let cmd;
+    
     if (props.selectedDataSource === 'serial') {
       cmd = invoke('connect_serial', {
-        port: props.serialSettings.port,
-        baudRate: props.serialSettings.baudRate,
-        stopBits: props.serialSettings.stopBits,
-        parity: props.serialSettings.parity,
-        dataBits: props.serialSettings.dataBits
+        port: serialSettings.port,
+        baudRate: serialSettings.baudRate,
+        stopBits: serialSettings.stopBits,
+        parity: serialSettings.parity,
+        dataBits: serialSettings.dataBits
       });
     } else if (props.selectedDataSource === 'fake') {
       cmd = invoke('start_fake_data', {
         config: {
-          min_value: props.fakeDataSettings.minValue,
-          max_value: props.fakeDataSettings.maxValue,
-          frequency: props.fakeDataSettings.frequency,
-          channel_count: props.fakeDataSettings.channelCount,
-          waveform: props.fakeDataSettings.waveform
+          min_value: fakeDataSettings.minValue,
+          max_value: fakeDataSettings.maxValue,
+          frequency: fakeDataSettings.frequency,
+          channel_count: fakeDataSettings.channelCount,
+          waveform: fakeDataSettings.waveform
         }
       });
     } else if (props.selectedDataSource === 'tcp') {
-      cmd = Promise.reject('TCP connect not implemented');
+      // Reset reconnection counters
+      tcpSettings.reset();
+      
+      cmd = connectToTcpSocket();
+      
+      // If auto-reconnect is enabled, we'll handle reconnection attempts
+      if (tcpSettings.autoReconnect) {
+        cmd.catch((e) => {
+          console.error(e);
+          tcpSettings.lastError = e.toString();
+          connectionStatus.value = 'failed';
+          tcpSettings.isConnected = false;
+          // Schedule first reconnection attempt
+          reconnectTimer.value = setTimeout(attemptReconnect, tcpSettings.reconnectInterval);
+        });
+      }
     } else {
       cmd = Promise.reject('Unknown data source');
     }
+    
     cmd
-      .then(() => { connectionStatus.value = 'connected'; })
+      .then(() => { 
+        connectionStatus.value = 'connected'; 
+        if (props.selectedDataSource === 'tcp') {
+          tcpSettings.isConnected = true;
+          tcpSettings.lastError = '';
+        }
+      })
       .catch((e) => {
         console.error(e);
         connectionStatus.value = 'failed';
+        // TCP-specific error handling is done inside the TCP conditional block above
       });
   }
 }
