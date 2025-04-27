@@ -17,6 +17,11 @@
     "core:window:allow-start-dragging",
     "os:default",
     "fs:default",
-    "fs:default"
+    "fs:allow-app-meta",
+    "dialog:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "$APPDATA" }, { "path": "$APPDATA/**" },{"path": "$DOCUMENT"}, {"path": "$DOCUMENT/**"}]
+    }
   ]
 }

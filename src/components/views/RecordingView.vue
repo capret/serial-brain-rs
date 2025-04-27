@@ -132,6 +132,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { exists, mkdir, stat, BaseDirectory } from '@tauri-apps/plugin-fs';
+import * as path from '@tauri-apps/api/path';
 import { recordingDirectory } from '../../store/appState';
 
 // State variables
@@ -141,13 +143,18 @@ const maxDuration = ref(30); // Default 30 minutes
 const isRecording = ref(false);
 const recordingFilename = ref('');
 
-// Check initial recording status when component mounts
+// Initialize recording directory and check recording status when component mounts
 onMounted(async () => {
   try {
+    // First, set up the recordings directory in AppData
+    await selectDirectory();
+    await mkdir('serial-brain-mk', {
+      baseDir: BaseDirectory.Document,
+    });
     const status = await invoke('get_recording_status');
     isRecording.value = status;
   } catch (error) {
-    console.error('Error checking recording status:', error);
+    console.error('Error initializing component:', error);
   }
 });
 
@@ -162,16 +169,11 @@ onUnmounted(async () => {
   }
 });
 
-// Select directory using Tauri file dialog
+// Use AppData directory for recordings
 async function selectDirectory() {
-  try {
-    const directory = await invoke('select_recording_directory');
-    if (directory) {
-      recordingDirectory.value = directory;
-    }
-  } catch (error) {
-    console.error('Error selecting directory:', error);
-  }
+  const home = await path.documentDir();
+  recordingDirectory.value = home;
+  console.log(home);
 }
 
 // Start recording using the selected settings

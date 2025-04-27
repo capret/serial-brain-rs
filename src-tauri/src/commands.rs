@@ -274,14 +274,7 @@ pub fn stop_streaming(state: State<Arc<SerialState>>) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-pub fn select_recording_directory() -> Result<Option<String>, String> {
-    let dialog = rfd::FileDialog::new().pick_folder();
-    match dialog {
-        Some(path) => Ok(Some(path.display().to_string())),
-        None => Ok(None), // User cancelled the dialog
-    }
-}
+// Recording directory is now handled by the frontend using the fs plugin
 
 #[tauri::command]
 pub fn start_recording(

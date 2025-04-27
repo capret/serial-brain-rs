@@ -6,7 +6,7 @@ mod state;
 mod types;
 use commands::{
     connect_serial, connect_socket, get_available_ports, get_recent_data, get_recording_status,
-    select_recording_directory, send_serial, start_fake_data, start_recording, start_streaming,
+    send_serial, start_fake_data, start_recording, start_streaming,
     stop_data_acquisition, stop_recording, stop_streaming,
 };
 use state::SerialState;
@@ -17,6 +17,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(serial_state)
         // Removed automatic frame stream on startup; streaming controlled via commands
         .invoke_handler(tauri::generate_handler![
@@ -29,7 +30,6 @@ pub fn run() {
             stop_data_acquisition,
             start_streaming,
             stop_streaming,
-            select_recording_directory,
             start_recording,
             stop_recording,
             get_recording_status
