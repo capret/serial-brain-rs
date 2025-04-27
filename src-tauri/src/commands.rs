@@ -1,5 +1,5 @@
 use crate::reader::{
-    reader_loop, DataReader, FakeBinaryReader, SerialBinaryReader, SocketBinaryReader,
+    reader_loop, FakeBinaryReader, SerialBinaryReader, SocketBinaryReader,
 };
 use crate::state::SerialState;
 use crate::types::{ChannelData, FakeDataConfig};
@@ -298,7 +298,7 @@ pub fn start_recording(
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_err(|e| e.to_string())?;
     
-    let timestamp = now.as_secs();
+    let timestamp = now.as_millis();
     let filename = match format.as_str() {
         "csv" => format!("serial_recording_{}.csv", timestamp),
         "json" => format!("serial_recording_{}.json", timestamp),
@@ -391,6 +391,10 @@ pub fn start_recording(
                                     eprintln!("Error writing to CSV file: {}", e);
                                     break;
                                 }
+                            }
+                            // Flush CSV entries to disk in real time
+                            if let Err(e) = file.flush() {
+                                eprintln!("Error flushing CSV file: {}", e);
                             }
                         },
                         "json" => {

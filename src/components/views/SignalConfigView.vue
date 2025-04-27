@@ -1,16 +1,16 @@
 <template>
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 flex flex-col h-full">
-    <div class="flex justify-between items-start mb-6">
-      <div>
+    <div class="flex flex-wrap justify-between items-start mb-6 gap-4">
+      <div class="mb-2">
         <h2 class="text-3xl font-bold text-blue-400">Signal Configuration</h2>
       </div>
-      <div class="flex gap-3">
+      <div class="flex w-full md:w-auto">
         <button
           @click="handleConnectionToggle"
           :disabled="isDisabled"
           :class="[
             buttonClass,
-            'px-6 py-3 rounded-md font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg',
+            'px-6 py-3 rounded-md font-semibold flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg w-full md:w-auto',
             { 'opacity-50 cursor-not-allowed': isDisabled }
           ]"
         >
@@ -26,10 +26,10 @@
     <!-- Data Source Selection Panel -->
     <div class="mb-6">
       <h3 class="text-lg font-semibold mb-4">Select Data Source</h3>
-      <div class="grid grid-cols-3 gap-4">
+      <div class="flex flex-wrap gap-4">
         <div 
           @click="onDataSourceChanged('serial')"
-          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02]"
+          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02] w-full md:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.75rem)]"
           :class="{'border-2 border-blue-500': selectedDataSource === 'serial'}"
         >
           <div>
@@ -40,7 +40,7 @@
         
         <div 
           @click="onDataSourceChanged('tcp')"
-          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02]"
+          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02] w-full md:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.75rem)]"
           :class="{'border-2 border-blue-500': selectedDataSource === 'tcp'}"
         >
           <div>
@@ -51,7 +51,7 @@
         
         <div 
           @click="onDataSourceChanged('fake')"
-          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02]"
+          class="bg-gray-700 p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-[1.02] w-full md:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.75rem)]"
           :class="{'border-2 border-blue-500': selectedDataSource === 'fake'}"
         >
           <div>

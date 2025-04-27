@@ -54,7 +54,7 @@
       </div>
       
       <!-- Socket status messages -->
-      <div class="text-xs h-32 overflow-y-auto bg-gray-800 p-2 rounded">
+      <div ref="messagesRef" class="text-xs h-32 overflow-y-auto bg-gray-800 p-2 rounded flex-1">
         <div v-for="(message, index) in socketMessages" :key="index" 
           :class="{
             'text-green-400': message.includes('Connected from') || message.includes('successful'),
@@ -76,11 +76,14 @@
 
 <script setup>
 import { tcpSettings, socketMessages, hasClientConnected, addSocketMessage } from '../../store/appState';
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { listen } from '@tauri-apps/api/event';
 
 // Set up listener for socket status events
 let unlistenSocketStatus;
+
+// Reference to messages container for auto-scrolling
+const messagesRef = ref(null);
 
 // Reset connection state when port changes
 watch(() => tcpSettings.port, (newPort, oldPort) => {
@@ -105,6 +108,13 @@ onMounted(async () => {
   unlistenSocketStatus = await listen('socket_status', (event) => {
     // Use the global function to add messages
     addSocketMessage(event.payload);
+    
+    // Auto-scroll to bottom when new content is added
+    nextTick(() => {
+      if (messagesRef.value) {
+        messagesRef.value.scrollTop = messagesRef.value.scrollHeight;
+      }
+    });
   });
 });
 

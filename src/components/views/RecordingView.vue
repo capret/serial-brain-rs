@@ -8,9 +8,9 @@
         <button 
           v-if="!isRecording"
           @click="startRecording"
-          :disabled="!selectedDirectory"
+          :disabled="!recordingDirectory"
           class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md font-semibold flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg max-[800px]:w-full"
-          :class="{ 'opacity-50 cursor-not-allowed': !selectedDirectory }">
+          :class="{ 'opacity-50 cursor-not-allowed': !recordingDirectory }">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -40,8 +40,8 @@
           <div class="flex">
             <input 
               type="text" 
-              :placeholder="selectedDirectory ? selectedDirectory : 'No folder selected'" 
-              v-model="selectedDirectory"
+              :placeholder="recordingDirectory ? recordingDirectory : 'No folder selected'" 
+              v-model="recordingDirectory"
               readonly
               class="bg-gray-700 px-3 py-2 rounded-l-md flex-grow text-gray-300" />
             <button
@@ -132,9 +132,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { recordingDirectory } from '../../store/appState';
 
 // State variables
-const selectedDirectory = ref('');
 const selectedFormat = ref('csv'); // Default format
 const autoStart = ref(false);
 const maxDuration = ref(30); // Default 30 minutes
@@ -167,7 +167,7 @@ async function selectDirectory() {
   try {
     const directory = await invoke('select_recording_directory');
     if (directory) {
-      selectedDirectory.value = directory;
+      recordingDirectory.value = directory;
     }
   } catch (error) {
     console.error('Error selecting directory:', error);
@@ -176,7 +176,7 @@ async function selectDirectory() {
 
 // Start recording using the selected settings
 async function startRecording() {
-  if (!selectedDirectory.value) {
+  if (!recordingDirectory.value) {
     alert('Please select a directory to save recordings');
     return;
   }
@@ -189,7 +189,7 @@ async function startRecording() {
     // Start recording through Tauri command
     await invoke('start_recording', {
       format: selectedFormat.value,
-      directory: selectedDirectory.value,
+      directory: recordingDirectory.value,
       maxDurationMinutes: maxDuration.value,
       autoStart: autoStart.value
     });

@@ -86,3 +86,6 @@ export const fakeDataSettings = reactive({
   channelCount: 8,
   waveform: 'sine'
 });
+
+// Global recording directory to persist selection across views
+export const recordingDirectory = ref<string>('');

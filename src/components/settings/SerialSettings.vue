@@ -2,8 +2,8 @@
   <div class="flex flex-col h-full">
     <h3 class="text-lg font-semibold">Serial Connection Settings</h3>
     
-    <div class="grid grid-cols-2 gap-4 items-start">
-      <div class="flex flex-col gap-4 overflow-auto">
+    <div class="flex flex-col gap-4">
+      <div class="flex flex-col gap-4 w-full">
         <!-- Serial settings form -->
         <div class="flex flex-wrap gap-4 w-full items-start">
           <div class="flex flex-col">
@@ -63,9 +63,46 @@
           </div>
         </div>
       </div>
-      <div class="bg-gray-800 p-4 rounded text-white flex flex-col flex-1  h-[300px]">
-        <h4 class="text-md font-medium mb-2">Serial Info</h4>
-        <pre ref="infoRef" class="overflow-auto flex-1">{{ settings.serialInfoBuffer.length ? settings.serialInfoBuffer.join('\n') : 'No serial info.' }}</pre>
+      <div class="bg-gray-900 p-3 rounded text-white flex flex-col w-full h-[250px] mt-2">
+        <h4 class="text-sm font-medium mb-2">Serial Connection Status:</h4>
+        
+        <!-- Connection state indicator -->
+        <div class="flex items-center mb-2">
+          <div class="w-3 h-3 rounded-full mr-2" 
+            :class="{
+              'bg-green-500': settings.isConnected,
+              'bg-red-500': !settings.isConnected
+            }"></div>
+          <span class="text-xs">
+            <span v-if="settings.isConnected">Connected to {{ settings.port }}</span>
+            <span v-else>Not connected</span>
+          </span>
+        </div>
+        
+        <!-- Current Port display -->
+        <div class="text-xs mb-2" v-if="settings.isConnected">
+          <span class="text-gray-400">Configuration: </span>
+          <span class="text-blue-400">{{ settings.port }}, {{ settings.baudRate }} baud, {{ settings.dataBits }}{{ settings.parity.charAt(0).toUpperCase() }}{{ settings.stopBits }}</span>
+        </div>
+        
+        <!-- Serial status messages -->
+        <div ref="infoRef" class="text-xs overflow-y-auto bg-gray-800 p-2 rounded flex-1">
+          <div v-for="(message, index) in settings.serialInfoBuffer" :key="index" 
+            :class="{
+              'text-green-400': message.includes('Connected') || message.includes('successful'),
+              'text-yellow-400': message.includes('waiting') || message.includes('opened'),
+              'text-red-400': message.includes('failed') || message.includes('disconnected') || message.includes('error'),
+              'mb-1': true
+            }">
+            {{ message }}
+          </div>
+          <div v-if="!settings.serialInfoBuffer.length" class="text-gray-400">No serial info.</div>
+        </div>
+        
+        <!-- Error display -->
+        <div v-if="settings.lastError" class="text-red-400 text-xs mt-2">
+          {{ settings.lastError }}
+        </div>
       </div>
     </div>
   </div>
