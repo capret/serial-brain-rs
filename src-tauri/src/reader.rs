@@ -1,17 +1,21 @@
-use std::{
-    thread,
-    time::Duration,
-    sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc::Receiver},
-    io::{self, Read},
-    net::{TcpListener, TcpStream},
-    convert::TryInto,
-};
-use tauri::{AppHandle, Emitter};
-use rand::Rng;
-use serialport::{SerialPort, StopBits, Parity, DataBits};
 use crate::state::SerialState;
 use crate::types::FakeDataConfig;
 use encoding_rs::GBK;
+use rand::Rng;
+use serialport::{DataBits, Parity, SerialPort, StopBits};
+use std::{
+    convert::TryInto,
+    io::{self, Read},
+    net::{TcpListener, TcpStream},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
+        Arc,
+    },
+    thread,
+    time::Duration,
+};
+use tauri::{AppHandle, Emitter};
 
 // Packet header and length
 const DATA_HEADER: [u8; 4] = [0xAA, 0xFF, 0xF1, 0x20];
@@ -44,16 +48,39 @@ impl SerialBinaryReader {
         data_bits: u8,
         rx: Receiver<String>,
     ) -> Self {
-        Self { port_name, baud_rate, stop_bits, parity, data_bits, rx, port: None }
+        Self {
+            port_name,
+            baud_rate,
+            stop_bits,
+            parity,
+            data_bits,
+            rx,
+            port: None,
+        }
     }
 }
 
 impl DataReader for SerialBinaryReader {
     fn setup(&mut self) -> Result<(), String> {
         let p = serialport::new(self.port_name.clone(), self.baud_rate)
-            .stop_bits(match self.stop_bits { 1 => StopBits::One, 2 => StopBits::Two, _ => StopBits::One })
-            .parity(match self.parity.as_str() { "none" => Parity::None, "odd" => Parity::Odd, "even" => Parity::Even, _ => Parity::None })
-            .data_bits(match self.data_bits { 5 => DataBits::Five, 6 => DataBits::Six, 7 => DataBits::Seven, 8 => DataBits::Eight, _ => DataBits::Eight })
+            .stop_bits(match self.stop_bits {
+                1 => StopBits::One,
+                2 => StopBits::Two,
+                _ => StopBits::One,
+            })
+            .parity(match self.parity.as_str() {
+                "none" => Parity::None,
+                "odd" => Parity::Odd,
+                "even" => Parity::Even,
+                _ => Parity::None,
+            })
+            .data_bits(match self.data_bits {
+                5 => DataBits::Five,
+                6 => DataBits::Six,
+                7 => DataBits::Seven,
+                8 => DataBits::Eight,
+                _ => DataBits::Eight,
+            })
             .timeout(Duration::from_millis(100))
             .open()
             .map_err(|e| format!("Failed to open port {}: {}", self.port_name, e))?;
@@ -94,7 +121,12 @@ pub struct SocketBinaryReader {
 
 impl SocketBinaryReader {
     pub fn new(host: String, port: u16) -> Self {
-        Self { host, port, listener: None, stream: None }
+        Self {
+            host,
+            port,
+            listener: None,
+            stream: None,
+        }
     }
 }
 
@@ -107,8 +139,13 @@ impl DataReader for SocketBinaryReader {
         // accept one client
         for stream in self.listener.as_ref().unwrap().incoming() {
             match stream {
-                Ok(s) => { self.stream = Some(s); break; }
-                Err(_) => { thread::sleep(Duration::from_millis(10)); }
+                Ok(s) => {
+                    self.stream = Some(s);
+                    break;
+                }
+                Err(_) => {
+                    thread::sleep(Duration::from_millis(10));
+                }
             }
         }
         Ok(())
@@ -145,7 +182,9 @@ impl FakeBinaryReader {
 }
 
 impl DataReader for FakeBinaryReader {
-    fn setup(&mut self) -> Result<(), String> { Ok(()) }
+    fn setup(&mut self) -> Result<(), String> {
+        Ok(())
+    }
     fn read_data(&mut self) -> Result<Vec<u8>, String> {
         let mut packet = Vec::with_capacity(DATA_PACKET_LENGTH);
         packet.extend_from_slice(&DATA_HEADER);
@@ -154,11 +193,15 @@ impl DataReader for FakeBinaryReader {
             let amplitude = (self.config.max_value - self.config.min_value) as f64;
             let offset = self.config.min_value as f64;
             let value = match self.config.waveform.as_str() {
-                "sine" => ((phase * 2.0 * std::f64::consts::PI).sin() * amplitude / 2.0 + amplitude / 2.0 + offset) as i32,
+                "sine" => {
+                    ((phase * 2.0 * std::f64::consts::PI).sin() * amplitude / 2.0
+                        + amplitude / 2.0
+                        + offset) as i32
+                }
                 "square" => {
                     let sq = if (phase % 1.0) < 0.5 { 0.0 } else { 1.0 };
                     (sq * amplitude + offset) as i32
-                },
+                }
                 "triangle" => {
                     let tri_phase = phase % 1.0;
                     let tri = if tri_phase < 0.5 {
@@ -167,12 +210,14 @@ impl DataReader for FakeBinaryReader {
                         2.0 - tri_phase * 2.0
                     };
                     (tri * amplitude + offset) as i32
-                },
+                }
                 "sawtooth" => {
                     let st = phase % 1.0;
                     (st * amplitude + offset) as i32
-                },
-                "random" => rand::thread_rng().gen_range(self.config.min_value..=self.config.max_value),
+                }
+                "random" => {
+                    rand::thread_rng().gen_range(self.config.min_value..=self.config.max_value)
+                }
                 _ => rand::thread_rng().gen_range(self.config.min_value..=self.config.max_value),
             };
             packet.extend_from_slice(&value.to_le_bytes());
@@ -185,7 +230,9 @@ impl DataReader for FakeBinaryReader {
         packet.push(sc1);
         packet.push(sc2);
         self.t += 0.001;
-        thread::sleep(Duration::from_millis((1000.0/self.config.frequency).round() as u64));
+        thread::sleep(Duration::from_millis(
+            (1000.0 / self.config.frequency).round() as u64,
+        ));
         Ok(packet)
     }
     fn close(&mut self) {}
@@ -242,7 +289,12 @@ fn process_buffer(buffer: &mut Vec<u8>, state: &SerialState, app: &AppHandle) {
 }
 
 // Main loop for any reader
-pub fn reader_loop<R: DataReader + Send + 'static>(mut rd: R, running: Arc<AtomicBool>, state: Arc<SerialState>, app: AppHandle) {
+pub fn reader_loop<R: DataReader + Send + 'static>(
+    mut rd: R,
+    running: Arc<AtomicBool>,
+    state: Arc<SerialState>,
+    app: AppHandle,
+) {
     if rd.setup().is_err() {
         return;
     }
@@ -254,7 +306,7 @@ pub fn reader_loop<R: DataReader + Send + 'static>(mut rd: R, running: Arc<Atomi
                     buf.extend(data);
                     process_buffer(&mut buf, &state, &app);
                 }
-            },
+            }
             Err(_) => break,
         }
     }

@@ -1,10 +1,7 @@
 use std::{
     collections::VecDeque,
-    sync::{
-        atomic::AtomicBool,
-        mpsc::Sender,
-        Arc, Mutex,
-    },
+    fs::File,
+    sync::{atomic::AtomicBool, mpsc::Sender, Arc, Mutex},
     thread::JoinHandle,
 };
 
@@ -15,11 +12,14 @@ pub struct SerialState {
     pub outbound_tx: Mutex<Option<Sender<String>>>,
     pub active_buffer: Mutex<VecDeque<ChannelData>>,
     pub read_buffer: Mutex<VecDeque<ChannelData>>,
-    pub buffer_lock: Mutex<()> ,
+    pub buffer_lock: Mutex<()>,
     pub signal_stream_running: Arc<AtomicBool>,
     pub signal_stream_handle: Mutex<Option<JoinHandle<()>>>,
     pub camera_stream_running: Arc<AtomicBool>,
     pub camera_stream_handle: Mutex<Option<JoinHandle<()>>>,
+    pub recording_active: Arc<AtomicBool>,
+    pub recording_handle: Mutex<Option<JoinHandle<()>>>,
+    pub recording_file: Mutex<Option<(File, String)>>,
 }
 
 impl SerialState {
@@ -33,6 +33,9 @@ impl SerialState {
             signal_stream_handle: Mutex::new(None),
             camera_stream_running: Arc::new(AtomicBool::new(false)),
             camera_stream_handle: Mutex::new(None),
+            recording_active: Arc::new(AtomicBool::new(false)),
+            recording_handle: Mutex::new(None),
+            recording_file: Mutex::new(None),
         }
     }
 

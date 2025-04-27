@@ -1,21 +1,22 @@
 use std::sync::Arc;
 
-
-mod types;
-mod state;
-mod reader;
 mod commands;
-use commands::{connect_serial, connect_socket, 
-                send_serial, get_recent_data, 
-                get_available_ports, start_fake_data, 
-                stop_data_acquisition, start_streaming, stop_streaming};
+mod reader;
+mod state;
+mod types;
+use commands::{
+    connect_serial, connect_socket, get_available_ports, get_recent_data, get_recording_status,
+    select_recording_directory, send_serial, start_fake_data, start_recording, start_streaming,
+    stop_data_acquisition, stop_recording, stop_streaming,
+};
 use state::SerialState;
-
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let serial_state = Arc::new(SerialState::new());
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_os::init())
         .manage(serial_state)
         // Removed automatic frame stream on startup; streaming controlled via commands
         .invoke_handler(tauri::generate_handler![
@@ -27,7 +28,11 @@ pub fn run() {
             start_fake_data,
             stop_data_acquisition,
             start_streaming,
-            stop_streaming
+            stop_streaming,
+            select_recording_directory,
+            start_recording,
+            stop_recording,
+            get_recording_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
