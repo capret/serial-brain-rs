@@ -117,6 +117,7 @@ pub struct SocketBinaryReader {
     port: u16,
     listener: Option<TcpListener>,
     stream: Option<TcpStream>,
+    accepted: bool,
 }
 
 impl SocketBinaryReader {
@@ -126,46 +127,93 @@ impl SocketBinaryReader {
             port,
             listener: None,
             stream: None,
+            accepted: false,
         }
     }
 }
 
 impl DataReader for SocketBinaryReader {
     fn setup(&mut self) -> Result<(), String> {
-        let l = TcpListener::bind((&self.host[..], self.port))
+        let addr = format!("{}:{}", self.host, self.port);
+        
+        // Just bind directly to the address
+        // Note: In standard library we don't have direct access to SO_REUSEADDR
+        // but we're still moving the accept logic to read_data which should help
+        let listener = TcpListener::bind(&addr)
             .map_err(|e| format!("Failed to bind {}:{} - {}", self.host, self.port, e))?;
-        l.set_nonblocking(true).ok();
-        self.listener = Some(l);
-        // accept one client
-        for stream in self.listener.as_ref().unwrap().incoming() {
-            match stream {
-                Ok(s) => {
-                    self.stream = Some(s);
-                    break;
-                }
-                Err(_) => {
-                    thread::sleep(Duration::from_millis(10));
+            
+        // Set non-blocking mode so accept() won't block
+        listener.set_nonblocking(true)
+            .map_err(|e| format!("Failed to set non-blocking mode: {}", e))?;
+            
+        self.listener = Some(listener);
+        println!("[SOCKET] Bound to {}:{} and listening", self.host, self.port);
+        
+        // Don't wait for client in setup - we'll accept in read_data
+        self.accepted = false;
+        Ok(())
+    }
+    
+    fn read_data(&mut self) -> Result<Vec<u8>, String> {
+        let mut out = Vec::new();
+        
+        // If we don't have a client connection yet, try to accept one
+        if !self.accepted {
+            if let Some(listener) = &self.listener {
+                match listener.accept() {
+                    Ok((stream, addr)) => {
+                        println!("[SOCKET] Connected from {}", addr);
+                        // Set non-blocking mode
+                        stream.set_nonblocking(true)
+                            .map_err(|e| format!("Failed to set client non-blocking: {}", e))?;
+                        // Store the client stream
+                        self.stream = Some(stream);
+                        self.accepted = true;
+                    }
+                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        // No connection available yet, not an error
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(e) => {
+                        println!("[SOCKET] Accept error: {}", e);
+                        // Continue and try again next time
+                    }
                 }
             }
         }
-        Ok(())
-    }
-    fn read_data(&mut self) -> Result<Vec<u8>, String> {
-        let mut out = Vec::new();
+        
+        // If we have a client connection, try to read data
         if let Some(s) = self.stream.as_mut() {
             let mut buf = [0u8; 1024];
             match s.read(&mut buf) {
                 Ok(n) if n > 0 => out.extend_from_slice(&buf[..n]),
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-                Err(e) => return Err(format!("Socket read error: {}", e)),
-                _ => {}
+                Ok(0) => {
+                    // Connection closed by peer
+                    println!("[SOCKET] Client disconnected");
+                    self.stream = None;
+                    self.accepted = false;
+                }
+                Ok(_) => { /* Read 0 bytes, nothing to do */ }
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    // No data available, not an error
+                }
+                Err(e) => {
+                    println!("[SOCKET] Read error: {}", e);
+                    // Reset connection on error
+                    self.stream = None;
+                    self.accepted = false;
+                    return Err(format!("Socket read error: {}", e));
+                }
             }
         }
+        
         Ok(out)
     }
+    
     fn close(&mut self) {
         let _ = self.stream.take();
         let _ = self.listener.take();
+        self.accepted = false;
     }
 }
 
@@ -295,8 +343,12 @@ pub fn reader_loop<R: DataReader + Send + 'static>(
     state: Arc<SerialState>,
     app: AppHandle,
 ) {
-    if rd.setup().is_err() {
-        return;
+    match rd.setup() {
+        Ok(_) => println!("[READER-LOOP] Setup successful"),
+        Err(e) => {
+            println!("[READER-LOOP] Setup failed: {}", e);
+            return;
+        }
     }
     let mut buf = Vec::new();
     while running.load(Ordering::SeqCst) {

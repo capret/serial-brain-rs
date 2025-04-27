@@ -68,11 +68,8 @@ pub fn connect_socket(
         }
     }
 
-    let mut reader = SocketBinaryReader::new(host.clone(), port);
-    // Try setup to detect connection timeout
-    if let Err(e) = reader.setup() {
-        return Err(e);
-    }
+    // Create the reader but don't set it up yet - setup will be done in reader_loop
+    let reader = SocketBinaryReader::new(host.clone(), port);
     state.signal_stream_running.store(true, Ordering::SeqCst);
     let running_flag = state.signal_stream_running.clone();
     let state_inner = state.inner().clone();
