@@ -75,7 +75,12 @@ export const serialSettings = reactive({
   baudRate: 460800,
   dataBits: 8,
   stopBits: 1,
-  parity: 'none'
+  parity: 'none',
+  serialInfo: '',
+  serialInfoBuffer: [],
+  availablePorts: [],
+  sendData: '',
+  sendEndFlag: '\n'
 });
 
 // Fake Data Generator Settings

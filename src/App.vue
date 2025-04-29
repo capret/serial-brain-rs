@@ -31,7 +31,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 // Add style to document body directly
 document.body.style.margin = '0';
 document.body.style.padding = '0';
@@ -39,9 +39,9 @@ document.body.style.padding = '0';
 document.documentElement.style.margin = '0';
 document.documentElement.style.padding = '0';
 // Import the Window API from Tauri
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { onMounted, ref } from 'vue';
 import { serialSettings, tcpSettings, fakeDataSettings } from './store/appState';
+
 // Import components
 import AppSidebar from './components/AppSidebar.vue';
 import VisualizationView from './components/views/VisualizationView.vue';
@@ -51,24 +51,28 @@ import RecordingView from './components/views/RecordingView.vue';
 import StreamingView from './components/views/StreamingView.vue';
 import AppHeader from './components/AppHeader.vue';
 
+import { invoke } from '@tauri-apps/api/core'
+
+export async function ping(value: string): Promise<string | null> {
+  return await invoke<{value?: string}>('plugin:backgrouder|ping', {
+    payload: {
+      value,
+    },
+  }).then((r) => (r.value ? r.value : null));
+}
 
 // State for primary view and appended additional views (in visualization)
 const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder', 'streaming'
-const additionalViews = ref([]); // list of appended views when in visualization
+const additionalViews = ref<string[]>([]);
 const collapsed = ref(false);
 
 // Signal source state
 const selectedDataSource = ref('fake'); // Options: 'serial', 'tcp', 'fake'
 
-// Additional serial settings not in central state
-serialSettings.serialInfo = '';
-serialSettings.serialInfoBuffer = [];
-serialSettings.availablePorts = [];
-serialSettings.sendData = '';
-serialSettings.sendEndFlag = '\n';
+// Serial settings now defined in central state (appState.ts)
 
 // Function to handle data source change
-function onDataSourceChanged(source) {
+function onDataSourceChanged(source: 'serial' | 'tcp' | 'fake') {
   selectedDataSource.value = source;
   console.log(`Data source changed to: ${source}`);
 }
