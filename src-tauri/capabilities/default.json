@@ -15,6 +15,7 @@
     "core:window:allow-close",
     "core:window:allow-unmaximize",
     "core:window:allow-start-dragging",
+    "android-forward-service:default",
     "os:default",
     "fs:default",
     "fs:allow-app-meta",

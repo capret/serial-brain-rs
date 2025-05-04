@@ -79,7 +79,7 @@ function toggleRunning() {
 }
 
 async function ping(value: string): Promise<string | null> {
-  return await invoke<{value?: string}>('plugin:backgrouder|ping', {
+  return await invoke<{value?: string}>('plugin:android-forward-service|ping', {
     payload: {
       value,
     },
@@ -87,8 +87,8 @@ async function ping(value: string): Promise<string | null> {
 }
 
 function reportIssue() {
-  ping("10");
-  console.log("Report issue clicked - debug information will be added here");
+  console.log(ping("10"));
+  // console.log("Report issue clicked - debug information will be added here");
 }
 
 const isLaunchDisabled = computed(() => connectionStatus.value !== 'connected');

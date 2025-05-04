@@ -18,6 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_android_forward_service::init())
         .manage(serial_state)
         // Removed automatic frame stream on startup; streaming controlled via commands
         .invoke_handler(tauri::generate_handler![

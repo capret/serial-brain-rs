@@ -19,7 +19,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serialport = "4.0"
@@ -31,7 +30,8 @@ sci-rs = "0.4.1"
 tokio = { version = "1", features = ["full", "time"] }
 reqwest = { version = "0.11", default-features = false, features = ["blocking", "rustls-tls"] }
 tauri-plugin-os = "2"
+tauri-plugin-opener = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
-
+tauri-plugin-android-forward-service = { path = "../tauri-plugin-android-forward-service" }
 # opencv = { version = "0.94" }
