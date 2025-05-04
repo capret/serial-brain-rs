@@ -260,13 +260,17 @@ impl DataReader for FakeBinaryReader {
             let offset = self.config.min_value as f64;
             let value = match self.config.waveform.as_str() {
                 "sine" => {
-                    ((phase * 2.0 * std::f64::consts::PI).sin() * amplitude / 2.0
+                    let raw_value = (phase * 2.0 * std::f64::consts::PI).sin() * amplitude / 2.0
                         + amplitude / 2.0
-                        + offset) as i32
+                        + offset;
+                    // Apply inverse operation to make it consistent with real data processing
+                    (raw_value / (0.5364 / 12.0)) as i32
                 }
                 "square" => {
                     let sq = if (phase % 1.0) < 0.5 { 0.0 } else { 1.0 };
-                    (sq * amplitude + offset) as i32
+                    let raw_value = sq * amplitude + offset;
+                    // Apply inverse operation to make it consistent with real data processing
+                    (raw_value / (0.5364 / 12.0)) as i32
                 }
                 "triangle" => {
                     let tri_phase = phase % 1.0;
@@ -275,16 +279,26 @@ impl DataReader for FakeBinaryReader {
                     } else {
                         2.0 - tri_phase * 2.0
                     };
-                    (tri * amplitude + offset) as i32
+                    let raw_value = tri * amplitude + offset;
+                    // Apply inverse operation to make it consistent with real data processing
+                    (raw_value / (0.5364 / 12.0)) as i32
                 }
                 "sawtooth" => {
                     let st = phase % 1.0;
-                    (st * amplitude + offset) as i32
+                    let raw_value = st * amplitude + offset;
+                    // Apply inverse operation to make it consistent with real data processing
+                    (raw_value / (0.5364 / 12.0)) as i32
                 }
                 "random" => {
-                    rand::thread_rng().gen_range(self.config.min_value..=self.config.max_value)
+                    let raw_value = rand::thread_rng().gen_range(self.config.min_value..=self.config.max_value) as f64;
+                    // Apply inverse operation to make it consistent with real data processing
+                    (raw_value / (0.5364 / 12.0)) as i32
                 }
-                _ => rand::thread_rng().gen_range(self.config.min_value..=self.config.max_value),
+                _ => {
+                    let raw_value = rand::thread_rng().gen_range(self.config.min_value..=self.config.max_value) as f64;
+                    // Apply inverse operation to make it consistent with real data processing
+                    (raw_value / (0.5364 / 12.0)) as i32
+                },
             };
             packet.extend_from_slice(&value.to_le_bytes());
         }
@@ -334,7 +348,8 @@ fn process_buffer(buffer: &mut Vec<u8>, state: &SerialState, app: &AppHandle) {
                 for j in 0..8 {
                     let idx = 4 + j * 4;
                     let v = i32::from_le_bytes(packet[idx..idx + 4].try_into().unwrap());
-                    data[j] = v as f32;
+                    // Convert raw value to real voltage using the formula: raw_value * 0.5364 / 12
+                    data[j] = (v as f32) * 0.5364 / 12.0; // hard code for real unit calculation
                 }
                 state.add_data(data);
                 let _ = app.emit("serial_data", data);
