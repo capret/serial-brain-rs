@@ -71,6 +71,7 @@ import { channelColors, channelVisibility } from './channelSettings';
 
 const emit = defineEmits<{
   (event: 'crosshair-move', payload: { x: number; y: number; dataValues: number[] }): void;
+  (event: 'quality-update', payload: boolean[]): void;
 }>();
 const props = defineProps<{ running: boolean }>();
 
@@ -119,6 +120,10 @@ let dataUpdatePending = false;
 let fpsCounter = 0;
 let fpsControl = 1;
 let isActive = true;
+
+/* Signal quality */
+const signalQuality = ref<boolean[]>([true, true, true, true, true, true, true, true]);
+let qualityCheckPending = false;
 
 /* Interaction helpers */
 let zoomFlag = false;
@@ -420,6 +425,26 @@ function refreshData() {
     })
     .catch(err => console.error('Error retrieving data:', err))
     .finally(() => (dataUpdatePending = false));
+    
+  // Only check signal quality if the chart is running and at reduced frequency
+  if (!qualityCheckPending && props.running && fpsCounter % 30 === 0) {
+    checkSignalQuality();
+  }
+}
+
+// Fetch signal quality indicators from the backend
+function checkSignalQuality() {
+  if (qualityCheckPending) return;
+  qualityCheckPending = true;
+  invoke<boolean[]>('get_signal_quality')
+    .then(quality => {
+      if (quality && quality.length) {
+        signalQuality.value = quality;
+        emit('quality-update', quality);
+      }
+    })
+    .catch(err => console.error('Error retrieving signal quality:', err))
+    .finally(() => (qualityCheckPending = false));
 }
 
 /* ====================================================
@@ -495,5 +520,5 @@ onDeactivated(() => {
   if (resizeTimeout !== null) clearTimeout(resizeTimeout);
 });
 
-defineExpose({ initPlot, setChannelColor, setChannelVisibility, clearPlot });
+defineExpose({ initPlot, setChannelColor, setChannelVisibility, clearPlot, signalQuality });
 </script>

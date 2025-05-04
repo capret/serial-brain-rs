@@ -15,13 +15,23 @@
       ></div>
     </div>
 
+    <!-- Signal quality indicator removed from here -->
+
     <!-- Content rectangle, right-aligned and overlapping -->
     <div
       @click="onToggleVisibility"
       class="absolute top-0 left-5 right-0 h-12 rounded-lg flex flex-col justify-center px-3 cursor-pointer z-10 transition-transform duration-200 hover:scale-95"
       :class="props.visible ? 'bg-gray-700' : 'bg-gray-900'"
     >
-      <p class="text-xs text-gray-400 m-0 truncate">{{ channelTitle }}</p>
+      <div class="flex items-center">
+        <p class="text-xs text-gray-400 m-0 truncate">{{ channelTitle }}</p>
+        <!-- Signal quality indicator next to channel name -->
+        <div 
+          class="ml-1 w-2 h-2 rounded-xl z-20" 
+          :class="props.signalQuality ? 'bg-green-500' : 'bg-red-500'"
+          :title="props.signalQuality ? 'Good signal quality' : 'Poor signal quality'"
+        ></div>
+      </div>
       <p class="font-semibold m-0 truncate text-xs">{{ currentValue }}</p>
     </div>
   </div>
@@ -30,7 +40,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 
-const props = defineProps<{ channelTitle: string; currentValue: number | string; color: string; visible: boolean; }>();
+const props = defineProps<{ 
+  channelTitle: string; 
+  currentValue: number | string; 
+  color: string; 
+  visible: boolean; 
+  signalQuality: boolean;
+}>();
 const emit = defineEmits<{ (event: 'color-change', color: string): void; (event: 'toggle-visibility'): void; }>();
 
 const internalColor = ref<string>(props.color);

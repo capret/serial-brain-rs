@@ -500,3 +500,9 @@ pub fn stop_recording(state: State<Arc<SerialState>>) -> Result<(), String> {
 pub fn get_recording_status(state: State<Arc<SerialState>>) -> Result<bool, String> {
     Ok(state.recording_active.load(Ordering::SeqCst))
 }
+
+#[tauri::command]
+pub fn get_signal_quality(state: State<Arc<SerialState>>) -> Result<Vec<bool>, String> {
+    // Use the on-demand check_signal_quality method instead of just getting current values
+    Ok(state.check_signal_quality())
+}

@@ -4,6 +4,7 @@
       ref="signalChart" 
       :running="isRunning"
       @crosshair-move="handleCrosshairMove"
+      @quality-update="handleQualityUpdate"
     />
     <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));">
       <ChannelStatCard
@@ -13,6 +14,7 @@
         :currentValue="formatValue(channel.current)"
         :color="channelColors[index]"
         :visible="channelVisibility[index]"
+        :signalQuality="channelQuality[index]"
         @color-change="onColorChange(index, $event)"
         @toggle-visibility="onToggleVisibility(index)"
       />
@@ -40,6 +42,11 @@ const channelStats = ref([
   { current: 0 }
 ]);
 
+// Define state for signal quality (true = good, false = bad)
+const channelQuality = ref([
+  true, true, true, true, true, true, true, true
+]);
+
 const signalChart = ref<InstanceType<typeof SignalChart> | null>(null);
 
 // Format numeric values with appropriate precision
@@ -64,6 +71,16 @@ function updateChannelStats(data: number[]) {
   // Update current value for each channel
   for (let i = 0; i < Math.min(data.length, channelStats.value.length); i++) {
     channelStats.value[i].current = data[i];
+  }
+}
+
+// Handle signal quality updates from the chart component
+function handleQualityUpdate(qualityData: boolean[]) {
+  if (!qualityData || !Array.isArray(qualityData) || qualityData.length === 0) return;
+  
+  // Update signal quality for each channel
+  for (let i = 0; i < Math.min(qualityData.length, channelQuality.value.length); i++) {
+    channelQuality.value[i] = qualityData[i];
   }
 }
 
