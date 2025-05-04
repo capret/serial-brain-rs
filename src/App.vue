@@ -38,6 +38,19 @@ document.body.style.padding = '0';
 // document.body.style.overflow = 'hidden';
 document.documentElement.style.margin = '0';
 document.documentElement.style.padding = '0';
+
+// Add meta viewport tag to disable zooming
+const metaViewport = document.createElement('meta');
+metaViewport.name = 'viewport';
+metaViewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+document.head.appendChild(metaViewport);
+
+// Prevent pinch zoom
+document.addEventListener('touchmove', function(event) {
+  if (event.touches.length > 1) {
+    event.preventDefault();
+  }
+}, { passive: false });
 // Import the Window API from Tauri
 import { onMounted, ref } from 'vue';
 import { serialSettings, tcpSettings, fakeDataSettings } from './store/appState';
@@ -74,9 +87,17 @@ onMounted(() => {
       margin: '0',
       padding: '0',
       width: '100vw',
-      height: '100vh'
+      height: '100vh',
+      touchAction: 'pan-x pan-y' // Allows scrolling but prevents zooming
     });
   }
+  
+  // Additional touch event handler for the main container
+  mainContainer?.addEventListener('touchstart', (e) => {
+    if (e.touches.length > 1) {
+      e.preventDefault();
+    }
+  }, { passive: false });
 });
 </script>
 
