@@ -1,0 +1,266 @@
+**Tauri Plugin Development Guide (Agent Memory)**
+
+---
+
+## 1. Overview
+
+* **Purpose**: Extend Tauri applications with external functionality via plugins.
+* **Composition**: A Rust Cargo crate + optional PNPM package (+ Android/iOS modules).
+* **Capabilities**: Hook lifecycle, expose native code (Rust/Kotlin/Swift), define commands, manage state, emit events.
+
+## 2. Naming & Initialization
+
+* **Naming**: Crate: `tauri-plugin-{name}`; JS API: `tauri-plugin-{name}-api` (or `@scope/plugin-{name}`).
+* **Bootstrap**: `npx @tauri-apps/cli plugin new [name] [--no-api] [--android] [--ios]`.
+* **Project Layout**:
+
+  ```
+  tauri-plugin-[name]/
+  ├── src/
+  │   ├── commands.rs       # JS-invokable commands
+  │   ├── desktop.rs        # Desktop logic
+  │   ├── mobile.rs         # Mobile logic
+  │   ├── lib.rs            # Exports, setup
+  │   ├── error.rs          # Error type
+  │   └── models.rs         # Shared structs
+  ├── permissions/          # Auto/gen permission files
+  ├── android/              # Android library (Kotlin/Java)
+  ├── ios/                  # iOS Swift package
+  ├── guest-js/             # JS API source
+  ├── dist-js/              # Built JS assets
+  ├── Cargo.toml            # Rust metadata
+  └── package.json          # NPM metadata
+  ```
+
+## 3. Plugin Configuration
+
+* **tauri.conf.json**:
+
+  ```json
+  {
+    "plugins": { "plugin-name": { "timeout": 30 } }
+  }
+  ```
+* **Config Struct**:
+
+  ```rust
+  #[derive(Deserialize)]
+  struct Config { timeout: usize }
+  Builder::<R, Config>::new("plugin-name")
+    .setup(|app, api| { let t = api.config().timeout; Ok(()) })
+    .build()
+  ```
+
+## 4. Lifecycle Hooks
+
+| Hook               | When                        | Use Cases                                |
+| ------------------ | --------------------------- | ---------------------------------------- |
+| `setup`            | Plugin init                 | State, background tasks, app.manage      |
+| `on_navigation`    | URL navigation              | Validate/authorize navigation            |
+| `on_webview_ready` | Window creation             | Inject scripts, listen to events         |
+| `on_event`         | App event loop (e.g., exit) | Handle exit, prevent exit, persist state |
+| `on_drop`          | Plugin destruction          | Cleanup                                  |
+
+## 5. Exposing APIs & State
+
+* **State**: `app.manage(MyState(...))` + retrieve via `app.state::<MyState>()`.
+* **Rust API**: Provide extension traits (e.g., `GlobalShortcutExt`) to access plugin handle.
+* **Invoke Handler**:
+
+  ```rust
+  Builder::new("plugin-name")
+    .invoke_handler(tauri::generate_handler![commands::upload])
+    .build();
+  ```
+* **JS Binding**:
+
+  ```ts
+  import { invoke, Channel } from '@tauri-apps/api/core'
+  export async function upload(url, onProgress) { ... }
+  ```
+
+## 6. Commands & Permissions
+
+### Commands
+
+* Defined in `commands.rs` with `#[command]`.
+* Access `AppHandle`, `Window`, state, channels.
+
+### Permissions
+
+* **Files**: `permissions/*.toml` per command or set.
+* **Schema**: `[[permission]]` blocks, allow/deny lists, scopes.
+* **Autogen**: In `build.rs`, pass `COMMANDS` to auto-create allow/deny permissions.
+* **Sets & Default**: Group commands, define default permission set.
+
+## 7. Mobile Plugin Development
+
+Tauri plugins can include native Android and iOS modules. Below is an expanded guide for Android plugin development.
+
+### Android Plugin Development
+
+1. **Project Structure**
+   In your plugin root, the Android library lives under `android/`:
+
+   ```
+   tauri-plugin-foo/
+   └── android/
+       ├── build.gradle          # Gradle config
+       ├── settings.gradle       # Include plugin module
+       ├── AndroidManifest.xml   # Permissions, metadata
+       └── src/main/
+           ├── java/             # (if using Java)
+           └── kotlin/           # (Kotlin sources)
+               └── com/example/foo/
+                   └── FooPlugin.kt
+   ```
+
+2. **Gradle Configuration**
+   In `android/build.gradle`:
+
+   ```groovy
+   plugins {
+     id 'com.android.library'
+     id 'kotlin-android'
+   }
+   android {
+     namespace 'com.example.foo'
+     compileSdkVersion 33
+     defaultConfig {
+       minSdkVersion 21
+       targetSdkVersion 33
+     }
+   }
+   dependencies {
+     implementation 'app.tauri:plugin:1.2.3' // match Tauri Android plugin version
+   }
+   ```
+
+   Ensure `settings.gradle` includes `':android'` as a module.
+
+3. **AndroidManifest**
+   Declare any required permissions and metadata:
+
+   ```xml
+   <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+     package="com.example.foo">
+     <uses-permission android:name="android.permission.CAMERA" />
+     <!-- Add other permissions here -->
+   </manifest>
+   ```
+
+4. **Plugin Class**
+   Create a Kotlin class annotated with `@TauriPlugin`, extending `Plugin`:
+
+   ```kotlin
+   package com.example.foo
+
+   import android.app.Activity
+   import android.content.Intent
+   import android.webkit.WebView
+   import app.tauri.Plugin
+   import app.tauri.annotation.TauriPlugin
+   import app.tauri.annotation.Command
+   import app.tauri.annotation.InvokeArg
+   import kotlinx.coroutines.*
+
+   @InvokeArg
+   data class OpenArgs(
+     val requiredArg: String,
+     val allowEdit: Boolean = false,
+     val quality: Int = 100
+   )
+
+   @TauriPlugin(
+     permissions = [
+       Permission(strings = [android.Manifest.permission.CAMERA], alias = "camera")
+     ]
+   )
+   class FooPlugin(private val activity: Activity) : Plugin(activity) {
+     // Coroutine scope for async commands
+     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+     // Called when WebView is ready
+     override fun load(webView: WebView) {
+       // Initialization logic, e.g., register listeners
+     }
+
+     // (Optional) Handle new Intents for deep linking
+     override fun onNewIntent(intent: Intent) {
+       // Process intent data
+     }
+
+     // Expose a command callable from Rust/JS
+     @Command
+     fun openCamera(invoke: Invoke) {
+       scope.launch {
+         // Launch camera and obtain result
+         val photoPath = launchCamera() // custom implementation
+         // Return result to JS/Rust
+         invoke.resolve(mapOf("path" to photoPath))
+       }
+     }
+
+     private suspend fun launchCamera(): String {
+       // Suspend function to start camera intent and wait for result
+       TODO()
+     }
+   }
+   ```
+
+   * **@InvokeArg**: Annotates argument classes for type-safe parsing.
+   * **@Command**: Marks methods callable via `run_mobile_plugin` or JS invoke.
+   * Use a `CoroutineScope` for long-running tasks.
+
+5. **Calling from Rust**
+   In your plugin’s `lib.rs`:
+
+   ```rust
+   use app_tauri::plugin::PluginHandle; // pseudocode
+   pub fn init<R: Runtime>() -> TauriPlugin<R, Config> {
+     Builder::<R, Config>::new("foo")
+       .setup(|app, _api| {
+         // Attach Android plugin
+         app.register_mobile_plugin("foo", android_module_path);
+         Ok(())
+       })
+       .build()
+   }
+
+   impl<R: Runtime> Foo<R> {
+     pub fn open_camera(&self) -> crate::Result<Photo> {
+       self.0.run_mobile_plugin("openCamera", ())
+         .map_err(Into::into)
+     }
+   }
+   ```
+
+6. **JS/TS Binding**
+   In your NPM API package:
+
+   ```ts
+   import { invoke, PermissionState, Channel } from '@tauri-apps/api/core';
+
+   export async function openCamera(): Promise<{ path: string }> {
+     return await invoke('plugin:foo|openCamera');
+   }
+
+   export async function checkCameraPermission(): Promise<PermissionState> {
+     const perms = await invoke<{ camera: PermissionState }>('plugin:foo|checkPermissions');
+     return perms.camera;
+   }
+   ```
+
+7. **Permissions Flow**
+
+   * JS: `invoke('plugin:foo|requestPermissions', { permissions: ['camera'] })`
+   * Handle states `'granted'`, `'denied'`, `'prompt'`, `'prompt-with-rationale'`.
+
+8. **Debug & Packaging**
+
+   * Build the Android AAR: `./gradlew :android:assembleRelease`
+   * Include the generated `.aar` in your app’s `android` module or deploy to local Maven for consumption.
+
+---
+
+This expanded section should give you end-to-end guidance on developing, building, and consuming an Android Tauri plugin.

@@ -42,7 +42,7 @@
             <a href="#" class="block px-4 py-2 hover:bg-gray-600 transition-colors duration-200">
               Export Data
             </a>
-            <a href="#" class="block px-4 py-2 hover:bg-gray-600 transition-colors duration-200">
+            <a href="#" @click.prevent="reportIssue" class="block px-4 py-2 hover:bg-gray-600 transition-colors duration-200">
               Report Issue
             </a>
           </div>
@@ -55,13 +55,18 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import SignalVisualization from '../visualization/SignalVisualization.vue';
 import { ref, computed } from 'vue';
 import { isRunning, connectionStatus } from '../../store/appState';
+import { invoke } from '@tauri-apps/api/core';
+// Define the interface with only the methods we need to access
+interface SignalVisualizationExposed {
+  clearPlot: () => void;
+}
 
 // ref to child component for clearing
-const viz = ref(null);
+const viz = ref<SignalVisualizationExposed | null>(null);
 /**
  * Invoke clearPlot exposed by SignalVisualization
  */
@@ -71,6 +76,19 @@ function clearPlot() {
 
 function toggleRunning() {
   isRunning.value = !isRunning.value;
+}
+
+async function ping(value: string): Promise<string | null> {
+  return await invoke<{value?: string}>('plugin:backgrouder|ping', {
+    payload: {
+      value,
+    },
+  }).then((r) => (r.value ? r.value : null));
+}
+
+function reportIssue() {
+  ping("10");
+  console.log("Report issue clicked - debug information will be added here");
 }
 
 const isLaunchDisabled = computed(() => connectionStatus.value !== 'connected');
