@@ -415,7 +415,7 @@ function refreshData() {
       if (newData?.length) {
         addToDataBuffer(newData);
         addNewDataPoints(newData);
-        console.log('Data length:', newData.length);
+        // console.log('Data length:', newData.length);
       }
     })
     .catch(err => console.error('Error retrieving data:', err))

@@ -35,7 +35,11 @@ impl<R: Runtime, T: Manager<R>> crate::AndroidForwardServiceExt<R> for T {
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new("android-forward-service")
-    .invoke_handler(tauri::generate_handler![commands::ping])
+    .invoke_handler(tauri::generate_handler![
+        commands::ping,
+        commands::start_forward_service,
+        commands::stop_forward_service,
+    ])
     .setup(|app, api| {
       #[cfg(mobile)]
       let android_forward_service = mobile::init(app, api)?;

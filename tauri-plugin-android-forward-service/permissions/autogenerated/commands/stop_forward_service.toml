@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-stop-forward-service"
+description = "Enables the stop_forward_service command without any pre-configured scope."
+commands.allow = ["stop_forward_service"]
+
+[[permission]]
+identifier = "deny-stop-forward-service"
+description = "Denies the stop_forward_service command without any pre-configured scope."
+commands.deny = ["stop_forward_service"]

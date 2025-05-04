@@ -11,3 +11,17 @@ pub(crate) async fn ping<R: Runtime>(
 ) -> Result<PingResponse> {
     app.android_forward_service().ping(payload)
 }
+
+#[command]
+pub(crate) async fn start_forward_service<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<()> {
+    app.android_forward_service().start_service()
+}
+
+#[command]
+pub(crate) async fn stop_forward_service<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<()> {
+    app.android_forward_service().stop_service()
+}

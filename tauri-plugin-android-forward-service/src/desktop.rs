@@ -19,4 +19,17 @@ impl<R: Runtime> AndroidForwardService<R> {
       value: payload.value,
     })
   }
+
+  pub fn start_service(&self) -> crate::Result<()> {
+    // Foreground service not needed on desktop; no-op
+    println!("[Desktop] Foreground service would start here on Android");
+    eprintln!("[Desktop] Foreground service start called");
+    Ok(())
+  }
+
+  pub fn stop_service(&self) -> crate::Result<()> {
+    println!("[Desktop] Foreground service would stop here on Android");
+    eprintln!("[Desktop] Foreground service stop called");
+    Ok(())
+  }
 }

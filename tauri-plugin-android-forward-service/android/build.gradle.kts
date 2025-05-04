@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.plugin.android-forward-service"
+    namespace = "com.plugin.android_forward_service"
     compileSdk = 34
 
     defaultConfig {

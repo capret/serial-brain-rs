@@ -196,6 +196,14 @@ async function startRecording() {
       autoStart: autoStart.value
     });
     
+    // Start Android foreground service to keep app alive in background
+    try {
+      await invoke('plugin:android-forward-service|start_forward_service');
+      console.log('Android foreground service started');
+    } catch (e) {
+      console.warn('Forward service not available or failed to start:', e);
+    }
+    
     isRecording.value = true;
   } catch (error) {
     console.error('Error starting recording:', error);
@@ -207,6 +215,15 @@ async function startRecording() {
 async function stopRecording() {
   try {
     await invoke('stop_recording');
+    
+    // Stop Android foreground service
+    try {
+      await invoke('plugin:android-forward-service|stop_forward_service');
+      console.log('Android foreground service stopped');
+    } catch (e) {
+      console.warn('Forward service not available or failed to stop:', e);
+    }
+    
     isRecording.value = false;
     recordingFilename.value = '';
   } catch (error) {

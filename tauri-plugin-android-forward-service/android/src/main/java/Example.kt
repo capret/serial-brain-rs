@@ -1,4 +1,4 @@
-package com.plugin.android-forward-service
+package com.plugin.android_forward_service
 
 import android.util.Log
 

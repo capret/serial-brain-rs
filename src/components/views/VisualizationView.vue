@@ -85,9 +85,25 @@ async function ping(value: string): Promise<string | null> {
     },
   }).then((r) => (r.value ? r.value : null));
 }
-
+async function func_test(){
+  console.log("Starting forward service...");
+  try {
+    await invoke('plugin:android-forward-service|start_forward_service');
+    console.log("Forward service started successfully");
+    
+    // Wait 3 seconds before stopping
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    console.log("Stopping forward service...");
+    await invoke('plugin:android-forward-service|stop_forward_service');
+    console.log("Forward service stopped successfully");
+  } catch (error) {
+    console.error("Error with forward service:", error);
+  }
+}
 function reportIssue() {
   console.log(ping("10"));
+  func_test()
   // console.log("Report issue clicked - debug information will be added here");
 }
 
