@@ -50,18 +50,6 @@ import FilterConfigView from './components/views/FilterConfigView.vue';
 import RecordingView from './components/views/RecordingView.vue';
 import StreamingView from './components/views/StreamingView.vue';
 import AppHeader from './components/AppHeader.vue';
-
-import { invoke } from '@tauri-apps/api/core'
-
-export async function ping(value: string): Promise<string | null> {
-  return await invoke<{value?: string}>('plugin:backgrouder|ping', {
-    payload: {
-      value,
-    },
-  }).then((r) => (r.value ? r.value : null));
-}
-
-// State for primary view and appended additional views (in visualization)
 const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder', 'streaming'
 const additionalViews = ref<string[]>([]);
 const collapsed = ref(false);
