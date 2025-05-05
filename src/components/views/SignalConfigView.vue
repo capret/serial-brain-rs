@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 flex flex-col h-full">
+  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 flex flex-col">
     <div class="flex flex-wrap justify-between items-start mb-6 gap-4">
       <div class="mb-2">
         <h2 class="text-3xl font-bold text-blue-400">Signal Configuration</h2>
@@ -62,25 +62,23 @@
       </div>
     </div>
     
-    <!-- Settings Container with Fixed Height -->
+    <!-- Source Settings Section -->
     <div class="mb-6 flex flex-col flex-grow">
       <h3 class="text-lg font-semibold mb-4">Source Settings</h3>
-      <div class="bg-gray-700 rounded-lg flex flex-col flex-grow relative overflow-hidden">
-        <!-- Load the appropriate settings component based on selectedDataSource -->
-        <SerialSettings v-show="selectedDataSource === 'serial'" 
-                       :settings="serialSettings" 
-                       class="p-4 space-y-4 absolute inset-0 transition-opacity duration-300 overflow-y-auto"
-                       :class="{'opacity-100 z-10': selectedDataSource === 'serial', 'opacity-0 z-0': selectedDataSource !== 'serial'}" />
+      
+      <!-- Load the appropriate settings component based on selectedDataSource -->
+      <div class="bg-gray-700 p-4 rounded-lg">
+        <SerialSettings v-if="selectedDataSource === 'serial'" 
+                      :settings="serialSettings" 
+                      class="transition-opacity duration-300" />
         
-        <TCPSettings v-show="selectedDataSource === 'tcp'" 
+        <TCPSettings v-if="selectedDataSource === 'tcp'" 
                     :settings="tcpSettings" 
-                    class="p-4 space-y-4 absolute inset-0 transition-opacity duration-300 overflow-y-auto"
-                    :class="{'opacity-100 z-10': selectedDataSource === 'tcp', 'opacity-0 z-0': selectedDataSource !== 'tcp'}" />
+                    class="transition-opacity duration-300" />
         
-        <FakeDataSettings v-show="selectedDataSource === 'fake'" 
-                         :settings="fakeDataSettings" 
-                         class="p-4 space-y-4 absolute inset-0 transition-opacity duration-300 overflow-y-auto"
-                         :class="{'opacity-100 z-10': selectedDataSource === 'fake', 'opacity-0 z-0': selectedDataSource !== 'fake'}" />
+        <FakeDataSettings v-if="selectedDataSource === 'fake'" 
+                        :settings="fakeDataSettings" 
+                        class="transition-opacity duration-300" />
       </div>
     </div>
   </div>

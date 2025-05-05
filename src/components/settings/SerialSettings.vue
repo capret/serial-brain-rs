@@ -9,7 +9,7 @@
           <div class="flex flex-col">
             <label class="block text-sm mb-1">Port</label>
             <div class="flex gap-2">
-              <select class="w-[8rem] bg-gray-800 p-2 rounded" v-model="settings.port">
+              <select class="w-[8rem] bg-gray-800 p-2 rounded border border-gray-500" v-model="settings.port">
                 <option value="" disabled>Select a port</option>
                 <option v-for="p in settings.availablePorts" :key="p" :value="p">{{ p }}</option>
               </select>
@@ -18,7 +18,7 @@
           </div>
           <div class="flex flex-col">
             <label class="block text-sm mb-1">Baud Rate</label>
-            <select class="w-[8rem] bg-gray-800 p-2 rounded" v-model.number="settings.baudRate">
+            <select class="w-[8rem] bg-gray-800 p-2 rounded border border-gray-500" v-model.number="settings.baudRate">
               <option value="9600">9600</option>
               <option value="19200">19200</option>
               <option value="38400">38400</option>
@@ -29,14 +29,14 @@
           </div>
           <div class="flex flex-col">
             <label class="block text-sm mb-1">Stop Bits</label>
-            <select class="w-[8rem] bg-gray-800 p-2 rounded" v-model.number="settings.stopBits">
+            <select class="w-[8rem] bg-gray-800 p-2 rounded border border-gray-500" v-model.number="settings.stopBits">
               <option :value="1">1</option>
               <option :value="2">2</option>
             </select>
           </div>
           <div class="flex flex-col">
             <label class="block text-sm mb-1">Parity</label>
-            <select class="w-[8rem] bg-gray-800 p-2 rounded" v-model="settings.parity">
+            <select class="w-[8rem] bg-gray-800 p-2 rounded border border-gray-500" v-model="settings.parity">
               <option value="none">None</option>
               <option value="odd">Odd</option>
               <option value="even">Even</option>
@@ -44,7 +44,7 @@
           </div>
           <div class="flex flex-col">
             <label class="block text-sm mb-1">Data Bits</label>
-            <select class="w-[8rem] bg-gray-800 p-2 rounded" v-model.number="settings.dataBits">
+            <select class="w-[8rem] bg-gray-800 p-2 rounded border border-gray-500" v-model.number="settings.dataBits">
               <option :value="5">5</option>
               <option :value="6">6</option>
               <option :value="7">7</option>
@@ -55,9 +55,9 @@
         <div class="mt-4 w-full flex flex-col">
           <h4 class="text-md font-medium mb-2">Send Data</h4>
           <div class="space-y-2">
-            <input type="text" class="w-full bg-gray-800 p-2 rounded" v-model="settings.sendData" placeholder="Data to send" />
+            <input type="text" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model="settings.sendData" placeholder="Data to send" />
             <div class="flex gap-2">
-              <input type="text" class="w-1/3 bg-gray-800 p-2 rounded" v-model="settings.sendEndFlag" placeholder="End character" />
+              <input type="text" class="w-1/3 bg-gray-800 p-2 rounded border border-gray-500" v-model="settings.sendEndFlag" placeholder="End character" />
               <button class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md transition-colors duration-300 flex-grow">Send</button>
             </div>
           </div>

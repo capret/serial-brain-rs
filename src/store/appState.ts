@@ -5,6 +5,9 @@ export const connectionStatus = ref<string>('disconnected');
 export const isRunning = ref<boolean>(false);
 export const chartDataBuffer = reactive<number[][]>([]);
 
+// Chart configuration
+export const windowSize = ref<number>(5000); // Display window size (samples)
+
 // Socket status messages (for global access across pages)
 export const socketMessages = reactive<string[]>([]);
 export const hasClientConnected = ref<boolean>(false);

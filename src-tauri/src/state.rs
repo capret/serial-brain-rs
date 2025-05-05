@@ -2,8 +2,8 @@ use std::{
     collections::VecDeque,
     fs::File,
     sync::{atomic::AtomicBool, mpsc::Sender, Arc, Mutex},
-    thread::{self, JoinHandle},
-    time::{Duration, SystemTime},
+    thread::JoinHandle,
+    time::SystemTime,
 };
 
 use crate::types::ChannelData;
@@ -24,8 +24,6 @@ pub struct SerialState {
     pub recording_active: Arc<AtomicBool>,
     pub recording_handle: Mutex<Option<JoinHandle<()>>>,
     pub recording_file: Mutex<Option<(File, String)>>,
-    pub quality_check_running: Arc<AtomicBool>,
-    pub quality_check_handle: Mutex<Option<JoinHandle<()>>>,
     
 }
 
@@ -46,8 +44,7 @@ impl SerialState {
             recording_active: Arc::new(AtomicBool::new(false)),
             recording_handle: Mutex::new(None),
             recording_file: Mutex::new(None),
-            quality_check_running: Arc::new(AtomicBool::new(false)),
-            quality_check_handle: Mutex::new(None),
+
         };
         
         state
@@ -158,9 +155,5 @@ impl SerialState {
         signal_quality_guard.clone()
     }
     
-    // Clear the quality check buffer
-    pub fn clear_quality_buffer(&self) {
-        let mut buffer = self.quality_check_buffer.lock().unwrap();
-        buffer.clear();
-    }
+
 }

@@ -4,7 +4,10 @@ use crate::reader::{
 use crate::state::SerialState;
 use crate::types::{ChannelData, FakeDataConfig};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use image::{codecs::png::PngEncoder, ColorType, ImageBuffer, ImageEncoder, Rgb};
+use image::{ImageBuffer, Rgb, ColorType};
+
+use image::codecs::png::PngEncoder;
+use image::ImageEncoder;
 use rand::{thread_rng, Rng};
 use reqwest::blocking::Client;
 use serialport;
@@ -168,14 +171,45 @@ pub fn start_streaming(
         let app_clone = app_handle.clone();
         let handle = thread::spawn(move || {
             let mut rng = thread_rng();
+            let mut frame_count = 0;
             while running.load(Ordering::SeqCst) {
-                let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
-                    ImageBuffer::from_fn(W, H, |_x, _y| Rgb([rng.gen(), rng.gen(), rng.gen()]));
+                // Alternate between light and dark frames every 30 frames (about 1 second)
+                let is_light_frame = (frame_count / 30) % 2 == 0;
+                frame_count += 1;
+                
+                // Generate different brightness levels for testing
+                let img: ImageBuffer<Rgb<u8>, Vec<u8>> = if is_light_frame {
+                    // Light frame - values between 100 and 255
+                    ImageBuffer::from_fn(W, H, |_x, _y| {
+                        let r = rng.gen_range(100..=255);
+                        let g = rng.gen_range(100..=255);
+                        let b = rng.gen_range(100..=255);
+                        Rgb([r, g, b])
+                    })
+                } else {
+                    // Dark frame - values between 0 and 70
+                    ImageBuffer::from_fn(W, H, |_x, _y| {
+                        let r = rng.gen_range(0..=70);
+                        let g = rng.gen_range(0..=70);
+                        let b = rng.gen_range(0..=70);
+                        Rgb([r, g, b])
+                    })
+                };
                 let mut buf = Vec::new();
                 let raw = img.clone().into_raw();
                 PngEncoder::new(&mut buf)
                     .write_image(&raw, W, H, ColorType::Rgb8.into())
                     .unwrap();
+                // Analyze the image before sending
+                let total_pixels = (W * H) as u64;
+                let sum: u64 = raw.chunks(3).map(|p| (p[0] as u64 + p[1] as u64 + p[2] as u64) / 3).sum();
+                let avg = if total_pixels > 0 { sum / total_pixels } else { 0 };
+                
+                // Emit frame analysis result (true if avg >= 80, false otherwise)
+                let is_bright_enough = avg >= 80;
+                let _ = app_clone.emit("frame_analysis", Arc::new(is_bright_enough));
+                
+                // Encode and send the frame
                 let b64 = STANDARD.encode(&buf);
                 let _ = app_clone.emit("frame", Arc::new(b64));
                 std::thread::sleep(Duration::from_millis(33));
@@ -252,6 +286,31 @@ pub fn start_streaming(
                         }
                         let mut crlf = [0u8; 2];
                         let _ = reader.read_exact(&mut crlf);
+                        // Analyze image before sending it
+                        let image = match image::load_from_memory(&buf) {
+                            Ok(img) => img,
+                            Err(_) => {
+                                // If image analysis fails, just send the frame without analysis
+                                let b64 = STANDARD.encode(&buf);
+                                app_clone.emit("frame", Arc::new(b64)).unwrap();
+                                continue;
+                            }
+                        };
+
+                        // Calculate average pixel value for brightness analysis
+                        let rgb_image = image.to_rgb8();
+                        let pixels = rgb_image.pixels();
+                        let total_pixels = pixels.len() as u64;
+                        
+                        // Calculate average pixel value (across all rgb channels)
+                        let sum: u64 = pixels.map(|p| (p[0] as u64 + p[1] as u64 + p[2] as u64) / 3).sum();
+                        let avg = if total_pixels > 0 { sum / total_pixels } else { 0 };
+                        
+                        // Emit frame analysis result (true if avg >= 80, false otherwise)
+                        let is_bright_enough = avg >= 80;
+                        app_clone.emit("frame_analysis", Arc::new(is_bright_enough)).unwrap();
+                        
+                        // Encode and send the frame
                         let b64 = STANDARD.encode(&buf);
                         app_clone.emit("frame", Arc::new(b64)).unwrap();
                     }

@@ -5,18 +5,18 @@
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm mb-1">Min Value</label>
-        <input type="number" class="w-full bg-gray-800 p-2 rounded" v-model.number="settings.minValue" placeholder="-100" />
+        <input type="number" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model.number="settings.minValue" placeholder="-100" />
       </div>
       
       <div>
         <label class="block text-sm mb-1">Max Value</label>
-        <input type="number" class="w-full bg-gray-800 p-2 rounded" v-model.number="settings.maxValue" placeholder="100" />
+        <input type="number" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model.number="settings.maxValue" placeholder="100" />
       </div>
     </div>
     
     <div>
       <label class="block text-sm mb-1">Frequency (Hz)</label>
-      <input type="number" class="w-full bg-gray-800 p-2 rounded" v-model.number="settings.frequency" 
+      <input type="number" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model.number="settings.frequency" 
         placeholder="500" min="0.1" max="1000" step="0.1" />
       <div class="mt-1">
         <input type="range" class="w-full" min="0.1" max="1000" step="0.1" v-model.number="settings.frequency" />
@@ -26,7 +26,7 @@
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm mb-1">Number of Channels</label>
-        <input type="number" class="w-full bg-gray-800 p-2 rounded" v-model.number="settings.channelCount" 
+        <input type="number" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model.number="settings.channelCount" 
           placeholder="8" min="1" max="8" />
       </div>
       
@@ -35,8 +35,7 @@
         <div class="relative">
           <select 
             v-model="settings.waveform"
-            class="w-full bg-gray-800 p-2 rounded appearance-none cursor-pointer pr-8 custom-select"
-            style="background-color: rgb(31, 41, 55);"
+            class="w-full bg-gray-800 p-2 rounded appearance-none cursor-pointer pr-8 custom-select border border-gray-500"
           >
             <option value="sine">Sine</option>
             <option value="square">Square</option>

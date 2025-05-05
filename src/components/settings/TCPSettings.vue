@@ -5,18 +5,18 @@
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm mb-1">Host</label>
-        <input type="text" class="w-full bg-gray-800 p-2 rounded" v-model="tcpSettings.host" placeholder="0.0.0.0" />
+        <input type="text" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model="tcpSettings.host" placeholder="0.0.0.0" />
       </div>
       
       <div>
         <label class="block text-sm mb-1">Port</label>
-        <input type="number" class="w-full bg-gray-800 p-2 rounded" v-model.number="tcpSettings.port" placeholder="8234" />
+        <input type="number" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model.number="tcpSettings.port" placeholder="8234" />
       </div>
     </div>
     
     <div class="mb-4">
       <label class="block text-sm mb-1">Protocol</label>
-      <select class="w-full bg-gray-800 p-2 rounded" v-model="tcpSettings.protocol">
+      <select class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model="tcpSettings.protocol">
         <option value="tcp">TCP</option>
         <option value="udp">UDP</option>
       </select>

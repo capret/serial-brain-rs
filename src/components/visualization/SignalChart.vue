@@ -66,7 +66,7 @@ import {
 } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { WebglPlot, WebglLine, ColorRGBA } from 'webgl-plot';
-import { chartDataBuffer } from '../../store/appState';
+import { chartDataBuffer, windowSize } from '../../store/appState';
 import { channelColors, channelVisibility } from './channelSettings';
 
 const emit = defineEmits<{
@@ -94,7 +94,7 @@ const Y_AXIS_DIVISIONS = 8;
 const X_AXIS_DIVISIONS = 10;
 const CROSSHAIR_THROTTLE_MS = 10;
 
-const windowSize = ref<number>(1000);
+// Using windowSize from appState instead of local ref
 const dataBuffer = chartDataBuffer;
 
 const yMin = ref<number>(-1);
