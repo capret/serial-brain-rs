@@ -19,6 +19,7 @@
     "os:default",
     "fs:default",
     "fs:allow-app-meta",
+    "fs:allow-app-read",
     "dialog:default",
     {
       "identifier": "fs:scope",

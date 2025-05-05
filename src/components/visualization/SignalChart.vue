@@ -22,7 +22,7 @@
       </div>
     </div>
   </div>
-  <div class="rounded-md shadow-sm bg-gray-900 p-2 my-3 pb-0">
+  <div class="rounded-md shadow-sm bg-gray-900 p-6 my-3" :class="{ 'pb-0': isSmallScreen }">
     <div
       ref="plotGrid"
       class="grid"
@@ -68,6 +68,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { WebglPlot, WebglLine, ColorRGBA } from 'webgl-plot';
 import { chartDataBuffer, windowSize } from '../../store/appState';
 import { channelColors, channelVisibility } from './channelSettings';
+import { platform } from '@tauri-apps/plugin-os';
 
 const emit = defineEmits<{
   (event: 'crosshair-move', payload: { x: number; y: number; dataValues: number[] }): void;
@@ -90,14 +91,13 @@ function recalcPlotHeight(): void {
    ==================================================== */
 const Dpr = window.devicePixelRatio || 1;
 const windowWidth = ref(window.innerWidth);
-const isSmallScreen = ref(windowWidth.value < 800);
+const isSmallScreen = ref(platform() === "android");
 
 // Update window width on resize
 function updateWindowWidth() {
   windowWidth.value = window.innerWidth;
-  isSmallScreen.value = windowWidth.value < 800;
 }
-const MAX_BUFFER_SIZE = 10000;
+const MAX_BUFFER_SIZE = isSmallScreen.value ? 5000 : 20000;
 const Y_AXIS_DIVISIONS = 8;
 const X_AXIS_DIVISIONS = 10;
 const CROSSHAIR_THROTTLE_MS = 10;
@@ -214,7 +214,23 @@ function updateMinMax() {
   const visible = dataBuffer.slice(-windowSize.value);
   let min = Infinity,
     max = -Infinity;
-  visible.forEach(row => row.forEach(v => ((min = Math.min(min, v)), (max = Math.max(max, v)))));
+    
+  // Only calculate min/max for visible channels
+  visible.forEach(row => {
+    for (let i = 0; i < row.length; i++) {
+      if (channelVisibility[i]) { // Only consider visible channels
+        min = Math.min(min, row[i]);
+        max = Math.max(max, row[i]);
+      }
+    }
+  });
+  
+  // If no visible channels, use default range
+  if (min === Infinity || max === -Infinity) {
+    min = -1;
+    max = 1;
+  }
+  
   const range = Math.max(0.001, max - min);
   const margin = range * 0.05;
   yMin.value = min - margin;
