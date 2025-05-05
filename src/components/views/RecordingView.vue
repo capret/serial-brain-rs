@@ -1,6 +1,5 @@
 <template>
-  <div class="recording-view">
-    <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 mb-6">
+  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 mb-6">
     <div class="flex flex-wrap justify-between items-start mb-6">
       <div class="max-[800px]:w-full">
         <h2 class="text-3xl font-bold text-blue-400">Recording Setup</h2>
@@ -17,7 +16,6 @@
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
           </svg>
           Start Recording
-          <span v-if="connectionStatus !== 'connected'" class="text-xs bg-orange-800 text-white px-2 py-0.5 rounded ml-2">Connect signal first</span>
         </button>
         <button 
           v-else
@@ -35,24 +33,15 @@
       <div>
         <h3 class="text-lg font-semibold mb-4">Storage Location</h3>
         <div class="mt-2">
-          <div class="flex items-center justify-between mb-2">
-            <p class="text-sm">Select folder to record data</p>
-            <span class="text-xs text-gray-400">Required</span>
-          </div>
+
           <div class="flex">
             <input 
               type="text" 
               :placeholder="recordingDirectory ? recordingDirectory : 'No folder selected'" 
               v-model="recordingDirectory"
               readonly
-              class="bg-gray-700 px-3 py-2 rounded-l-md flex-grow text-gray-300" />
-            <button
-              @click="selectDirectory"
-              :disabled="isRecording"
-              class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-r-md transition-colors duration-300"
-              :class="{ 'opacity-50 cursor-not-allowed': isRecording }">
-              Browse
-            </button>
+              class="bg-gray-700 px-3 py-2 rounded-md flex-grow text-gray-300" />
+
           </div>
         </div>
       </div>
@@ -172,7 +161,7 @@
           :key="file.path" 
           :class="[
             'bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-all duration-300 transform hover:scale-[1.02] flex flex-col relative',
-            {'recording-pulse': isActiveRecordingFile(file)}
+            {'recording-pulse': isFileActiveRecording(file)}
           ]"
           @click="logRecordingStatus(file)">
           
@@ -181,7 +170,7 @@
             <h4 class="font-medium truncate flex-grow" :title="file.name">{{ file.name }}</h4>
             <div class="flex items-center gap-2 ml-2 flex-shrink-0">
               <!-- Use a simpler badge + border approach -->
-              <span v-if="isActiveRecordingFile(file)" 
+              <span v-if="isFileActiveRecording(file)" 
                 class="text-xs px-2 py-1 rounded bg-red-600 text-white font-bold shadow-md shadow-red-500/50">
                 RECORDING
               </span>
@@ -250,13 +239,11 @@
       </transition-group>
     </div>
   </div>
-  </div>
 </template>
 
-<script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { exists, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
 import * as path from '@tauri-apps/api/path';
 import { recordingDirectory, connectionStatus } from '../../store/appState';
 import { 
@@ -264,7 +251,7 @@ import {
   setupDirectoryWatcher,
   setupRecordingFileWatcher,
   findAndUpdateActiveRecordingFile,
-  isActiveRecordingFile as checkActiveFile,
+  isActiveRecordingFile,
   syncFile,
   uploadFile,
   deleteFile,
@@ -273,21 +260,22 @@ import {
   formatTime,
 } from '../../utils/fileManager';
 
-// Note: We'll use the native file structure without trying to import the interface
+// Import the types from fileManager
+import type { RecordingFile, UnsubscribeFn } from '../../utils/fileManager';
 
 // State variables
-const selectedFormat = ref('csv'); // Default format
-const autoStart = ref(false);
-const maxDuration = ref(30); // Default 30 minutes
-const isRecording = ref(false);
-const recordingFilename = ref('');
+const selectedFormat = ref<string>('csv'); // Default format
+const autoStart = ref<boolean>(false);
+const maxDuration = ref<number>(30); // Default 30 minutes
+const isRecording = ref<boolean>(false);
+const recordingFilename = ref<string>('');
 // Keep track of files in the selected folder
-const folderFiles = ref([]);
-const isLoading = ref(false);
-const errorMessage = ref('');
-const activeRecordingPath = ref('');
-const watchUnsubscribe = ref(null);
-const fileWatchUnsubscribe = ref(null);
+const folderFiles = ref<RecordingFile[]>([]);
+const isLoading = ref<boolean>(false);
+const errorMessage = ref<string>('');
+const activeRecordingPath = ref<string>('');
+const watchUnsubscribe = ref<UnsubscribeFn | null>(null);
+const fileWatchUnsubscribe = ref<UnsubscribeFn | null>(null);
 
 // Initialize recording directory and check recording status when component mounts
 onMounted(async () => {
@@ -295,7 +283,7 @@ onMounted(async () => {
     // First, set up the recordings directory in AppData
     await selectDirectory();
     const status = await invoke('get_recording_status');
-    isRecording.value = status;
+    isRecording.value = status as boolean;
     
     // If recording is active, find and update the active recording file
     if (isRecording.value) {
@@ -330,21 +318,17 @@ onUnmounted(async () => {
 // We're using checkActiveFile from the fileManager utility directly
 
 // Use AppData directory for recordings
-async function selectDirectory() {
+async function selectDirectory(): Promise<void> {
   const home = await path.documentDir();
   // await mkdir(home, { baseDir: BaseDirectory.Home });
   recordingDirectory.value = home;
   console.log(home);
-  
-  // Load files from the directory
   await loadFiles();
-  
-  // Set up a watcher for the directory
   await initDirectoryWatcher();
 }
 
 // Refresh directory files
-async function loadFiles() {
+async function loadFiles(): Promise<void> {
   if (!recordingDirectory.value) return;
   errorMessage.value = ''; // Clear any previous errors
   
@@ -371,23 +355,15 @@ async function loadFiles() {
   }
 }
 
-// We're using the formatDate and formatTime functions directly from fileManager
-
-// Calculate and format recording duration for a file
-function calculateDuration(file) {
-  // We use the creation time and modification time as start and end points
+function calculateDuration(file: RecordingFile): string | null {
   const nameMatch = file.name.match(/serial_recording_(\d+)/);
   if (!nameMatch) return null;
-  
-  // First try to use the file.duration if it exists (set by the backend)
   if (file.duration) return file.duration;
-  
-  // Otherwise calculate from file stats
+
   const fileCreationTimeMs = parseInt(nameMatch[1]);
   if (!fileCreationTimeMs) return null;
-  
-  // If this is the active recording file, use current time as end time
-  const isActiveFile = isActiveRecordingFile(file);
+
+  const isActiveFile = isFileActiveRecording(file);
   
   let endTimeMs = 0;
   if (isActiveFile) {
@@ -409,7 +385,7 @@ function calculateDuration(file) {
 }
 
 // Format duration in milliseconds to a readable string
-function formatDurationTime(ms) {
+function formatDurationTime(ms: number): string | null {
   if (!ms || ms <= 0) return null;
   
   // Convert to seconds
@@ -431,7 +407,7 @@ function formatDurationTime(ms) {
 }
 
 // Set up a watcher for the directory to detect file additions/removals
-async function initDirectoryWatcher() {
+async function initDirectoryWatcher(): Promise<void> {
   await setupDirectoryWatcher(
     recordingDirectory.value,
     async () => await loadFiles(),
@@ -440,8 +416,7 @@ async function initDirectoryWatcher() {
   );
 }
 
-// Find the active recording file and update its information
-async function findRecordingFile() {
+async function findRecordingFile(): Promise<void> {
   await findAndUpdateActiveRecordingFile(
     isRecording.value,
     recordingDirectory.value,
@@ -455,56 +430,50 @@ async function findRecordingFile() {
 }
 
 // Helper function to check if a file is the active recording file
-function isActiveRecordingFile(file) {
+function isFileActiveRecording(file: RecordingFile): boolean {
   // Additional debugging
   console.log('Checking if file is active recording:', file.name);
   console.log('Current recording filename:', recordingFilename.value); 
-  console.log('Is recording:', isRecording.value);
-  
-  // Simple but most reliable check since we get filename directly from backend
-  return isRecording.value && file.name === recordingFilename.value;
+  console.log('Is recording:', isRecording.value);  
+  return isActiveRecordingFile(file.name, recordingFilename.value, isRecording.value);
 }
 
 // Debug function to check the recording status
-function logRecordingStatus(file) {
+function logRecordingStatus(file: RecordingFile): void {
   console.log('File name:', file.name);
   console.log('Recording filename:', recordingFilename.value);
   console.log('Is Recording:', isRecording.value);
   console.log('Match?', file.name === recordingFilename.value);
-  console.log('Should show green:', isActiveRecordingFile(file));
+  console.log('Should show green:', isFileActiveRecording(file));
 }
 
 // Handle file operations with extracted utility functions
-async function handleDeleteFile(filePath) {
+async function handleDeleteFile(filePath: string) {
   try {
     await deleteFile(filePath, loadFiles);
   } catch (error) {
-    alert(error.message);
+    alert(error instanceof Error ? error.message : String(error));
   }
 }
 
-async function handleSyncFile(filePath) {
+async function handleSyncFile(filePath: string) {
   try {
     await syncFile(filePath);
   } catch (error) {
-    alert(error.message);
+    alert(error instanceof Error ? error.message : String(error));
   }
 }
 
-async function handleUploadFile(filePath) {
+async function handleUploadFile(filePath: string) {
   try {
     await uploadFile(filePath);
   } catch (error) {
-    alert(error.message);
+    alert(error instanceof Error ? error.message : String(error));
   }
 }
 
 
-
-// No longer needed - replaced by findAndUpdateActiveRecordingFile
-
-// Start recording using the selected settings
-async function startRecording() {
+async function startRecording(): Promise<void> {
   if (!recordingDirectory.value) {
     alert('Please select a directory to save recordings');
     return;
@@ -513,26 +482,17 @@ async function startRecording() {
   try {
     console.log('Starting recording with format:', selectedFormat.value);
     console.log('Directory:', recordingDirectory.value);
-    
-    // Start recording through Tauri command and get the actual filename
     const actualFilename = await invoke('start_recording', {
       format: selectedFormat.value,
       directory: recordingDirectory.value,
       maxDurationMinutes: maxDuration.value,
       autoStart: autoStart.value
-    });
+    }) as string;
     
     console.log('Received filename from backend:', actualFilename);
-    
-    // Store the actual filename returned from the backend
     recordingFilename.value = actualFilename;
     console.log('Set recordingFilename.value to:', recordingFilename.value);
-    
-    // Log the recording filename in the global window object for debugging
-    // @ts-ignore
-    window.recordingFilename = recordingFilename.value;
-    
-    // Start Android foreground service to keep app alive in background
+
     try {
       await invoke('plugin:android-forward-service|start_forward_service');
       console.log('Android foreground service started');
@@ -610,7 +570,7 @@ async function startRecording() {
 
 
 
-async function stopRecording() {
+async function stopRecording(): Promise<void> {
   try {
     await invoke('stop_recording');
     

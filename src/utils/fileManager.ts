@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { stat, readDir, watchImmediate } from '@tauri-apps/plugin-fs';
-import { platform } from '@tauri-apps/plugin-os';
+
 
 // File interface
 export interface RecordingFile {
@@ -58,6 +58,20 @@ export function formatDuration(milliseconds: number): string {
   return remainingMinutes > 0 ?
     `${hours}h ${remainingMinutes}m` :
     `${hours}h`;
+}
+
+/**
+ * Calculate and update the duration for a recording file
+ */
+export function updateFileDuration(file: RecordingFile, birthtime: Date | null, modifiedTime: Date | null): RecordingFile {
+  if (birthtime instanceof Date && modifiedTime instanceof Date) {
+    const durationMs = modifiedTime.getTime() - birthtime.getTime();
+    if (durationMs > 0) {
+      file.duration = formatDuration(durationMs);
+      console.log('Updated duration:', file.duration);
+    }
+  }
+  return file;
 }
 
 /**
@@ -148,30 +162,21 @@ export async function loadDirectoryFiles(
             path: `${directoryPath}/${entry.name}`,
             size: formatFileSize(fileStat.size),
             modified: modifiedDate instanceof Date ? modifiedDate.toLocaleString() : 'Unknown',
-            duration: duration,
+            duration,
             rawSize: fileStat.size,
             dateObject: modifiedDate,
-            // Add unique key for Vue transitions
-            key: entry.name
+            key: entry.name,
           };
-        } catch (error) {
-          console.error(`Error getting stats for ${entry.name}:`, error);
-          return {
-            name: entry.name,
-            path: `${directoryPath}/${entry.name}`,
-            size: 'Unknown',
-            modified: 'Unknown',
-            rawSize: 0,
-            dateObject: null,
-            key: entry.name
-          };
+        } catch (e) {
+          console.error(`Error getting stats for ${entry.name}:`, e);
+          return null;
         }
       })
     );
     
-    // Sort files by modified date (newest first)
-    return filesWithStats.sort((a, b) => {
-      // Use Date objects for comparison if available
+    // Filter out failed entries and sort by date
+    const validFiles = filesWithStats.filter(file => file !== null) as RecordingFile[];
+    return validFiles.sort((a, b) => {
       if (a.dateObject instanceof Date && b.dateObject instanceof Date) {
         return b.dateObject.getTime() - a.dateObject.getTime();
       }
@@ -379,13 +384,22 @@ export async function findAndUpdateActiveRecordingFile(
               existingFile.dateObject = fileModifiedDate;
             }
             
+            // Calculate and update duration
+            if (fileStat.birthtime instanceof Date && fileModifiedDate instanceof Date) {
+              const durationMs = fileModifiedDate.getTime() - fileStat.birthtime.getTime();
+              if (durationMs > 0) {
+                existingFile.duration = formatDuration(durationMs);
+                console.log('Updated duration:', existingFile.duration);
+              }
+            }
+            
             // Create a new array reference to trigger reactive updates
             updateFiles([...folderFiles]);
           } else {
             // If file is not in the list yet, add just this file without a full reload
             // console.log('Adding new file to list:', entry.name);
             const fileModifiedDate = fileStat.mtime || fileStat.birthtime;
-            const newFile = {
+            const newFile: RecordingFile = {
               name: entry.name,
               path: actualPath,
               size: formatFileSize(fileStat.size),
@@ -394,6 +408,14 @@ export async function findAndUpdateActiveRecordingFile(
               dateObject: fileModifiedDate,
               key: entry.name
             };
+            
+            // Add duration if available
+            if (fileStat.birthtime instanceof Date && fileModifiedDate instanceof Date) {
+              const durationMs = fileModifiedDate.getTime() - fileStat.birthtime.getTime();
+              if (durationMs > 0) {
+                newFile.duration = formatDuration(durationMs);
+              }
+            }
             
             // Add to the front of the array (newest file)
             folderFiles.unshift(newFile);
@@ -402,58 +424,61 @@ export async function findAndUpdateActiveRecordingFile(
           
           // Update the actual recording filename to match what's on disk
           setRecordingFilename(entry.name);
-          break;
-        } catch (error) {
-          console.error(`Error getting stats for ${entry.name}:`, error);
+          return; // Found and updated the exact file
+        } catch (e) {
+          console.error('Error updating file info:', e);
         }
-      } else if (entry.name.includes(timestampPrefix) && 
-                 entry.name.toLowerCase().endsWith(`.${selectedFormat}`)) {
-        // console.log('MATCH FOUND:', entry.name);
+      }
+      
+      // For more lenient matching when exact filenames might be out of sync
+      if (!matchFound && timestampPrefix && entry.name.includes(timestampPrefix)) {
+        console.log('TIMESTAMP PREFIX MATCH FOUND:', entry.name);
         matchFound = true;
         
-        // Found the actual recording file
+        // Set the recording path for this file
         const actualPath = `${recordingDirectory}/${entry.name}`;
         setActiveRecordingPath(actualPath);
         
-        // Update just this file's size without refreshing the entire list
+        // Update the actual filename in the state
+        setRecordingFilename(entry.name);
+        
+        // Update just this file's info
         try {
           const fileStat = await stat(actualPath);
-          // console.log('Got file stats, size:', fileStat.size);
           
-          // Find and update the file in the folderFiles array
-          const fileIndex = folderFiles.findIndex(file => file.path === actualPath);
-          // console.log('File index in folder list:', fileIndex);
+          // Look for the file in the current list
+          const fileIndex = folderFiles.findIndex(f => f.path === actualPath);
           
           if (fileIndex >= 0) {
-            // Get the modified date from FileInfo
+            // Update existing file
+            const existingFile = folderFiles[fileIndex];
             const fileModifiedDate = fileStat.mtime || fileStat.birthtime;
             
-            // Only update properties if they've changed to avoid Vue re-renders
-            const existingFile = folderFiles[fileIndex];
-            
-            // Update size if changed
+            // Only update changed properties
             if (existingFile.rawSize !== fileStat.size) {
-              // console.log('Updating file size from', existingFile.rawSize, 'to', fileStat.size);
               existingFile.size = formatFileSize(fileStat.size);
               existingFile.rawSize = fileStat.size;
             }
             
-            // Update date if changed
-            if (fileModifiedDate instanceof Date && 
-                (!(existingFile.dateObject instanceof Date) || 
-                 existingFile.dateObject.getTime() !== fileModifiedDate.getTime())) {
-              // console.log('Updating file date');
+            if (fileModifiedDate instanceof Date) {
               existingFile.modified = fileModifiedDate.toLocaleString();
               existingFile.dateObject = fileModifiedDate;
+              
+              // Calculate and update duration
+              if (fileStat.birthtime instanceof Date) {
+                const durationMs = fileModifiedDate.getTime() - fileStat.birthtime.getTime();
+                if (durationMs > 0) {
+                  existingFile.duration = formatDuration(durationMs);
+                }
+              }
             }
             
             // Create a new array reference to trigger reactive updates
             updateFiles([...folderFiles]);
           } else {
-            // If file is not in the list yet, add just this file without a full reload
-            // console.log('Adding new file to list:', entry.name);
+            // Add new file to list
             const fileModifiedDate = fileStat.mtime || fileStat.birthtime;
-            const newFile = {
+            const newFile: RecordingFile = {
               name: entry.name,
               path: actualPath,
               size: formatFileSize(fileStat.size),
@@ -463,17 +488,46 @@ export async function findAndUpdateActiveRecordingFile(
               key: entry.name
             };
             
-            // Insert at the beginning (newest files first)
-            const updatedFiles = [newFile, ...folderFiles];
-            updateFiles(updatedFiles);
+            // Add duration if available
+            if (fileStat.birthtime instanceof Date && fileModifiedDate instanceof Date) {
+              const durationMs = fileModifiedDate.getTime() - fileStat.birthtime.getTime();
+              if (durationMs > 0) {
+                newFile.duration = formatDuration(durationMs);
+              }
+            }
+            
+            // Add to the front of the array (newest file)
+            folderFiles.unshift(newFile);
+            updateFiles([...folderFiles]);
           }
           
-          // Update the actual recording filename to match what's on disk
-          setRecordingFilename(entry.name);
-          break;
-        } catch (error) {
-          console.error(`Error getting stats for ${entry.name}:`, error);
+          return; // Found and updated a matching file
+        } catch (e) {
+          console.error('Error updating file info:', e);
         }
+      }
+    }
+    
+    // If we made it here without finding a match, and we're recording, create a placeholder
+    if (isRecording && recordingFilename && !matchFound) {
+      console.log('Creating placeholder for unseen recording file:', recordingFilename);
+      
+      // Check if we already have a placeholder
+      const existingIndex = folderFiles.findIndex(f => f.name === recordingFilename);
+      if (existingIndex < 0) {
+        // Create a placeholder entry for the file until it's visible in the filesystem
+        folderFiles.unshift({
+          name: recordingFilename,
+          path: `${recordingDirectory}/${recordingFilename}`,
+          size: '0 B',
+          modified: new Date().toLocaleString(),
+          duration: '0s',
+          rawSize: 0,
+          dateObject: new Date(),
+          key: recordingFilename
+        });
+        
+        updateFiles([...folderFiles]);
       }
     }
   } catch (error) {
@@ -606,6 +660,14 @@ export function updateFilesInPlace(
           ...updatedFiles[i],
           dateObject: newFile.dateObject,
           modified: newFile.modified
+        };
+      }
+      
+      // Update duration if available
+      if (newFile.duration && (!existingFile.duration || existingFile.duration !== newFile.duration)) {
+        updatedFiles[i] = {
+          ...updatedFiles[i],
+          duration: newFile.duration
         };
       }
       

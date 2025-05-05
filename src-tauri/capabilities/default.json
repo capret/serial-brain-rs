@@ -20,6 +20,7 @@
     "fs:default",
     "fs:allow-app-meta",
     "fs:allow-app-read",
+    "fs:allow-app-write",
     "dialog:default",
     {
       "identifier": "fs:scope",
