@@ -9,14 +9,15 @@
         <button 
           v-if="!isRecording"
           @click="startRecording"
-          :disabled="!recordingDirectory"
+          :disabled="!recordingDirectory || connectionStatus !== 'connected'"
           class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md font-semibold flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg max-[800px]:w-full"
-          :class="{ 'opacity-50 cursor-not-allowed': !recordingDirectory }">
+          :class="{ 'opacity-50 cursor-not-allowed': !recordingDirectory || connectionStatus !== 'connected' }">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
           </svg>
           Start Recording
+          <span v-if="connectionStatus !== 'connected'" class="text-xs bg-orange-800 text-white px-2 py-0.5 rounded ml-2">Connect signal first</span>
         </button>
         <button 
           v-else
@@ -127,10 +128,10 @@
         <p class="mt-4 text-sm">Saving data to: <span class="text-blue-300">{{ recordingFilename }}</span></p>
       </div>
     </div>
-  </div>
-  
-  <!-- Recorded Files Section -->
-  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
+    
+    <div class="border-t border-gray-700 my-8"></div>
+    
+    <!-- record folder section -->
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-3xl font-bold text-blue-400">Recorded Files</h2>
       <button 
@@ -197,25 +198,33 @@
           </div>
           
           <!-- File details -->
-          <div class="space-y-3 flex-grow text-sm">
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-gray-400">Size:</span>
-              <span class="text-white">{{ file.size }}</span>
+          <div class="space-y-2 flex-grow text-sm">
+            <div class="flex gap-4">
+              <div class="flex items-center gap-2 w-1/2">
+                <span class="text-sm text-gray-400">Size:</span>
+                <span class="text-white">{{ file.size }}</span>
+              </div>
+              <div class="flex items-center gap-2 w-1/2">
+                <span class="text-sm text-gray-400">Date:</span>
+                <span class="text-white">{{ formatDate(file) }}</span>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-gray-400">Date:</span>
-              <span class="text-white">{{ formatDate(file) }}</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-gray-400">Time:</span>
-              <span class="text-white">{{ formatTime(file) }}</span>
+            <div class="flex gap-4">
+              <div class="flex items-center gap-2 w-1/2">
+                <span class="text-sm text-gray-400">Time:</span>
+                <span class="text-white">{{ formatTime(file) }}</span>
+              </div>
+              <div v-if="calculateDuration(file)" class="flex items-center gap-2 w-1/2">
+                <span class="text-sm text-gray-400">Duration:</span>
+                <span class="text-white font-medium">{{ calculateDuration(file) }}</span>
+              </div>
             </div>
           </div>
           
           <!-- Actions footer -->
           <div class="flex gap-2 mt-4 justify-between">
             <button 
-              @click="handleOpenFile(file.path)"
+              @click="handleSyncFile(file.path)"
               class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -223,11 +232,11 @@
                 <polyline points="15 3 21 3 21 9"></polyline>
                 <line x1="10" y1="14" x2="21" y2="3"></line>
               </svg>
-              Open
+              Sync
             </button>
             <button 
               @click="handleUploadFile(file.path)"
-              class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors flex-grow justify-center">
+              class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors flex-grow justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -249,14 +258,14 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { exists, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
 import * as path from '@tauri-apps/api/path';
-import { recordingDirectory } from '../../store/appState';
+import { recordingDirectory, connectionStatus } from '../../store/appState';
 import { 
   loadDirectoryFiles,
   setupDirectoryWatcher,
   setupRecordingFileWatcher,
   findAndUpdateActiveRecordingFile,
   isActiveRecordingFile as checkActiveFile,
-  openFileLocation,
+  syncFile,
   uploadFile,
   deleteFile,
   updateFilesInPlace,
@@ -364,6 +373,63 @@ async function loadFiles() {
 
 // We're using the formatDate and formatTime functions directly from fileManager
 
+// Calculate and format recording duration for a file
+function calculateDuration(file) {
+  // We use the creation time and modification time as start and end points
+  const nameMatch = file.name.match(/serial_recording_(\d+)/);
+  if (!nameMatch) return null;
+  
+  // First try to use the file.duration if it exists (set by the backend)
+  if (file.duration) return file.duration;
+  
+  // Otherwise calculate from file stats
+  const fileCreationTimeMs = parseInt(nameMatch[1]);
+  if (!fileCreationTimeMs) return null;
+  
+  // If this is the active recording file, use current time as end time
+  const isActiveFile = isActiveRecordingFile(file);
+  
+  let endTimeMs = 0;
+  if (isActiveFile) {
+    // For active recordings, use the current time
+    endTimeMs = Date.now();
+  } else if (file.dateObject) {
+    // For completed recordings, use the last modified date
+    endTimeMs = file.dateObject.getTime();
+  } else {
+    return null;
+  }
+  
+  // Calculate duration in milliseconds
+  const durationMs = endTimeMs - fileCreationTimeMs;
+  if (durationMs <= 0) return null;
+  
+  // Format the duration
+  return formatDurationTime(durationMs);
+}
+
+// Format duration in milliseconds to a readable string
+function formatDurationTime(ms) {
+  if (!ms || ms <= 0) return null;
+  
+  // Convert to seconds
+  const totalSeconds = Math.floor(ms / 1000);
+  
+  // Calculate hours, minutes, seconds
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  
+  // Format the output
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
 // Set up a watcher for the directory to detect file additions/removals
 async function initDirectoryWatcher() {
   await setupDirectoryWatcher(
@@ -417,9 +483,9 @@ async function handleDeleteFile(filePath) {
   }
 }
 
-async function handleOpenFile(filePath) {
+async function handleSyncFile(filePath) {
   try {
-    await openFileLocation(filePath);
+    await syncFile(filePath);
   } catch (error) {
     alert(error.message);
   }

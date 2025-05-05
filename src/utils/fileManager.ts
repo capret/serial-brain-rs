@@ -8,6 +8,7 @@ export interface RecordingFile {
   path: string;
   size: string;
   modified: string;
+  duration?: string; // Optional duration field
   rawSize: number;
   dateObject: Date | null;
   key: string;
@@ -17,14 +18,46 @@ export interface RecordingFile {
 export type UnsubscribeFn = () => void;
 
 /**
- * Format file size from bytes to human-readable string
+ * Format a file size in bytes to a human-readable string
  */
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 Bytes';
+
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+/**
+ * Format duration in milliseconds to a human-readable string
+ */
+export function formatDuration(milliseconds: number): string {
+  if (!milliseconds || milliseconds <= 0) return '0s';
+  
+  // Convert to seconds
+  const seconds = Math.floor(milliseconds / 1000);
+  
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  
+  if (minutes < 60) {
+    return remainingSeconds > 0 ? 
+      `${minutes}m ${remainingSeconds}s` : 
+      `${minutes}m`;
+  }
+  
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  
+  return remainingMinutes > 0 ?
+    `${hours}h ${remainingMinutes}m` :
+    `${hours}h`;
 }
 
 /**
@@ -101,11 +134,21 @@ export async function loadDirectoryFiles(
           // Get the modified date from FileInfo
           const modifiedDate = fileStat.mtime || fileStat.birthtime;
           
+          // Calculate duration if both mtime and birthtime are available
+          let duration = undefined;
+          if (fileStat.mtime instanceof Date && fileStat.birthtime instanceof Date) {
+            const durationMs = fileStat.mtime.getTime() - fileStat.birthtime.getTime();
+            if (durationMs > 0) {
+              duration = formatDuration(durationMs);
+            }
+          }
+          
           return {
             name: entry.name,
             path: `${directoryPath}/${entry.name}`,
             size: formatFileSize(fileStat.size),
             modified: modifiedDate instanceof Date ? modifiedDate.toLocaleString() : 'Unknown',
+            duration: duration,
             rawSize: fileStat.size,
             dateObject: modifiedDate,
             // Add unique key for Vue transitions
@@ -441,16 +484,16 @@ export async function findAndUpdateActiveRecordingFile(
 /**
  * Open file in file explorer or viewer
  */
-export async function openFileLocation(filePath: string): Promise<void> {
+export async function syncFile(filePath: string): Promise<void> {
   try {
     // On desktop platforms, show the file in folder
-    if (platform() !== 'android' && platform() !== 'ios') {
-      await invoke('plugin:shell|open', { path: filePath });
-    } else {
+    // if (platform() !== 'android' && platform() !== 'ios') {
+    //   await invoke('plugin:shell|open', { path: filePath });
+    // } else {
       // On mobile, we might need a different approach
       // Possibly using a Tauri plugin or a mobile-specific way to share files
-      alert('Opening files directly not supported on this platform yet');
-    }
+    alert('Opening files directly not supported on this platform yet');
+    // }
   } catch (error) {
     console.error('Error opening file location:', error);
     throw new Error(`Unable to open file: ${error}`);

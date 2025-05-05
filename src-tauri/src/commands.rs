@@ -173,13 +173,10 @@ pub fn start_streaming(
             let mut rng = thread_rng();
             let mut frame_count = 0;
             while running.load(Ordering::SeqCst) {
-                // Alternate between light and dark frames every 30 frames (about 1 second)
                 let is_light_frame = (frame_count / 30) % 2 == 0;
                 frame_count += 1;
                 
-                // Generate different brightness levels for testing
                 let img: ImageBuffer<Rgb<u8>, Vec<u8>> = if is_light_frame {
-                    // Light frame - values between 100 and 255
                     ImageBuffer::from_fn(W, H, |_x, _y| {
                         let r = rng.gen_range(100..=255);
                         let g = rng.gen_range(100..=255);
@@ -187,7 +184,6 @@ pub fn start_streaming(
                         Rgb([r, g, b])
                     })
                 } else {
-                    // Dark frame - values between 0 and 70
                     ImageBuffer::from_fn(W, H, |_x, _y| {
                         let r = rng.gen_range(0..=70);
                         let g = rng.gen_range(0..=70);
@@ -200,16 +196,13 @@ pub fn start_streaming(
                 PngEncoder::new(&mut buf)
                     .write_image(&raw, W, H, ColorType::Rgb8.into())
                     .unwrap();
-                // Analyze the image before sending
                 let total_pixels = (W * H) as u64;
                 let sum: u64 = raw.chunks(3).map(|p| (p[0] as u64 + p[1] as u64 + p[2] as u64) / 3).sum();
                 let avg = if total_pixels > 0 { sum / total_pixels } else { 0 };
-                
-                // Emit frame analysis result (true if avg >= 80, false otherwise)
+
                 let is_bright_enough = avg >= 80;
                 let _ = app_clone.emit("frame_analysis", Arc::new(is_bright_enough));
-                
-                // Encode and send the frame
+
                 let b64 = STANDARD.encode(&buf);
                 let _ = app_clone.emit("frame", Arc::new(b64));
                 std::thread::sleep(Duration::from_millis(33));
