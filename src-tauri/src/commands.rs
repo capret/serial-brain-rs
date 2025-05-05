@@ -342,7 +342,7 @@ pub fn start_recording(
     max_duration_minutes: u32,
     _auto_start: bool,
     state: State<Arc<SerialState>>,
-) -> Result<bool, String> {
+) -> Result<String, String> {
     let mut path = PathBuf::from(&directory);
     
     // Create a timestamped filename
@@ -358,7 +358,8 @@ pub fn start_recording(
         _ => return Err("Invalid format specified".to_string()),
     };
     
-    path.push(filename);
+    // Clone the filename before pushing to path to avoid ownership issues
+    path.push(filename.clone());
     
     // Set up the file
     let file = OpenOptions::new()
@@ -538,7 +539,8 @@ pub fn start_recording(
         *state.recording_handle.lock().unwrap() = Some(handle);
     }
     
-    Ok(true)
+    // Return the actual filename that was created
+    Ok(filename)
 }
 
 #[tauri::command]

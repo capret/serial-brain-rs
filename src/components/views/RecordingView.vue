@@ -134,7 +134,7 @@
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-3xl font-bold text-blue-400">Recorded Files</h2>
       <button 
-        @click="loadDirectoryFiles"
+        @click="loadFiles"
         class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-sm flex items-center gap-2 transition-colors">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -169,19 +169,23 @@
         <div 
           v-for="file in folderFiles" 
           :key="file.path" 
-          class="bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-all duration-300 transform hover:scale-[1.02] flex flex-col"
-          :class="{ 'ring-2 ring-green-500 ring-opacity-75 shadow-lg shadow-green-500/30 recording-pulse': isActiveRecordingFile(file.name) }">
+          :class="[
+            'bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-all duration-300 transform hover:scale-[1.02] flex flex-col relative',
+            {'recording-pulse': isActiveRecordingFile(file)}
+          ]"
+          @click="logRecordingStatus(file)">
           
           <!-- File card header with name and actions -->
           <div class="flex justify-between items-start mb-3">
             <h4 class="font-medium truncate flex-grow" :title="file.name">{{ file.name }}</h4>
             <div class="flex items-center gap-2 ml-2 flex-shrink-0">
-              <span v-if="isActiveRecordingFile(file.name)" 
-                class="text-xs px-2 py-1 rounded bg-green-600 text-white font-medium">
-                Recording
+              <!-- Use a simpler badge + border approach -->
+              <span v-if="isActiveRecordingFile(file)" 
+                class="text-xs px-2 py-1 rounded bg-red-600 text-white font-bold shadow-md shadow-red-500/50">
+                RECORDING
               </span>
               <button 
-                @click="deleteFile(file.path)" 
+                @click="handleDeleteFile(file.path)" 
                 class="text-xs p-1 rounded bg-gray-600 hover:bg-gray-500 text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7"/>
@@ -211,7 +215,7 @@
           <!-- Actions footer -->
           <div class="flex gap-2 mt-4 justify-between">
             <button 
-              @click="openFileLocation(file.path)"
+              @click="handleOpenFile(file.path)"
               class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -222,7 +226,7 @@
               Open
             </button>
             <button 
-              @click="uploadFile(file.path)"
+              @click="handleUploadFile(file.path)"
               class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors flex-grow justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -243,10 +247,24 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { exists, mkdir, stat, readDir, watchImmediate, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
 import * as path from '@tauri-apps/api/path';
-import { platform } from '@tauri-apps/plugin-os';
 import { recordingDirectory } from '../../store/appState';
+import { 
+  loadDirectoryFiles,
+  setupDirectoryWatcher,
+  setupRecordingFileWatcher,
+  findAndUpdateActiveRecordingFile,
+  isActiveRecordingFile as checkActiveFile,
+  openFileLocation,
+  uploadFile,
+  deleteFile,
+  updateFilesInPlace,
+  formatDate,
+  formatTime,
+} from '../../utils/fileManager';
+
+// Note: We'll use the native file structure without trying to import the interface
 
 // State variables
 const selectedFormat = ref('csv'); // Default format
@@ -254,6 +272,7 @@ const autoStart = ref(false);
 const maxDuration = ref(30); // Default 30 minutes
 const isRecording = ref(false);
 const recordingFilename = ref('');
+// Keep track of files in the selected folder
 const folderFiles = ref([]);
 const isLoading = ref(false);
 const errorMessage = ref('');
@@ -268,6 +287,11 @@ onMounted(async () => {
     await selectDirectory();
     const status = await invoke('get_recording_status');
     isRecording.value = status;
+    
+    // If recording is active, find and update the active recording file
+    if (isRecording.value) {
+      await findRecordingFile();
+    }
   } catch (error) {
     console.error('Error initializing component:', error);
   }
@@ -285,420 +309,131 @@ onUnmounted(async () => {
   
   // Clean up directory watcher if active
   if (watchUnsubscribe.value) {
-    await watchUnsubscribe.value();
+    watchUnsubscribe.value();
   }
-  
+
   // Clean up file watcher if active
   if (fileWatchUnsubscribe.value) {
-    await fileWatchUnsubscribe.value();
+    fileWatchUnsubscribe.value();
   }
 });
 
-// Check if a filename is the current active recording file
-function isActiveRecordingFile(filename) {
-  if (!isRecording.value) return false;
-  if (recordingFilename.value) {
-    const match = recordingFilename.value.match(/serial_recording_(\d+)/);
-    if (match && match[1]) {
-      const timestampPrefix = match[1].substring(0, 10);
-      return filename.includes(timestampPrefix);
-    }
-  }
-  
-  return false;
-}
+// We're using checkActiveFile from the fileManager utility directly
 
 // Use AppData directory for recordings
 async function selectDirectory() {
   const home = await path.documentDir();
+  // await mkdir(home, { baseDir: BaseDirectory.Home });
   recordingDirectory.value = home;
   console.log(home);
   
-  await loadDirectoryFiles();
-  await setupDirectoryWatcher();
+  // Load files from the directory
+  await loadFiles();
+  
+  // Set up a watcher for the directory
+  await initDirectoryWatcher();
 }
 
-// Function to load files from the selected directory
-async function loadDirectoryFiles() {
+// Refresh directory files
+async function loadFiles() {
   if (!recordingDirectory.value) return;
+  errorMessage.value = ''; // Clear any previous errors
   
-  // Only show loading indicator if we have no files yet
+  // Only show loading indicator if we have no files yet to avoid flickering
   if (folderFiles.value.length === 0) {
     isLoading.value = true;
   }
-  errorMessage.value = '';
   
   try {
-    // Read all files in the directory
-    const entries = await readDir(recordingDirectory.value);
+    // Load all files from the directory
+    const files = await loadDirectoryFiles(recordingDirectory.value);
     
-    // Filter for CSV files
-    const csvEntries = entries.filter(entry => !entry.children && entry.name.toLowerCase().endsWith('.csv'));
-    
-    // Get file stats for each CSV file
-    const filesWithStats = await Promise.all(
-      csvEntries.map(async entry => {
-        try {
-          const fileStat = await stat(`${recordingDirectory.value}/${entry.name}`);
-          // Get the modified date from FileInfo
-          const modifiedDate = fileStat.mtime || fileStat.birthtime;
-          
-          return {
-            name: entry.name,
-            path: `${recordingDirectory.value}/${entry.name}`,
-            size: formatFileSize(fileStat.size),
-            modified: modifiedDate instanceof Date ? modifiedDate.toLocaleString() : 'Unknown',
-            rawSize: fileStat.size,
-            dateObject: modifiedDate,
-            // Add unique key for Vue transitions
-            key: entry.name
-          };
-        } catch (error) {
-          console.error(`Error getting stats for ${entry.name}:`, error);
-          return {
-            name: entry.name,
-            path: `${recordingDirectory.value}/${entry.name}`,
-            size: 'Unknown',
-            modified: 'Unknown',
-            rawSize: 0,
-            dateObject: null,
-            key: entry.name
-          };
-        }
-      })
+    // Use optimized update function to maintain transitions
+    updateFilesInPlace(
+      files, 
+      folderFiles.value, 
+      newFiles => folderFiles.value = newFiles, 
+      loading => isLoading.value = loading
     );
-    
-    // Sort files by modified date (newest first)
-    const sortedFiles = filesWithStats.sort((a, b) => {
-      // Use Date objects for comparison if available
-      if (a.dateObject instanceof Date && b.dateObject instanceof Date) {
-        return b.dateObject.getTime() - a.dateObject.getTime();
-      }
-      // Fall back to filename timestamp if no valid dates
-      const getTimestamp = (file) => {
-        const match = file.name.match(/serial_recording_(\d+)/);
-        return match ? parseInt(match[1]) : 0;
-      };
-      return getTimestamp(b) - getTimestamp(a);
-    });
-    
-    // Update existing files in-place to avoid flashing
-    updateFilesInPlace(sortedFiles);
   } catch (error) {
-    console.error('Error loading directory files:', error);
-    errorMessage.value = `Failed to load files: ${error}`;
-    folderFiles.value = [];
-  } finally {
+    console.error('Error loading files:', error);
+    errorMessage.value = `Error loading files: ${error}`;
     isLoading.value = false;
   }
 }
 
-// Format file size in a human-readable format
-function formatFileSize(bytes) {
-  if (bytes === 0) return '0 Bytes';
-  
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  
-  return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-// Format the date portion of a file timestamp
-function formatDate(file) {
-  // Check if file has valid date information from FileInfo
-  if (!file) return 'Unknown';
-  
-  try {
-    // Use the modified date directly from file.modified which is now formatted correctly
-    if (file.modified && file.modified.includes(',')) {
-      return file.modified.split(',')[0].trim();
-    }
-    
-    // Try getting the date from the filename as a fallback
-    const match = file.name.match(/serial_recording_(\d+)/);
-    if (match && match[1]) {
-      const timestamp = parseInt(match[1]);
-      if (!isNaN(timestamp)) {
-        return new Date(timestamp).toLocaleDateString();
-      }
-    }
-    
-    // Get today's date as fallback
-    return new Date().toLocaleDateString();
-  } catch (e) {
-    console.error('Error formatting date:', e);
-    return 'Unknown';
-  }
-}
-
-// Format the time portion of a file timestamp
-function formatTime(file) {
-  // Check if file has valid date information from FileInfo
-  if (!file) return 'Unknown';
-  
-  try {
-    // Use the modified date directly from file.modified which is now formatted correctly
-    if (file.modified && file.modified.includes(',')) {
-      return file.modified.split(',')[1]?.trim() || 'Unknown';
-    }
-    
-    // Try getting the time from the filename as a fallback
-    const match = file.name.match(/serial_recording_(\d+)/);
-    if (match && match[1]) {
-      const timestamp = parseInt(match[1]);
-      if (!isNaN(timestamp)) {
-        return new Date(timestamp).toLocaleTimeString();
-      }
-    }
-    
-    // Get current time as fallback
-    return new Date().toLocaleTimeString();
-  } catch (e) {
-    console.error('Error formatting time:', e);
-    return 'Unknown';
-  }
-}
+// We're using the formatDate and formatTime functions directly from fileManager
 
 // Set up a watcher for the directory to detect file additions/removals
-async function setupDirectoryWatcher() {
-  // Clean up existing watcher if any
-  if (watchUnsubscribe.value) {
-    await watchUnsubscribe.value();
-    watchUnsubscribe.value = null;
-  }
+async function initDirectoryWatcher() {
+  await setupDirectoryWatcher(
+    recordingDirectory.value,
+    async () => await loadFiles(),
+    (unsubscribeFn) => watchUnsubscribe.value = unsubscribeFn,
+    (error) => errorMessage.value = `Failed to watch directory: ${error}`
+  );
+}
+
+// Find the active recording file and update its information
+async function findRecordingFile() {
+  await findAndUpdateActiveRecordingFile(
+    isRecording.value,
+    recordingDirectory.value,
+    recordingFilename.value,
+    selectedFormat.value,
+    folderFiles.value,
+    (path) => activeRecordingPath.value = path,
+    (name) => recordingFilename.value = name,
+    (files) => folderFiles.value = files
+  );
+}
+
+// Helper function to check if a file is the active recording file
+function isActiveRecordingFile(file) {
+  // Additional debugging
+  console.log('Checking if file is active recording:', file.name);
+  console.log('Current recording filename:', recordingFilename.value); 
+  console.log('Is recording:', isRecording.value);
   
-  if (!recordingDirectory.value) return;
-  
+  // Simple but most reliable check since we get filename directly from backend
+  return isRecording.value && file.name === recordingFilename.value;
+}
+
+// Debug function to check the recording status
+function logRecordingStatus(file) {
+  console.log('File name:', file.name);
+  console.log('Recording filename:', recordingFilename.value);
+  console.log('Is Recording:', isRecording.value);
+  console.log('Match?', file.name === recordingFilename.value);
+  console.log('Should show green:', isActiveRecordingFile(file));
+}
+
+// Handle file operations with extracted utility functions
+async function handleDeleteFile(filePath) {
   try {
-    // Watch the directory for changes (new files, deleted files, etc) with immediate notifications
-    watchUnsubscribe.value = await watchImmediate(
-      recordingDirectory.value,
-      async (event) => {
-        console.log('Directory event:', event);
-        // Reload directory contents when changes are detected
-        await loadDirectoryFiles();
-      },
-      { recursive: false }
-    );
-    console.log('Directory watcher set up successfully with immediate notifications');
+    await deleteFile(filePath, loadFiles);
   } catch (error) {
-    console.error('Error setting up directory watcher:', error);
-    errorMessage.value = `Failed to watch directory: ${error}`;
+    alert(error.message);
   }
 }
 
-// Set up a watcher for the directory during recording to track active file changes
-async function setupRecordingFileWatcher() {
-  // Clean up any existing file watcher
-  if (fileWatchUnsubscribe.value) {
-    await fileWatchUnsubscribe.value();
-    fileWatchUnsubscribe.value = null;
-  }
-  
-  if (!isRecording.value || !recordingDirectory.value) return;
-  
-  // Instead of watching a specific file, we'll watch the directory for changes
-  // and update any file that matches our timestamp pattern
+async function handleOpenFile(filePath) {
   try {
-    // Create a directory watcher with immediate notifications
-    fileWatchUnsubscribe.value = await watchImmediate(
-      recordingDirectory.value,
-      async (event) => {
-        console.log('Recording file event:', event);
-        // When directory changes, look for the active recording file and update it
-        await findAndUpdateActiveRecordingFile();
-      },
-      { recursive: false }
-    );
-    console.log('Recording directory watcher set up successfully with immediate notifications');
-    
-    // Do an immediate check to find the file
-    await findAndUpdateActiveRecordingFile();
+    await openFileLocation(filePath);
   } catch (error) {
-    console.error('Error setting up recording watcher:', error);
-    // Fall back to polling if watch fails
-    const intervalId = setInterval(async () => {
-      if (isRecording.value) {
-        await findAndUpdateActiveRecordingFile();
-      } else {
-        clearInterval(intervalId);
-      }
-    }, 1000);
+    alert(error.message);
   }
 }
 
-// Helper function to update files in-place to avoid UI flashing
-function updateFilesInPlace(newFiles) {
-  if (!newFiles || newFiles.length === 0) {
-    isLoading.value = false;
-    return;
-  }
-
-  // Special case: if we have no existing files, use the special Vue set operation to avoid flicker
-  if (folderFiles.value.length === 0) {
-    // Add files one by one with a stable key to enable proper transitions
-    newFiles.forEach(file => {
-      file.key = file.path; // Ensure stable key for Vue's transition system
-      folderFiles.value.push(file);
-    });
-    isLoading.value = false;
-    return;
-  }
-  
-  // Create maps for quick lookups
-  const existingFilesMap = new Map(folderFiles.value.map(file => [file.path, file]));
-  const newFilesMap = new Map(newFiles.map(file => [file.path, file]));
-  
-  // Track which files we've already processed to avoid duplication
-  const processedPaths = new Set();
-  
-  // 1. First update existing files in place (most important to avoid flicker)
-  for (let i = 0; i < folderFiles.value.length; i++) {
-    const existingFile = folderFiles.value[i];
-    const newFile = newFilesMap.get(existingFile.path);
-    
-    if (newFile) {
-      // File exists in both arrays - update properties individually
-      // instead of replacing the entire object to preserve reactivity
-      if (existingFile.rawSize !== newFile.rawSize) {
-        existingFile.rawSize = newFile.rawSize;
-        existingFile.size = newFile.size;
-      }
-      
-      if (newFile.dateObject instanceof Date && 
-          (!existingFile.dateObject instanceof Date || 
-           existingFile.dateObject.getTime() !== newFile.dateObject.getTime())) {
-        existingFile.dateObject = newFile.dateObject;
-        existingFile.modified = newFile.modified;
-      }
-      
-      // Mark as processed
-      processedPaths.add(existingFile.path);
-    }
-  }
-  
-  // 2. Remove files that don't exist in the new list (using reverse loop to avoid index issues)
-  for (let i = folderFiles.value.length - 1; i >= 0; i--) {
-    const existingFile = folderFiles.value[i];
-    if (!newFilesMap.has(existingFile.path)) {
-      // Remove this file - it's not in the new list
-      folderFiles.value.splice(i, 1);
-    }
-  }
-  
-  // 3. Add new files that weren't in the original list
-  for (const newFile of newFiles) {
-    if (!processedPaths.has(newFile.path)) {
-      // This is a new file we need to add
-      // Ensure it has a stable key for Vue transitions
-      newFile.key = newFile.path;
-      
-      // Find the right position based on date sorting
-      let insertIndex = folderFiles.value.findIndex(file => {
-        if (file.dateObject instanceof Date && newFile.dateObject instanceof Date) {
-          return newFile.dateObject.getTime() > file.dateObject.getTime();
-        }
-        // Fallback to filename timestamp comparison if dates aren't available
-        const getTimestamp = (f) => {
-          const match = f.name.match(/serial_recording_(\d+)/);
-          return match ? parseInt(match[1]) : 0;
-        };
-        return getTimestamp(newFile) > getTimestamp(file);
-      });
-      
-      // If no appropriate position found, add to the end
-      if (insertIndex === -1) {
-        folderFiles.value.push(newFile);
-      } else {
-        // Insert at the proper position
-        folderFiles.value.splice(insertIndex, 0, newFile);
-      }
-    }
-  }
-  
-  isLoading.value = false;
-}
-
-// Find the actual recording file in the directory and update its size
-async function findAndUpdateActiveRecordingFile() {
-  if (!isRecording.value || !recordingDirectory.value) return;
-  
+async function handleUploadFile(filePath) {
   try {
-    // Read all files in the directory
-    const entries = await readDir(recordingDirectory.value);
-    
-    // Extract timestamp pattern from current recording filename
-    let timestampPrefix = '';
-    if (recordingFilename.value) {
-      const match = recordingFilename.value.match(/serial_recording_(\d+)/);
-      if (match && match[1]) {
-        timestampPrefix = match[1].substring(0, 10);
-      }
-    }
-    
-    // Find files matching the timestamp pattern
-    for (const entry of entries) {
-      if (!entry.children && entry.name.includes(timestampPrefix) && 
-          entry.name.toLowerCase().endsWith(`.${selectedFormat.value}`)) {
-        // Found the actual recording file
-        const actualPath = `${recordingDirectory.value}/${entry.name}`;
-        activeRecordingPath.value = actualPath;
-        
-        // Update just this file's size without refreshing the entire list
-        try {
-          const fileStat = await stat(actualPath);
-          
-          // Find and update the file in the folderFiles array
-          const fileIndex = folderFiles.value.findIndex(file => file.path === actualPath);
-          
-          if (fileIndex >= 0) {
-            // Get the modified date from FileInfo
-            const modifiedDate = fileStat.mtime || fileStat.birthtime;
-            
-            // Only update properties if they've changed to avoid Vue re-renders
-            const existingFile = folderFiles.value[fileIndex];
-            
-            // Update size if changed
-            if (existingFile.rawSize !== fileStat.size) {
-              existingFile.size = formatFileSize(fileStat.size);
-              existingFile.rawSize = fileStat.size;
-            }
-            
-            // Update date if changed
-            if (modifiedDate instanceof Date && 
-                (!existingFile.dateObject instanceof Date || 
-                 existingFile.dateObject.getTime() !== modifiedDate.getTime())) {
-              existingFile.modified = modifiedDate.toLocaleString();
-              existingFile.dateObject = modifiedDate;
-            }
-          } else {
-            // If file is not in the list yet, add just this file without a full reload
-            const newFile = {
-              name: entry.name,
-              path: actualPath,
-              size: formatFileSize(fileStat.size),
-              modified: modifiedDate instanceof Date ? modifiedDate.toLocaleString() : 'Unknown',
-              rawSize: fileStat.size,
-              dateObject: modifiedDate,
-              key: entry.name
-            };
-            
-            // Insert at the beginning (newest files first)
-            folderFiles.value.unshift(newFile);
-          }
-          
-          // Update the actual recording filename to match what's on disk
-          recordingFilename.value = entry.name;
-          break;
-        } catch (error) {
-          console.error(`Error getting stats for ${entry.name}:`, error);
-        }
-      }
-    }
+    await uploadFile(filePath);
   } catch (error) {
-    console.error('Error finding active recording file:', error);
+    alert(error.message);
   }
 }
+
+
 
 // No longer needed - replaced by findAndUpdateActiveRecordingFile
 
@@ -710,17 +445,26 @@ async function startRecording() {
   }
   
   try {
-    // Generate recording filename based on current timestamp
-    const timestamp = new Date().getTime();
-    recordingFilename.value = `serial_recording_${timestamp}.${selectedFormat.value}`;
+    console.log('Starting recording with format:', selectedFormat.value);
+    console.log('Directory:', recordingDirectory.value);
     
-    // Start recording through Tauri command
-    await invoke('start_recording', {
+    // Start recording through Tauri command and get the actual filename
+    const actualFilename = await invoke('start_recording', {
       format: selectedFormat.value,
       directory: recordingDirectory.value,
       maxDurationMinutes: maxDuration.value,
       autoStart: autoStart.value
     });
+    
+    console.log('Received filename from backend:', actualFilename);
+    
+    // Store the actual filename returned from the backend
+    recordingFilename.value = actualFilename;
+    console.log('Set recordingFilename.value to:', recordingFilename.value);
+    
+    // Log the recording filename in the global window object for debugging
+    // @ts-ignore
+    window.recordingFilename = recordingFilename.value;
     
     // Start Android foreground service to keep app alive in background
     try {
@@ -731,13 +475,66 @@ async function startRecording() {
     }
     
     isRecording.value = true;
+  console.log('Recording started - filename:', recordingFilename.value);
     
     // Set up a watcher for the recording file
-    await setupRecordingFileWatcher();
+    const fullPath = `${recordingDirectory.value}/${recordingFilename.value}`;
+    fileWatchUnsubscribe.value = await setupRecordingFileWatcher(
+      fullPath,
+      async () => {
+        // When file changes, update it without triggering a full reload
+        await findAndUpdateActiveRecordingFile(
+          isRecording.value,
+          recordingDirectory.value,
+          recordingFilename.value,
+          selectedFormat.value,
+          folderFiles.value,
+          (path) => activeRecordingPath.value = path,
+          (name) => recordingFilename.value = name,
+          (files) => folderFiles.value = files
+        );
+      },
+      fileWatchUnsubscribe.value
+    );
+    
+    // Also set up a periodic update for the active recording file
+    // This ensures the size and time get updated continuously
+    const updateInterval = setInterval(async () => {
+      if (isRecording.value) {
+        console.log('Periodic update check - recording filename:', recordingFilename.value);
+        
+        await findAndUpdateActiveRecordingFile(
+          isRecording.value,
+          recordingDirectory.value,
+          recordingFilename.value,
+          selectedFormat.value,
+          folderFiles.value,
+          (path) => {
+            console.log('Setting activeRecordingPath to:', path);
+            activeRecordingPath.value = path;
+          },
+          (name) => {
+            console.log('Setting recordingFilename to:', name);
+            recordingFilename.value = name;
+          },
+          (files) => {
+            console.log('Updating folderFiles, count:', files.length);
+            folderFiles.value = files;
+          }
+        );
+        
+        // Double check if we have the actual recording file in our list
+        const recordingFileExists = folderFiles.value.some(file => file.name === recordingFilename.value);
+        console.log('Recording file exists in folder list?', recordingFileExists);
+      } else {
+        console.log('Recording stopped, clearing interval');
+        clearInterval(updateInterval);
+      }
+    }, 2000); // Update every 2 seconds
     
     // Reload directory to ensure the new file shows up
     setTimeout(async () => {
-      await loadDirectoryFiles();
+      await loadFiles();
     }, 1000); // Give the file system a moment to create the file
   } catch (error) {
     console.error('Error starting recording:', error);
@@ -745,64 +542,7 @@ async function startRecording() {
   }
 }
 
-// Open file in file explorer or viewer
-async function openFileLocation(filePath) {
-  try {
-    // On desktop platforms, show the file in folder
-    if (platform() !== 'android' && platform() !== 'ios') {
-      await invoke('plugin:shell|open', { path: filePath });
-    } else {
-      // On mobile, we might need a different approach
-      // Possibly using a Tauri plugin or a mobile-specific way to share files
-      alert('Opening files directly not supported on this platform yet');
-    }
-  } catch (error) {
-    console.error('Error opening file location:', error);
-    alert(`Unable to open file: ${error}`);
-  }
-}
 
-// Upload file to a remote server or cloud storage
-async function uploadFile(filePath) {
-  try {
-    // This is a placeholder for actual upload functionality
-    // In a real implementation, you would:
-    // 1. Read the file content
-    // 2. Upload to a server/cloud storage using an API
-    // 3. Show progress and status
-    
-    // For now, we'll just show a notification
-    alert(`File upload feature will be implemented in a future version.\nSelected file: ${filePath}`);
-    
-    // Example of how it might be implemented with a Tauri command:
-    // await invoke('upload_file_to_server', { 
-    //   filePath, 
-    //   destination: 'cloud_storage',
-    //   credentials: { /* auth tokens, etc */ }
-    // });
-  } catch (error) {
-    console.error('Error uploading file:', error);
-    alert(`Failed to upload file: ${error}`);
-  }
-}
-
-// Delete file from the filesystem
-async function deleteFile(filePath) {
-  try {
-    // Confirm deletion
-    const confirmed = confirm(`Are you sure you want to delete ${filePath.split('/').pop()}?`);
-    if (!confirmed) return;
-    
-    // Use Tauri FS plugin to remove the file
-    // await invoke('plugin:fs|remove_file', { path: filePath });
-    
-    // Refresh the file list
-    await loadDirectoryFiles();
-  } catch (error) {
-    console.error('Error deleting file:', error);
-    alert(`Failed to delete file: ${error}`);
-  }
-}
 
 async function stopRecording() {
   try {
@@ -818,9 +558,12 @@ async function stopRecording() {
     
     // Clean up file watcher if active
     if (fileWatchUnsubscribe.value) {
-      await fileWatchUnsubscribe.value();
+      fileWatchUnsubscribe.value();
       fileWatchUnsubscribe.value = null;
     }
+    
+    // Clear any update intervals that might be running
+    // This is handled automatically since we check isRecording.value
     
     // Clear the active recording path
     activeRecordingPath.value = '';
@@ -829,7 +572,7 @@ async function stopRecording() {
     recordingFilename.value = '';
     
     // Final refresh of directory contents
-    await loadDirectoryFiles();
+    await loadFiles();
   } catch (error) {
     console.error('Error stopping recording:', error);
     alert(`Failed to stop recording: ${error}`);
@@ -840,19 +583,19 @@ async function stopRecording() {
 <style scoped>
 /* Animations for recording indicator */
 .recording-pulse {
-  animation: pulse 2s infinite;
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  border: 4px solid #10b981 !important;
+  animation: recording-card-pulse 2s ease-in-out infinite alternate;
 }
 
-@keyframes pulse {
+@keyframes recording-card-pulse {
   0% {
-    box-shadow: 0 0 5px rgba(16, 185, 129, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 25px rgba(16, 185, 129, 0.8);
+    box-shadow: 0 0 5px rgba(16, 185, 129, 0.4);
+    border-color: #10b981;
   }
   100% {
-    box-shadow: 0 0 5px rgba(16, 185, 129, 0.5);
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.8);
+    border-color: #34d399;
   }
 }
 
