@@ -22,19 +22,19 @@
       </div>
     </div>
   </div>
-  <div class="rounded-md shadow-sm bg-gray-900 p-4 my-6">
+  <div class="rounded-md shadow-sm bg-gray-900 p-2 my-3 pb-0">
     <div
       ref="plotGrid"
       class="grid"
       :style="{
-        gridTemplateColumns: '40px 1fr',
-        gridTemplateRows: plotHeight + 'px 20px',
+        gridTemplateColumns: isSmallScreen ? 'minmax(1rem, 5%) 1fr' : '40px 1fr',
+        gridTemplateRows: plotHeight + 'px ' + (isSmallScreen ? 'min-content' : '20px'),
       }"
     >
       <canvas
         ref="yAxisCanvas"
         class="border-r border-gray-200 block"
-        :style="{ width: '40px', height: plotHeight + 'px' }"
+        :style="{ width: isSmallScreen ? '100%' : '40px', height: plotHeight + 'px' }"
       ></canvas>
       <canvas
         ref="plotCanvas"
@@ -45,7 +45,7 @@
       <canvas
         ref="xAxisCanvas"
         class="border-t border-gray-200 w-full block"
-        style="height:20px"
+        :style="{ height: isSmallScreen ? '1rem' : '20px' }"
       ></canvas>
     </div>
   </div>
@@ -89,7 +89,15 @@ function recalcPlotHeight(): void {
    2. Constants & State
    ==================================================== */
 const Dpr = window.devicePixelRatio || 1;
-const MAX_BUFFER_SIZE = 20000;
+const windowWidth = ref(window.innerWidth);
+const isSmallScreen = ref(windowWidth.value < 800);
+
+// Update window width on resize
+function updateWindowWidth() {
+  windowWidth.value = window.innerWidth;
+  isSmallScreen.value = windowWidth.value < 800;
+}
+const MAX_BUFFER_SIZE = 10000;
 const Y_AXIS_DIVISIONS = 8;
 const X_AXIS_DIVISIONS = 10;
 const CROSSHAIR_THROTTLE_MS = 10;
@@ -476,6 +484,7 @@ let resizeTimeout: number | null = null;
 function scheduleResize(): void {
   if (resizeTimeout !== null) clearTimeout(resizeTimeout);
   resizeTimeout = window.setTimeout(() => {
+    updateWindowWidth(); // Update window width state first
     handleResize();
     resizeTimeout = null;
   }, 10);
@@ -490,11 +499,14 @@ function handleResize() {
 
 onMounted(async () => {
   await nextTick();
+  // Initialize responsive state
+  updateWindowWidth();
   recalcPlotHeight();
   initPlot();
   window.addEventListener('resize', scheduleResize);
   // ensure correct layout after first paint
   requestAnimationFrame(() => {
+    updateWindowWidth();
     recalcPlotHeight();
     initPlot();
   });
@@ -508,6 +520,8 @@ onBeforeUnmount(() => {
 });
 onActivated(() => {
   isActive = true;
+  // Re-check window width on reactivation
+  updateWindowWidth();
   recalcPlotHeight();
   initPlot();
   window.addEventListener('resize', scheduleResize);

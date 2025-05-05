@@ -22,4 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-./src-tauri/gen/*
+src-tauri/gen/android/app/universal/release/*
+src-tauri/gen/android/app/arm64/release/*

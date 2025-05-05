@@ -24,7 +24,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import { listen } from '@tauri-apps/api/event';
 import SignalChart from './SignalChart.vue';
 import ChannelStatCard from './ChannelStatCard.vue';
 import { channelColors, channelVisibility } from './channelSettings';
@@ -64,15 +63,7 @@ function handleCrosshairMove(data: any) {
   }
 }
 
-// Update statistics for all channels when new data is received
-function updateChannelStats(data: number[]) {
-  if (!data || !Array.isArray(data) || data.length === 0) return;
-
-  // Update current value for each channel
-  for (let i = 0; i < Math.min(data.length, channelStats.value.length); i++) {
-    channelStats.value[i].current = data[i];
-  }
-}
+// Update statistics for all channels when new data is received (commented out as not currently used)
 
 // Handle signal quality updates from the chart component
 function handleQualityUpdate(qualityData: boolean[]) {
@@ -99,12 +90,8 @@ function onToggleVisibility(index: number) {
 let unlistenFn: any = null;
 
 onMounted(async () => {
-  // unlistenFn = await listen('serial_data', (event: any) => {
-  //   // Update stats only when running
-  //   if (event.payload && isRunning.value) {
-  //     updateChannelStats(event.payload);
-  //   }
-  // });
+  // Serial data event listening is currently disabled
+  // If needed, uncomment and import listen from '@tauri-apps/api/event'
 });
 
 onBeforeUnmount(() => {
