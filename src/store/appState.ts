@@ -95,5 +95,8 @@ export const fakeDataSettings = reactive({
   waveform: 'sine'
 });
 
-// Global recording directory to persist selection across views
+// Global recording settings to persist across views
 export const recordingDirectory = ref<string>('');
+export const maxRecordingDuration = ref<number>(30); // Default to 30 minutes
+export const recordingFormat = ref<string>('csv'); // Default format
+export const autoStartRecording = ref<boolean>(false); // Default auto-start setting

@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 mb-6">
+  <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
     <div class="flex flex-wrap justify-between items-start mb-6">
       <div class="max-[800px]:w-full">
         <h2 class="text-3xl font-bold text-blue-400">Recording Setup</h2>
@@ -7,7 +7,7 @@
       <div class="flex gap-3 max-[800px]:w-full max-[800px]:mt-4">
         <button 
           v-if="!isRecording"
-          @click="startRecording"
+          @click="() => startRecording()"
           :disabled="!recordingDirectory || connectionStatus !== 'connected'"
           class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md font-semibold flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg max-[800px]:w-full"
           :class="{ 'opacity-50 cursor-not-allowed': !recordingDirectory || connectionStatus !== 'connected' }">
@@ -51,30 +51,30 @@
         <div class="grid grid-cols-3 gap-4">
           <div 
             class="bg-gray-700 p-4 rounded-lg cursor-pointer" 
-            :class="{'border-2 border-blue-500': selectedFormat === 'csv'}"
-            @click="selectedFormat = 'csv'">
+            :class="{'border-2 border-blue-500': recordingFormat === 'csv'}"
+            @click="recordingFormat = 'csv'">
             <div class="flex items-center gap-2">
-              <input type="radio" name="format" :checked="selectedFormat === 'csv'" id="csv" />
+              <input type="radio" name="format" :checked="recordingFormat === 'csv'" id="csv" />
               <label for="csv" class="font-medium">CSV</label>
             </div>
             <p class="text-xs text-gray-400 mt-1">Standard format compatible with most analysis tools</p>
           </div>
           <div 
             class="bg-gray-700 p-4 rounded-lg cursor-pointer" 
-            :class="{'border-2 border-blue-500': selectedFormat === 'binary'}"
-            @click="selectedFormat = 'binary'">
+            :class="{'border-2 border-blue-500': recordingFormat === 'binary'}"
+            @click="recordingFormat = 'binary'">
             <div class="flex items-center gap-2">
-              <input type="radio" name="format" :checked="selectedFormat === 'binary'" id="binary" />
+              <input type="radio" name="format" :checked="recordingFormat === 'binary'" id="binary" />
               <label for="binary" class="font-medium">Binary</label>
             </div>
             <p class="text-xs text-gray-400 mt-1">Compact storage for large datasets</p>
           </div>
           <div 
             class="bg-gray-700 p-4 rounded-lg cursor-pointer" 
-            :class="{'border-2 border-blue-500': selectedFormat === 'json'}"
-            @click="selectedFormat = 'json'">
+            :class="{'border-2 border-blue-500': recordingFormat === 'json'}"
+            @click="recordingFormat = 'json'">
             <div class="flex items-center gap-2">
-              <input type="radio" name="format" :checked="selectedFormat === 'json'" id="json" />
+              <input type="radio" name="format" :checked="recordingFormat === 'json'" id="json" />
               <label for="json" class="font-medium">JSON</label>
             </div>
             <p class="text-xs text-gray-400 mt-1">Structured format with metadata</p>
@@ -89,7 +89,8 @@
             <input 
               type="checkbox" 
               id="autostart" 
-              v-model="autoStart" 
+              :checked="autoStartRecording"
+              @change="event => autoStartRecording = (event.target as HTMLInputElement).checked" 
               :disabled="isRecording"
               class="mr-2" />
             <label for="autostart">Auto-start recording when signal is detected</label>
@@ -98,7 +99,8 @@
             <label class="block mb-2 text-sm">Maximum recording duration (minutes)</label>
             <input 
               type="number" 
-              v-model="maxDuration" 
+              :value="maxRecordingDuration"
+              @input="event => maxRecordingDuration = parseInt((event.target as HTMLInputElement).value) || 1" 
               min="1" 
               :disabled="isRecording"
               class="bg-gray-700 px-3 py-2 rounded-md w-32" />
@@ -244,8 +246,15 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import * as path from '@tauri-apps/api/path';
-import { recordingDirectory, connectionStatus } from '../../store/appState';
+import { 
+  recordingDirectory, 
+  connectionStatus, 
+  maxRecordingDuration,
+  recordingFormat,
+  autoStartRecording
+} from '../../store/appState';
 import { 
   loadDirectoryFiles,
   setupDirectoryWatcher,
@@ -263,10 +272,7 @@ import {
 // Import the types from fileManager
 import type { RecordingFile, UnsubscribeFn } from '../../utils/fileManager';
 
-// State variables
-const selectedFormat = ref<string>('csv'); // Default format
-const autoStart = ref<boolean>(false);
-const maxDuration = ref<number>(30); // Default 30 minutes
+// State variables - recording settings now use global state
 const isRecording = ref<boolean>(false);
 const recordingFilename = ref<string>('');
 // Keep track of files in the selected folder
@@ -277,6 +283,85 @@ const activeRecordingPath = ref<string>('');
 const watchUnsubscribe = ref<UnsubscribeFn | null>(null);
 const fileWatchUnsubscribe = ref<UnsubscribeFn | null>(null);
 
+// Event listener unsubscribe function
+let recordingCompletedUnsubscribe: (() => void) | null = null;
+
+// Listen for recording-completed events from the backend
+async function setupEventListeners() {
+  // Clean up previous listener if it exists
+  if (recordingCompletedUnsubscribe) {
+    recordingCompletedUnsubscribe();
+    recordingCompletedUnsubscribe = null;
+  }
+  
+  // Listen for when a recording completes due to reaching max duration
+  recordingCompletedUnsubscribe = await listen('recording-completed', async (event) => {
+    console.log('Recording completed event received:', event);
+    const payload = event.payload as {
+      format: string;
+      directory: string;
+      maxDurationMinutes: number;
+      shouldRestartRecording: boolean;
+    };
+    
+    // Only restart if shouldRestartRecording is true
+    if (payload.shouldRestartRecording) {
+      console.log('Auto-starting new recording...');
+      
+      // Update UI state to show recording is temporarily stopped
+      isRecording.value = false;
+      
+      // Start a new recording with the same parameters
+      try {
+        // Small delay to ensure the previous recording is properly closed
+        setTimeout(async () => {
+          await startRecording(payload.format, payload.directory, payload.maxDurationMinutes);
+        }, 500);
+      } catch (error) {
+        console.error('Failed to auto-restart recording:', error);
+        alert(`Failed to auto-restart recording: ${error}`);
+      }
+    }
+  });
+}
+
+// Reference to the update interval for active recordings
+let activeUpdateInterval: number | undefined = undefined;
+
+// Function to set up periodic updates for active recording files
+function setupActiveRecordingUpdates() {
+  // Clear any existing interval
+  if (activeUpdateInterval) {
+    clearInterval(activeUpdateInterval);
+    activeUpdateInterval = undefined;
+  }
+  
+  // Only set up if recording is active
+  if (isRecording.value) {
+    console.log('Setting up periodic updates for active recording');
+    activeUpdateInterval = setInterval(async () => {
+      if (isRecording.value) {
+        console.log('Periodic update check for active recording');
+        await loadFiles();
+        
+        // Find and update the active recording file
+        const activeFile = folderFiles.value.find(file => file.name === recordingFilename.value);
+        if (activeFile) {
+          activeRecordingPath.value = activeFile.path;
+          console.log('Updated active recording file:', activeFile);
+        } else {
+          console.log('Active recording file not found in folder list');
+        }
+      } else {
+        // Stop interval if recording is no longer active
+        console.log('Recording stopped, clearing update interval');
+        clearInterval(activeUpdateInterval);
+        activeUpdateInterval = undefined;
+      }
+    }, 2000) as unknown as number; // Update every 2 seconds
+  }
+}
+
 // Initialize recording directory and check recording status when component mounts
 onMounted(async () => {
   try {
@@ -285,25 +370,43 @@ onMounted(async () => {
     const status = await invoke('get_recording_status');
     isRecording.value = status as boolean;
     
-    // If recording is active, find and update the active recording file
+    // Set up event listeners
+    await setupEventListeners();
+    
+    // If recording is active, get the current recording filename from the backend
     if (isRecording.value) {
-      await findRecordingFile();
+      // Get the current recording filename from the backend
+      try {
+        const filename = await invoke('get_recording_filename') as string;
+        if (filename) {
+          console.log('Retrieved current recording filename from backend:', filename);
+          recordingFilename.value = filename;
+          // Also try to find this file in the file list
+          await loadFiles();
+          // Look for active recording among loaded files
+          const activeFile = folderFiles.value.find(file => file.name === recordingFilename.value);
+          if (activeFile) {
+            activeRecordingPath.value = activeFile.path;
+          }
+          
+          // Set up periodic updates for the active recording
+          setupActiveRecordingUpdates();
+        }
+      } catch (error) {
+        console.error('Failed to get recording filename:', error);
+      }
     }
+    
   } catch (error) {
     console.error('Error initializing component:', error);
   }
 });
 
 // Clean up when component unmounts
-onUnmounted(async () => {
-  // If recording is still active when leaving the view, ask if we should stop it
-  if (isRecording.value) {
-    const shouldStop = confirm('Recording is still in progress. Stop recording?');
-    if (shouldStop) {
-      await stopRecording();
-    }
-  }
-  
+onUnmounted(() => {
+  // NOTE: We no longer stop recording when navigating away from this page
+  // This allows recording to continue while using other app features
+
   // Clean up directory watcher if active
   if (watchUnsubscribe.value) {
     watchUnsubscribe.value();
@@ -312,6 +415,18 @@ onUnmounted(async () => {
   // Clean up file watcher if active
   if (fileWatchUnsubscribe.value) {
     fileWatchUnsubscribe.value();
+  }
+  
+  // Remove event listeners
+  if (recordingCompletedUnsubscribe) {
+    recordingCompletedUnsubscribe();
+    recordingCompletedUnsubscribe = null;
+  }
+  
+  // Clean up the update interval for active recordings
+  if (activeUpdateInterval) {
+    clearInterval(activeUpdateInterval);
+    activeUpdateInterval = undefined;
   }
 });
 
@@ -416,18 +531,7 @@ async function initDirectoryWatcher(): Promise<void> {
   );
 }
 
-async function findRecordingFile(): Promise<void> {
-  await findAndUpdateActiveRecordingFile(
-    isRecording.value,
-    recordingDirectory.value,
-    recordingFilename.value,
-    selectedFormat.value,
-    folderFiles.value,
-    (path) => activeRecordingPath.value = path,
-    (name) => recordingFilename.value = name,
-    (files) => folderFiles.value = files
-  );
-}
+// Function removed as it's now handled directly in onMounted
 
 // Helper function to check if a file is the active recording file
 function isFileActiveRecording(file: RecordingFile): boolean {
@@ -473,20 +577,26 @@ async function handleUploadFile(filePath: string) {
 }
 
 
-async function startRecording(): Promise<void> {
-  if (!recordingDirectory.value) {
+async function startRecording(format?: string, directory?: string, duration?: number): Promise<void> {
+  // Use provided parameters or defaults from UI controls
+  const recordFormat = format || recordingFormat.value;
+  const recordDir = directory || recordingDirectory.value;
+  const recordDuration = duration || maxRecordingDuration.value;
+  
+  if (!recordDir) {
     alert('Please select a directory to save recordings');
     return;
   }
   
   try {
-    console.log('Starting recording with format:', selectedFormat.value);
-    console.log('Directory:', recordingDirectory.value);
+    console.log('Starting recording with format:', recordFormat);
+    console.log('Directory:', recordDir);
+    console.log('Duration:', recordDuration);
     const actualFilename = await invoke('start_recording', {
-      format: selectedFormat.value,
-      directory: recordingDirectory.value,
-      maxDurationMinutes: maxDuration.value,
-      autoStart: autoStart.value
+      format: recordFormat,
+      directory: recordDir,
+      maxDurationMinutes: recordDuration,
+      autoStart: autoStartRecording.value
     }) as string;
     
     console.log('Received filename from backend:', actualFilename);
@@ -501,7 +611,10 @@ async function startRecording(): Promise<void> {
     }
     
     isRecording.value = true;
-  console.log('Recording started - filename:', recordingFilename.value);
+    console.log('Recording started - filename:', recordingFilename.value);
+    
+    // Set up periodic updates for the active recording
+    setupActiveRecordingUpdates();
     
     // Set up a watcher for the recording file
     const fullPath = `${recordingDirectory.value}/${recordingFilename.value}`;
@@ -513,7 +626,7 @@ async function startRecording(): Promise<void> {
           isRecording.value,
           recordingDirectory.value,
           recordingFilename.value,
-          selectedFormat.value,
+          recordingFormat.value,
           folderFiles.value,
           (path) => activeRecordingPath.value = path,
           (name) => recordingFilename.value = name,
@@ -533,7 +646,7 @@ async function startRecording(): Promise<void> {
           isRecording.value,
           recordingDirectory.value,
           recordingFilename.value,
-          selectedFormat.value,
+          recordingFormat.value,
           folderFiles.value,
           (path) => {
             console.log('Setting activeRecordingPath to:', path);
@@ -557,8 +670,6 @@ async function startRecording(): Promise<void> {
         clearInterval(updateInterval);
       }
     }, 2000); // Update every 2 seconds
-    
-    // Reload directory to ensure the new file shows up
     setTimeout(async () => {
       await loadFiles();
     }, 1000); // Give the file system a moment to create the file
@@ -567,8 +678,6 @@ async function startRecording(): Promise<void> {
     alert(`Failed to start recording: ${error}`);
   }
 }
-
-
 
 async function stopRecording(): Promise<void> {
   try {
@@ -587,17 +696,10 @@ async function stopRecording(): Promise<void> {
       fileWatchUnsubscribe.value();
       fileWatchUnsubscribe.value = null;
     }
-    
-    // Clear any update intervals that might be running
-    // This is handled automatically since we check isRecording.value
-    
-    // Clear the active recording path
     activeRecordingPath.value = '';
     
     isRecording.value = false;
     recordingFilename.value = '';
-    
-    // Final refresh of directory contents
     await loadFiles();
   } catch (error) {
     console.error('Error stopping recording:', error);

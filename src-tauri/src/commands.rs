@@ -11,6 +11,7 @@ use image::ImageEncoder;
 use rand::{thread_rng, Rng};
 use reqwest::blocking::Client;
 use serialport;
+use serde_json::json;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
@@ -365,11 +366,18 @@ pub fn start_recording(
     // Store the file in state for continued writing
     *state.recording_file.lock().unwrap() = Some((file, format.clone()));
     
+    // Store the filename for retrieval even when switching views
+    *state.recording_filename.lock().unwrap() = Some(filename.clone());
+    
     // Start the recording thread that will poll data and write to file
     if !state.recording_active.load(Ordering::SeqCst) {
         state.recording_active.store(true, Ordering::SeqCst);
         let state_clone = state.inner().clone();
-        // let _format_clone = format.clone(); // Not needed currently
+        
+        // Clone format and directory for the emit event after max duration
+        let format_clone = format.clone();
+        let directory_clone = directory.clone();
+        
         let max_duration = Duration::from_secs(max_duration_minutes as u64 * 60);
         let start_time = SystemTime::now();
         
@@ -401,6 +409,19 @@ pub fn start_recording(
                 // Check if max duration is reached
                 if let Ok(elapsed) = SystemTime::now().duration_since(start_time) {
                     if elapsed > max_duration {
+                        // Emit an event to notify the frontend that recording has completed
+                        // due to reaching max duration, so frontend can start a new recording
+                        if let Some(app_handle) = state_clone.app_handle.lock().unwrap().as_ref() {
+                            let _ = app_handle.emit("recording-completed", {
+                                json!({
+                                    "format": format_clone,
+                                    "directory": directory_clone,
+                                    "maxDurationMinutes": max_duration_minutes,
+                                    "shouldRestartRecording": true
+                                })
+                            });
+                        }
+                        
                         state_clone.recording_active.store(false, Ordering::SeqCst);
                         break;
                     }
@@ -545,6 +566,9 @@ pub fn stop_recording(state: State<Arc<SerialState>>) -> Result<(), String> {
         if let Some(handle) = state.recording_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
+        
+        // Clear the recording filename
+        *state.recording_filename.lock().unwrap() = None;
     }
     
     Ok(())
@@ -553,6 +577,22 @@ pub fn stop_recording(state: State<Arc<SerialState>>) -> Result<(), String> {
 #[tauri::command]
 pub fn get_recording_status(state: State<Arc<SerialState>>) -> Result<bool, String> {
     Ok(state.recording_active.load(Ordering::SeqCst))
+}
+
+#[tauri::command]
+pub fn get_recording_filename(state: State<Arc<SerialState>>) -> Result<String, String> {
+    // Get the current recording filename if there's an active recording
+    if !state.recording_active.load(Ordering::SeqCst) {
+        return Ok(String::new()); // Return empty string if not recording
+    }
+    
+    // Get the current recording information from state
+    if let Some(current_filename) = &*state.recording_filename.lock().unwrap() {
+        return Ok(current_filename.clone());
+    }
+    
+    // Fallback - we're recording but can't get filename
+    Ok(String::new())
 }
 
 #[tauri::command]

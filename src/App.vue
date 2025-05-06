@@ -7,7 +7,7 @@
         <!-- Sidebar Component -->
         <AppSidebar v-model:activeView="primaryView" v-model:additionalViews="additionalViews" v-model:collapsed="collapsed" :class="[
             collapsed ? 'w-16 px-2 py-5' : 'w-60 p-5',
-            'mb-5 border border-gray-700 shadow-inner rounded-lg overflow-y-auto',
+            'mb-4 border border-gray-700 shadow-inner rounded-lg overflow-y-auto',
             'flex flex-col flex-shrink-0 bg-gray-800 bg-opacity-60',
             'max-[800px]:fixed max-[800px]:bottom-0 max-[800px]:left-0',
             'max-[800px]:flex-row max-[800px]:items-center max-[800px]:z-50',

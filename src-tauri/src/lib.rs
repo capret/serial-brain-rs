@@ -5,9 +5,9 @@ mod reader;
 mod state;
 mod types;
 use commands::{
-    connect_serial, connect_socket, get_available_ports, get_recent_data, get_recording_status,
-    get_signal_quality, send_serial, start_fake_data, start_recording, start_streaming,
-    stop_data_acquisition, stop_recording, stop_streaming,
+    connect_serial, connect_socket, get_available_ports, get_recent_data, get_recording_filename,
+    get_recording_status, get_signal_quality, send_serial, start_fake_data, start_recording, 
+    start_streaming, stop_data_acquisition, stop_recording, stop_streaming,
 };
 use state::SerialState;
 
@@ -19,7 +19,13 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_android_forward_service::init())
-        .manage(serial_state)
+        .manage(serial_state.clone())
+        .setup(move |app| {
+            // Store the app handle in the serial state for event emission
+            let app_handle = app.handle();
+            *serial_state.app_handle.lock().unwrap() = Some(app_handle.clone());
+            Ok(())
+        })
         // Removed automatic frame stream on startup; streaming controlled via commands
         .invoke_handler(tauri::generate_handler![
             connect_serial,
@@ -34,6 +40,7 @@ pub fn run() {
             start_recording,
             stop_recording,
             get_recording_status,
+            get_recording_filename,
             get_signal_quality
         ])
         .run(tauri::generate_context!())
