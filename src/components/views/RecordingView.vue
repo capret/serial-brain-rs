@@ -1,245 +1,46 @@
 <template>
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
-    <div class="flex flex-wrap justify-between items-start mb-6">
-      <div class="max-[800px]:w-full">
-        <h2 class="text-3xl font-bold text-blue-400">Recording Setup</h2>
-      </div>
-      <div class="flex gap-3 max-[800px]:w-full max-[800px]:mt-4">
-        <button 
-          v-if="!isRecording"
-          @click="() => startRecording()"
-          :disabled="!recordingDirectory || connectionStatus !== 'connected'"
-          class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md font-semibold flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg max-[800px]:w-full"
-          :class="{ 'opacity-50 cursor-not-allowed': !recordingDirectory || connectionStatus !== 'connected' }">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
-          Start Recording
-        </button>
-        <button 
-          v-else
-          @click="stopRecording"
-          class="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-md font-semibold flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg max-[800px]:w-full">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="6" y="6" width="12" height="12"></rect>
-          </svg>
-          Stop Recording
-        </button>
-      </div>
-    </div>
+    <!-- Recording Setup Section -->
+    <RecordingSetup
+      :is-recording="isRecording"
+      :recording-directory="recordingDirectory"
+      :connection-status="connectionStatus"
+      @start-recording="startRecording"
+      @stop-recording="stopRecording"
+    />
+
     <div class="space-y-6">
-      <div>
-        <h3 class="text-lg font-semibold mb-4">Storage Location</h3>
-        <div class="mt-2">
-
-          <div class="flex">
-            <input 
-              type="text" 
-              :placeholder="recordingDirectory ? recordingDirectory : 'No folder selected'" 
-              v-model="recordingDirectory"
-              readonly
-              class="bg-gray-700 px-3 py-2 rounded-md flex-grow text-gray-300" />
-
-          </div>
-        </div>
-      </div>
+      <!-- Storage Location is included in RecordingSetup -->
       
-      <div>
-        <h3 class="text-lg font-semibold mb-4">Recording Format</h3>
-        <div class="grid grid-cols-3 gap-4">
-          <div 
-            class="bg-gray-700 p-4 rounded-lg cursor-pointer" 
-            :class="{'border-2 border-blue-500': recordingFormat === 'csv'}"
-            @click="recordingFormat = 'csv'">
-            <div class="flex items-center gap-2">
-              <input type="radio" name="format" :checked="recordingFormat === 'csv'" id="csv" />
-              <label for="csv" class="font-medium">CSV</label>
-            </div>
-            <p class="text-xs text-gray-400 mt-1">Standard format compatible with most analysis tools</p>
-          </div>
-          <div 
-            class="bg-gray-700 p-4 rounded-lg cursor-pointer" 
-            :class="{'border-2 border-blue-500': recordingFormat === 'binary'}"
-            @click="recordingFormat = 'binary'">
-            <div class="flex items-center gap-2">
-              <input type="radio" name="format" :checked="recordingFormat === 'binary'" id="binary" />
-              <label for="binary" class="font-medium">Binary</label>
-            </div>
-            <p class="text-xs text-gray-400 mt-1">Compact storage for large datasets</p>
-          </div>
-          <div 
-            class="bg-gray-700 p-4 rounded-lg cursor-pointer" 
-            :class="{'border-2 border-blue-500': recordingFormat === 'json'}"
-            @click="recordingFormat = 'json'">
-            <div class="flex items-center gap-2">
-              <input type="radio" name="format" :checked="recordingFormat === 'json'" id="json" />
-              <label for="json" class="font-medium">JSON</label>
-            </div>
-            <p class="text-xs text-gray-400 mt-1">Structured format with metadata</p>
-          </div>
-        </div>
-      </div>
+      <!-- Recording Format Section -->
+      <RecordingFormatSelector
+        v-model="recordingFormat"
+        :disabled="isRecording"
+      />
       
-      <div>
-        <h3 class="text-lg font-semibold mb-4">Recording Options</h3>
-        <div class="space-y-4">
-          <div class="flex items-center">
-            <input 
-              type="checkbox" 
-              id="autostart" 
-              :checked="autoStartRecording"
-              @change="event => autoStartRecording = (event.target as HTMLInputElement).checked" 
-              :disabled="isRecording"
-              class="mr-2" />
-            <label for="autostart">Auto-start recording when signal is detected</label>
-          </div>
-          <div>
-            <label class="block mb-2 text-sm">Maximum recording duration (minutes)</label>
-            <input 
-              type="number" 
-              :value="maxRecordingDuration"
-              @input="event => maxRecordingDuration = parseInt((event.target as HTMLInputElement).value) || 1" 
-              min="1" 
-              :disabled="isRecording"
-              class="bg-gray-700 px-3 py-2 rounded-md w-32" />
-          </div>
-        </div>
-      </div>
+      <!-- Recording Options Section -->
+      <RecordingOptions
+        v-model:autostart="autoStartRecording"
+        v-model:max-recording-duration="maxRecordingDuration"
+        :disabled="isRecording"
+      />
       
-      <div v-if="isRecording" class="mt-6 p-4 bg-gray-700 rounded-lg">
-        <div class="flex justify-between items-center">
-          <h3 class="text-lg font-semibold text-green-400">Recording in Progress</h3>
-          <div class="flex items-center gap-2">
-            <div class="animate-pulse h-3 w-3 rounded-full bg-red-500"></div>
-            <span class="text-sm">Recording...</span>
-          </div>
-        </div>
-        <p class="mt-4 text-sm">Saving data to: <span class="text-blue-300">{{ recordingFilename }}</span></p>
-      </div>
+      <!-- Recording Status Section -->
+      <RecordingStatus
+        v-if="isRecording"
+        :is-recording="isRecording"
+        :recording-filename="recordingFilename"
+      />
     </div>
     
     <div class="border-t border-gray-700 my-8"></div>
     
-    <!-- record folder section -->
-    <div class="flex justify-between items-center mb-6">
-      <h2 class="text-3xl font-bold text-blue-400">Recorded Files</h2>
-      <button 
-        @click="loadFiles"
-        class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-sm flex items-center gap-2 transition-colors">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 2v6h-6"></path>
-          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
-          <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L16 16"></path>
-          <path d="M16 16h6v6"></path>
-        </svg>
-        Refresh
-      </button>
-    </div>
-    
-    <div v-if="recordingDirectory" class="mb-4 text-sm text-gray-400">
-      Monitoring: {{ recordingDirectory }}
-    </div>
-    
-    <div v-if="errorMessage" class="bg-red-900 bg-opacity-50 p-4 rounded-md mb-4 text-sm">
-      {{ errorMessage }}
-    </div>
-    
-    <div v-if="isLoading" class="flex justify-center items-center py-8">
-      <div class="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
-    </div>
-    
-    <div v-else-if="folderFiles.length === 0" class="bg-gray-700 p-6 rounded-md text-center">
-      <p v-if="recordingDirectory">No CSV files found in the selected directory.</p>
-      <p v-else>Select a directory to view recorded files.</p>
-    </div>
-    
-    <div v-else class="file-grid grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-      <transition-group name="filter" tag="div" class="contents">
-        <div 
-          v-for="file in folderFiles" 
-          :key="file.path" 
-          :class="[
-            'bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-all duration-300 transform hover:scale-[1.02] flex flex-col relative',
-            {'recording-pulse': isFileActiveRecording(file)}
-          ]"
-          @click="logRecordingStatus(file)">
-          
-          <!-- File card header with name and actions -->
-          <div class="flex justify-between items-start mb-3">
-            <h4 class="font-medium truncate flex-grow" :title="file.name">{{ file.name }}</h4>
-            <div class="flex items-center gap-2 ml-2 flex-shrink-0">
-              <!-- Use a simpler badge + border approach -->
-              <span v-if="isFileActiveRecording(file)" 
-                class="text-xs px-2 py-1 rounded bg-red-600 text-white font-bold shadow-md shadow-red-500/50">
-                RECORDING
-              </span>
-              <button 
-                @click="handleDeleteFile(file.path)" 
-                class="text-xs p-1 rounded bg-gray-600 hover:bg-gray-500 text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M10 11v6M14 11v6"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          
-          <!-- File details -->
-          <div class="space-y-2 flex-grow text-sm">
-            <div class="flex gap-4">
-              <div class="flex items-center gap-2 w-1/2">
-                <span class="text-sm text-gray-400">Size:</span>
-                <span class="text-white">{{ file.size }}</span>
-              </div>
-              <div class="flex items-center gap-2 w-1/2">
-                <span class="text-sm text-gray-400">Date:</span>
-                <span class="text-white">{{ formatDate(file) }}</span>
-              </div>
-            </div>
-            <div class="flex gap-4">
-              <div class="flex items-center gap-2 w-1/2">
-                <span class="text-sm text-gray-400">Time:</span>
-                <span class="text-white">{{ formatTime(file) }}</span>
-              </div>
-              <div v-if="calculateDuration(file)" class="flex items-center gap-2 w-1/2">
-                <span class="text-sm text-gray-400">Duration:</span>
-                <span class="text-white font-medium">{{ calculateDuration(file) }}</span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Actions footer -->
-          <div class="flex gap-2 mt-4 justify-between">
-            <button 
-              @click="handleSyncFile(file.path)"
-              class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
-              </svg>
-              Sync
-            </button>
-            <button 
-              @click="handleUploadFile(file.path)"
-              class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors flex-grow justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              Upload
-            </button>
-          </div>
-        </div>
-      </transition-group>
-    </div>
+    <!-- Recorded Files Section -->
+    <RecordedFilesList
+      :recording-directory="recordingDirectory"
+      :is-recording="isRecording"
+      :recording-filename="recordingFilename"
+    />
   </div>
 </template>
 
@@ -256,31 +57,25 @@ import {
   autoStartRecording
 } from '../../store/appState';
 import { 
-  loadDirectoryFiles,
-  setupDirectoryWatcher,
+  formatDuration,
   setupRecordingFileWatcher,
   findAndUpdateActiveRecordingFile,
-  isActiveRecordingFile,
-  syncFile,
-  uploadFile,
-  deleteFile,
-  updateFilesInPlace,
-  formatDate,
-  formatTime,
-} from '../../utils/fileManager';
+  UnsubscribeFn
+} from '../../utils/records';
 
-// Import the types from fileManager
-import type { RecordingFile, UnsubscribeFn } from '../../utils/fileManager';
+// Import the components
+import { 
+  RecordingSetup,
+  RecordingFormatSelector,
+  RecordingOptions,
+  RecordingStatus,
+  RecordedFilesList
+} from '../records';
 
-// State variables - recording settings now use global state
+// State variables for recording
 const isRecording = ref<boolean>(false);
 const recordingFilename = ref<string>('');
-// Keep track of files in the selected folder
-const folderFiles = ref<RecordingFile[]>([]);
-const isLoading = ref<boolean>(false);
-const errorMessage = ref<string>('');
 const activeRecordingPath = ref<string>('');
-const watchUnsubscribe = ref<UnsubscribeFn | null>(null);
 const fileWatchUnsubscribe = ref<UnsubscribeFn | null>(null);
 
 // Event listener unsubscribe function
@@ -341,16 +136,46 @@ function setupActiveRecordingUpdates() {
     console.log('Setting up periodic updates for active recording');
     activeUpdateInterval = setInterval(async () => {
       if (isRecording.value) {
-        console.log('Periodic update check for active recording');
-        await loadFiles();
-        
-        // Find and update the active recording file
-        const activeFile = folderFiles.value.find(file => file.name === recordingFilename.value);
-        if (activeFile) {
-          activeRecordingPath.value = activeFile.path;
-          console.log('Updated active recording file:', activeFile);
-        } else {
-          console.log('Active recording file not found in folder list');
+        console.log('Checking active recording status');
+        try {
+          // Get the latest filename from the backend to ensure we stay in sync
+          const currentFilename = await invoke('get_recording_filename') as string;
+          if (currentFilename && currentFilename !== recordingFilename.value) {
+            console.log('Updating recording filename from backend:', currentFilename);
+            recordingFilename.value = currentFilename;
+          }
+          
+          // Check the file size of the current recording
+          if (recordingFilename.value && recordingDirectory.value) {
+            const fullPath = `${recordingDirectory.value}/${recordingFilename.value}`;
+            try {
+              // Get the actual file stats to update size
+              interface FileStats {
+                size: number; 
+                modified: number;
+                created: number;
+              }
+              const fileStat = await invoke<FileStats>('get_file_stats', { path: fullPath });
+              if (fileStat && fileStat.size) {
+                console.log(`Current recording file size: ${fileStat.size} bytes`);
+                // Trigger a file list refresh to update the size
+                await findAndUpdateActiveRecordingFile(
+                  isRecording.value,
+                  recordingDirectory.value,
+                  recordingFilename.value,
+                  recordingFormat.value,
+                  [],
+                  (path) => activeRecordingPath.value = path,
+                  (name) => recordingFilename.value = name,
+                  () => {} // We'll handle the UI update separately
+                );
+              }
+            } catch (error) {
+              console.warn('Error checking file stats:', error);
+            }
+          }
+        } catch (e) {
+          console.error('Error updating recording filename:', e);
         }
       } else {
         // Stop interval if recording is no longer active
@@ -358,7 +183,7 @@ function setupActiveRecordingUpdates() {
         clearInterval(activeUpdateInterval);
         activeUpdateInterval = undefined;
       }
-    }, 2000) as unknown as number; // Update every 2 seconds
+    }, 1000) as unknown as number; // Update every second for more responsive updates
   }
 }
 
@@ -381,13 +206,6 @@ onMounted(async () => {
         if (filename) {
           console.log('Retrieved current recording filename from backend:', filename);
           recordingFilename.value = filename;
-          // Also try to find this file in the file list
-          await loadFiles();
-          // Look for active recording among loaded files
-          const activeFile = folderFiles.value.find(file => file.name === recordingFilename.value);
-          if (activeFile) {
-            activeRecordingPath.value = activeFile.path;
-          }
           
           // Set up periodic updates for the active recording
           setupActiveRecordingUpdates();
@@ -396,7 +214,6 @@ onMounted(async () => {
         console.error('Failed to get recording filename:', error);
       }
     }
-    
   } catch (error) {
     console.error('Error initializing component:', error);
   }
@@ -407,14 +224,10 @@ onUnmounted(() => {
   // NOTE: We no longer stop recording when navigating away from this page
   // This allows recording to continue while using other app features
 
-  // Clean up directory watcher if active
-  if (watchUnsubscribe.value) {
-    watchUnsubscribe.value();
-  }
-
   // Clean up file watcher if active
   if (fileWatchUnsubscribe.value) {
     fileWatchUnsubscribe.value();
+    fileWatchUnsubscribe.value = null;
   }
   
   // Remove event listeners
@@ -430,152 +243,12 @@ onUnmounted(() => {
   }
 });
 
-// We're using checkActiveFile from the fileManager utility directly
-
 // Use AppData directory for recordings
 async function selectDirectory(): Promise<void> {
   const home = await path.documentDir();
-  // await mkdir(home, { baseDir: BaseDirectory.Home });
   recordingDirectory.value = home;
-  console.log(home);
-  await loadFiles();
-  await initDirectoryWatcher();
+  console.log('Using documents directory for recordings:', home);
 }
-
-// Refresh directory files
-async function loadFiles(): Promise<void> {
-  if (!recordingDirectory.value) return;
-  errorMessage.value = ''; // Clear any previous errors
-  
-  // Only show loading indicator if we have no files yet to avoid flickering
-  if (folderFiles.value.length === 0) {
-    isLoading.value = true;
-  }
-  
-  try {
-    // Load all files from the directory
-    const files = await loadDirectoryFiles(recordingDirectory.value);
-    
-    // Use optimized update function to maintain transitions
-    updateFilesInPlace(
-      files, 
-      folderFiles.value, 
-      newFiles => folderFiles.value = newFiles, 
-      loading => isLoading.value = loading
-    );
-  } catch (error) {
-    console.error('Error loading files:', error);
-    errorMessage.value = `Error loading files: ${error}`;
-    isLoading.value = false;
-  }
-}
-
-function calculateDuration(file: RecordingFile): string | null {
-  const nameMatch = file.name.match(/serial_recording_(\d+)/);
-  if (!nameMatch) return null;
-  if (file.duration) return file.duration;
-
-  const fileCreationTimeMs = parseInt(nameMatch[1]);
-  if (!fileCreationTimeMs) return null;
-
-  const isActiveFile = isFileActiveRecording(file);
-  
-  let endTimeMs = 0;
-  if (isActiveFile) {
-    // For active recordings, use the current time
-    endTimeMs = Date.now();
-  } else if (file.dateObject) {
-    // For completed recordings, use the last modified date
-    endTimeMs = file.dateObject.getTime();
-  } else {
-    return null;
-  }
-  
-  // Calculate duration in milliseconds
-  const durationMs = endTimeMs - fileCreationTimeMs;
-  if (durationMs <= 0) return null;
-  
-  // Format the duration
-  return formatDurationTime(durationMs);
-}
-
-// Format duration in milliseconds to a readable string
-function formatDurationTime(ms: number): string | null {
-  if (!ms || ms <= 0) return null;
-  
-  // Convert to seconds
-  const totalSeconds = Math.floor(ms / 1000);
-  
-  // Calculate hours, minutes, seconds
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  
-  // Format the output
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${seconds}s`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  } else {
-    return `${seconds}s`;
-  }
-}
-
-// Set up a watcher for the directory to detect file additions/removals
-async function initDirectoryWatcher(): Promise<void> {
-  await setupDirectoryWatcher(
-    recordingDirectory.value,
-    async () => await loadFiles(),
-    (unsubscribeFn) => watchUnsubscribe.value = unsubscribeFn,
-    (error) => errorMessage.value = `Failed to watch directory: ${error}`
-  );
-}
-
-// Function removed as it's now handled directly in onMounted
-
-// Helper function to check if a file is the active recording file
-function isFileActiveRecording(file: RecordingFile): boolean {
-  // Additional debugging
-  console.log('Checking if file is active recording:', file.name);
-  console.log('Current recording filename:', recordingFilename.value); 
-  console.log('Is recording:', isRecording.value);  
-  return isActiveRecordingFile(file.name, recordingFilename.value, isRecording.value);
-}
-
-// Debug function to check the recording status
-function logRecordingStatus(file: RecordingFile): void {
-  console.log('File name:', file.name);
-  console.log('Recording filename:', recordingFilename.value);
-  console.log('Is Recording:', isRecording.value);
-  console.log('Match?', file.name === recordingFilename.value);
-  console.log('Should show green:', isFileActiveRecording(file));
-}
-
-// Handle file operations with extracted utility functions
-async function handleDeleteFile(filePath: string) {
-  try {
-    await deleteFile(filePath, loadFiles);
-  } catch (error) {
-    alert(error instanceof Error ? error.message : String(error));
-  }
-}
-
-async function handleSyncFile(filePath: string) {
-  try {
-    await syncFile(filePath);
-  } catch (error) {
-    alert(error instanceof Error ? error.message : String(error));
-  }
-}
-
-async function handleUploadFile(filePath: string) {
-  try {
-    await uploadFile(filePath);
-  } catch (error) {
-    alert(error instanceof Error ? error.message : String(error));
-  }
-}
-
 
 async function startRecording(format?: string, directory?: string, duration?: number): Promise<void> {
   // Use provided parameters or defaults from UI controls
@@ -592,6 +265,7 @@ async function startRecording(format?: string, directory?: string, duration?: nu
     console.log('Starting recording with format:', recordFormat);
     console.log('Directory:', recordDir);
     console.log('Duration:', recordDuration);
+    
     const actualFilename = await invoke('start_recording', {
       format: recordFormat,
       directory: recordDir,
@@ -601,8 +275,7 @@ async function startRecording(format?: string, directory?: string, duration?: nu
     
     console.log('Received filename from backend:', actualFilename);
     recordingFilename.value = actualFilename;
-    console.log('Set recordingFilename.value to:', recordingFilename.value);
-
+    
     try {
       await invoke('plugin:android-forward-service|start_forward_service');
       console.log('Android foreground service started');
@@ -612,9 +285,6 @@ async function startRecording(format?: string, directory?: string, duration?: nu
     
     isRecording.value = true;
     console.log('Recording started - filename:', recordingFilename.value);
-    
-    // Set up periodic updates for the active recording
-    setupActiveRecordingUpdates();
     
     // Set up a watcher for the recording file
     const fullPath = `${recordingDirectory.value}/${recordingFilename.value}`;
@@ -627,52 +297,15 @@ async function startRecording(format?: string, directory?: string, duration?: nu
           recordingDirectory.value,
           recordingFilename.value,
           recordingFormat.value,
-          folderFiles.value,
+          [],
           (path) => activeRecordingPath.value = path,
           (name) => recordingFilename.value = name,
-          (files) => folderFiles.value = files
+          () => {} // No need to update files here as that's handled by RecordedFilesList
         );
       },
       fileWatchUnsubscribe.value
     );
     
-    // Also set up a periodic update for the active recording file
-    // This ensures the size and time get updated continuously
-    const updateInterval = setInterval(async () => {
-      if (isRecording.value) {
-        console.log('Periodic update check - recording filename:', recordingFilename.value);
-        
-        await findAndUpdateActiveRecordingFile(
-          isRecording.value,
-          recordingDirectory.value,
-          recordingFilename.value,
-          recordingFormat.value,
-          folderFiles.value,
-          (path) => {
-            console.log('Setting activeRecordingPath to:', path);
-            activeRecordingPath.value = path;
-          },
-          (name) => {
-            console.log('Setting recordingFilename to:', name);
-            recordingFilename.value = name;
-          },
-          (files) => {
-            console.log('Updating folderFiles, count:', files.length);
-            folderFiles.value = files;
-          }
-        );
-        
-        // Double check if we have the actual recording file in our list
-        const recordingFileExists = folderFiles.value.some(file => file.name === recordingFilename.value);
-        console.log('Recording file exists in folder list?', recordingFileExists);
-      } else {
-        console.log('Recording stopped, clearing interval');
-        clearInterval(updateInterval);
-      }
-    }, 2000); // Update every 2 seconds
-    setTimeout(async () => {
-      await loadFiles();
-    }, 1000); // Give the file system a moment to create the file
   } catch (error) {
     console.error('Error starting recording:', error);
     alert(`Failed to start recording: ${error}`);
@@ -696,57 +329,13 @@ async function stopRecording(): Promise<void> {
       fileWatchUnsubscribe.value();
       fileWatchUnsubscribe.value = null;
     }
-    activeRecordingPath.value = '';
     
+    activeRecordingPath.value = '';
     isRecording.value = false;
     recordingFilename.value = '';
-    await loadFiles();
   } catch (error) {
     console.error('Error stopping recording:', error);
     alert(`Failed to stop recording: ${error}`);
   }
 }
 </script>
-
-<style scoped>
-/* Animations for recording indicator */
-.recording-pulse {
-  background-color: rgba(16, 185, 129, 0.15) !important;
-  border: 4px solid #10b981 !important;
-  animation: recording-card-pulse 2s ease-in-out infinite alternate;
-}
-
-@keyframes recording-card-pulse {
-  0% {
-    box-shadow: 0 0 5px rgba(16, 185, 129, 0.4);
-    border-color: #10b981;
-  }
-  100% {
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.8);
-    border-color: #34d399;
-  }
-}
-
-/* Filter card add/delete animations - same as in FilterConfigView */
-.filter-enter-active, .filter-leave-active {
-  transition: all 200ms ease-in-out;
-}
-.filter-enter-from, .filter-leave-to {
-  opacity: 0;
-  transform: scale(0.9);
-}
-.filter-enter-to, .filter-leave-from {
-  opacity: 1;
-  transform: scale(1);
-}
-
-/* Prevent flicker during updates */
-.file-grid {
-  position: relative;
-  min-height: 100px; /* Ensure grid has minimum height while loading */
-}
-
-.contents > * {
-  will-change: opacity, transform;
-}
-</style>

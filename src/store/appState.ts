@@ -1,4 +1,4 @@
-import { ref, reactive } from 'vue';
+import { ref, reactive, watch } from 'vue';
 
 // Connection status
 export const connectionStatus = ref<string>('disconnected');
@@ -97,6 +97,16 @@ export const fakeDataSettings = reactive({
 
 // Global recording settings to persist across views
 export const recordingDirectory = ref<string>('');
-export const maxRecordingDuration = ref<number>(30); // Default to 30 minutes
+
+// Load maxRecordingDuration from localStorage or use default
+const savedDuration = localStorage.getItem('maxRecordingDuration');
+export const maxRecordingDuration = ref<number>(savedDuration ? parseInt(savedDuration) : 30);
+
+// Save maxRecordingDuration to localStorage when it changes
+maxRecordingDuration.value = Math.max(1, maxRecordingDuration.value); // Ensure at least 1 minute
+watch(maxRecordingDuration, (newValue: number) => {
+  localStorage.setItem('maxRecordingDuration', newValue.toString());
+}, { immediate: true });
+
 export const recordingFormat = ref<string>('csv'); // Default format
 export const autoStartRecording = ref<boolean>(false); // Default auto-start setting
