@@ -4,7 +4,7 @@ import { loadBasicFileInfo, loadFileMetadata } from './fileLoader';
 import { stat } from '@tauri-apps/plugin-fs';
 import { type RecordingFile } from './types';
 import { formatFileSize, formatDuration } from './formatters';
-import { sortFilesByNewest } from './sortUtils';
+
 
 // Create a reactive file store that can be shared between components
 const files = ref<RecordingFile[]>([]);

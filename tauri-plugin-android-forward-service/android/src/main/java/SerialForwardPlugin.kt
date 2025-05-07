@@ -10,22 +10,32 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import app.tauri.plugin.Invoke
 
+/**
+ * Arguments for the sendMessage command
+ */
 @InvokeArg
-class PingArgs {
+class MessageArgs {
   var value: String? = null
 }
 
+/**
+ * Tauri plugin for Android forward service functionality
+ * This plugin enables background recording and serial data handling on Android devices
+ */
 @TauriPlugin
-class ExamplePlugin(private val activity: Activity): Plugin(activity) {
-    private val implementation = Example()
+class SerialForwardPlugin(private val activity: Activity): Plugin(activity) {
+    private val serialUtility = SerialUtility()
 
+    /**
+     * Sends a message to the serial utility
+     */
     @Command
-    fun ping(invoke: Invoke) {
-        val args = invoke.parseArgs(PingArgs::class.java)
+    fun sendMessage(invoke: Invoke) {
+        val args = invoke.parseArgs(MessageArgs::class.java)
 
-        val ret = JSObject()
-        ret.put("value", implementation.pong(args.value ?: "default value :("))
-        invoke.resolve(ret)
+        val response = JSObject()
+        response.put("value", serialUtility.processMessage(args.value ?: "No message provided"))
+        invoke.resolve(response)
     }
 
     /**
@@ -33,7 +43,7 @@ class ExamplePlugin(private val activity: Activity): Plugin(activity) {
      * application is backgrounded. On Android 8.0+ we must use startForegroundService.
      */
     @Command
-    fun startService(invoke: Invoke) {
+    fun startRecordingService(invoke: Invoke) {
         val ctx = activity.applicationContext
         val intent = Intent(ctx, RecordingForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -49,11 +59,11 @@ class ExamplePlugin(private val activity: Activity): Plugin(activity) {
      * Stops the foreground recording service.
      */
     @Command
-    fun stopService(invoke: Invoke) {
+    fun stopRecordingService(invoke: Invoke) {
         val ctx = activity.applicationContext
         val intent = Intent(ctx, RecordingForegroundService::class.java)
         ctx.stopService(intent)
-
+        
         invoke.resolve()
     }
 }
