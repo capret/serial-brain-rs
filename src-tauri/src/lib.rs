@@ -5,6 +5,8 @@ mod reader;
 mod state;
 mod types;
 mod file_utils;
+mod streaming;
+mod recording;
 use commands::{
     connect_serial, connect_socket, get_available_ports, get_recent_data, get_recording_filename,
     get_recording_status, get_signal_quality, record_video_stream, send_serial, start_fake_data, start_recording, 
