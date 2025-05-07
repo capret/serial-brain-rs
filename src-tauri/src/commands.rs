@@ -658,7 +658,7 @@ pub fn get_signal_quality(state: State<Arc<SerialState>>) -> Result<Vec<bool>, S
 }
 
 #[tauri::command]
-pub async fn record_stream(
+pub async fn record_video_stream(
     app_handle: tauri::AppHandle,
     file_path: String,
 ) -> Result<bool, String> {

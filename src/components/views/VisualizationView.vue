@@ -78,13 +78,13 @@ function toggleRunning() {
   isRunning.value = !isRunning.value;
 }
 
-async function ping(value: string): Promise<string | null> {
-  return await invoke<{value?: string}>('plugin:android-forward-service|ping', {
-    payload: {
-      value,
-    },
-  }).then((r) => (r.value ? r.value : null));
-}
+// async function ping(value: string): Promise<string | null> {
+//   return await invoke<{value?: string}>('plugin:android-forward-service|ping', {
+//     payload: {
+//       value,
+//     },
+//   }).then((r) => (r.value ? r.value : null));
+// }
 async function func_test(){
   console.log("Starting record_stream test function...");
   try {

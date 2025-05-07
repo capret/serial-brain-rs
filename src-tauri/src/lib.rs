@@ -7,7 +7,7 @@ mod types;
 mod file_utils;
 use commands::{
     connect_serial, connect_socket, get_available_ports, get_recent_data, get_recording_filename,
-    get_recording_status, get_signal_quality, record_stream, send_serial, start_fake_data, start_recording, 
+    get_recording_status, get_signal_quality, record_video_stream, send_serial, start_fake_data, start_recording, 
     start_streaming, stop_data_acquisition, stop_recording, stop_streaming,
 };
 use file_utils::get_file_stats;
@@ -47,7 +47,7 @@ pub fn run() {
             get_recording_filename,
             get_signal_quality,
             get_file_stats,
-            record_stream
+            record_video_stream
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
