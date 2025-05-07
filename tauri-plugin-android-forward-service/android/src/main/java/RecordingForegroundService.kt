@@ -27,7 +27,7 @@ class RecordingForegroundService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Serial Brain Recording")
             .setContentText("Recording in progress…")
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
         startForeground(1, notification)
