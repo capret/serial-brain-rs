@@ -55,7 +55,8 @@ import {
   connectionStatus, 
   maxRecordingDuration,
   recordingFormat,
-  autoStartRecording
+  autoStartRecording,
+  isRunning
 } from '../../store/appState';
 import {
   setupRecordingFileWatcher,
@@ -71,6 +72,17 @@ import {
   RecordingStatus,
   RecordedFilesList
 } from '../records';
+
+// Define interfaces for backend response types
+interface ConnectionStatusResponse {
+  status: string;
+  isRunning: boolean;
+}
+
+interface RecordingStatusResponse {
+  isRecording: boolean;
+  filename: string;
+}
 
 // State variables for recording
 const isRecording = ref<boolean>(false);
@@ -204,27 +216,68 @@ onMounted(async () => {
   try {
     // First, set up the recordings directory in AppData
     await selectDirectory();
-    const status = await invoke('get_recording_status');
-    isRecording.value = status as boolean;
+    
+    // Check the current connection status from the backend
+    try {
+      console.log('Fetching connection status from backend...');
+      const connStatus = await invoke('get_connection_status') as ConnectionStatusResponse;
+      
+      // Update the frontend connection status based on backend state
+      if (connStatus) {
+        console.log(`Backend reports connection status: ${connStatus.status}`);
+        connectionStatus.value = connStatus.status;
+        
+        console.log(`Backend reports running state: ${connStatus.isRunning}`);
+        isRunning.value = connStatus.isRunning;
+      }
+    } catch (error) {
+      console.warn('Failed to get connection status from backend:', error);
+    }
+    
+    // Check if we're already recording when navigating to this page
+    try {
+      const recordingStatus = await invoke('get_recording_status') as RecordingStatusResponse;
+      
+      if (recordingStatus) {
+        isRecording.value = recordingStatus.isRecording;
+        recordingFilename.value = recordingStatus.filename;
+        
+        console.log('Recording status from backend:', isRecording.value ? 'Active' : 'Inactive');
+        if (recordingFilename.value) {
+          console.log('Current recording filename:', recordingFilename.value);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to get recording status:', error);
+    }
     
     // Set up event listeners
     await setupEventListeners();
     
-    // If recording is active, get the current recording filename from the backend
-    if (isRecording.value) {
-      // Get the current recording filename from the backend
-      try {
-        const filename = await invoke('get_recording_filename') as string;
-        if (filename) {
-          console.log('Retrieved current recording filename from backend:', filename);
-          recordingFilename.value = filename;
-          
-          // Set up periodic updates for the active recording
-          setupActiveRecordingUpdates();
-        }
-      } catch (error) {
-        console.error('Failed to get recording filename:', error);
-      }
+    // If recording is active, set up file watcher and periodic updates
+    if (isRecording.value && recordingFilename.value) {
+      // Set up a watcher for the recording file
+      const fullPath = `${recordingDirectory.value}/${recordingFilename.value}`;
+      fileWatchUnsubscribe.value = await setupRecordingFileWatcher(
+        fullPath,
+        async () => {
+          // When file changes, update it without triggering a full reload
+          await findAndUpdateActiveRecordingFile(
+            true,
+            recordingDirectory.value,
+            recordingFilename.value,
+            recordingFormat.value,
+            [],
+            (path) => activeRecordingPath.value = path,
+            (name) => recordingFilename.value = name,
+            () => {} // No need to update files here
+          );
+        },
+        null
+      );
+      
+      // Set up periodic updates for the active recording
+      setupActiveRecordingUpdates();
     }
   } catch (error) {
     console.error('Error initializing component:', error);
@@ -321,8 +374,10 @@ async function startRecording(format?: string, directory?: string, duration?: nu
       } catch (e) {
         console.warn('Forward service not available or failed to start:', e);
       }
+    } else if (isSegmentChange) {
+      console.log('Segment change - not restarting Android service');
     } else {
-      console.log('Android service already running or segment change - not restarting service');
+      console.log('Android service already running - not restarting');
     }
     
     isRecording.value = true;

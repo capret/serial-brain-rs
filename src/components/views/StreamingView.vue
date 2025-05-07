@@ -76,14 +76,13 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { writeFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { save } from '@tauri-apps/plugin-dialog';
 
 /* -------------------------------------------------------------------
    constants
 ------------------------------------------------------------------- */
-const SRC_W = 640;           // incoming frame width
-const SRC_H = 480;           // incoming frame height
-const FPS   = 30;
+const SRC_W = 320;           // incoming frame width
+const SRC_H = 240;           // incoming frame height
 
 /* -------------------------------------------------------------------
    reactive state
@@ -104,15 +103,9 @@ let   prevCtx: CanvasRenderingContext2D;
 
 // off‑screen canvas for high‑res recording
 const recCanvas = document.createElement('canvas');
-recCanvas.width  = SRC_W;
+recCanvas.width = SRC_W;
 recCanvas.height = SRC_H;
 const recCtx = recCanvas.getContext('2d')!;
-
-/* -------------------------------------------------------------------
-   MediaRecorder
-------------------------------------------------------------------- */
-let mediaRecorder: MediaRecorder | null = null;
-let recordedChunks: Blob[] = [];
 
 /* -------------------------------------------------------------------
    event unlisten handles
@@ -153,49 +146,48 @@ function toggleFake() {
 }
 
 /* ===================================================================
-   recording controls
+   recording controls - using backend video recorder
 =================================================================== */
-function toggleRecording() {
-  isRecording.value ? stopRecording() : startRecording();
+async function toggleRecording() {
+  isRecording.value ? await stopRecording() : await startRecording();
 }
 
-function startRecording() {
-  // prepare stream
-  const stream = recCanvas.captureStream(FPS);
-
-  // choose MIME
-  let mime = 'video/mp4';
-  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
-
-  mediaRecorder  = new MediaRecorder(stream, { mimeType: mime });
-  recordedChunks = [];
-  isRecording.value = true;
-
-  mediaRecorder.ondataavailable = (e: BlobEvent) => {
-    if (e.data.size > 0) recordedChunks.push(e.data);
-  };
-
-  mediaRecorder.onstop = async () => {
-    if (!recordedChunks.length) return;
-    const blob   = new Blob(recordedChunks, { type: mime });
-    const buffer = new Uint8Array(await blob.arrayBuffer());
-    const ext    = mime.includes('mp4') ? 'mp4' : 'webm';
-    const file   = `camera_recording_${Date.now()}.${ext}`;
-
-    try {
-      await writeFile(file, buffer, { baseDir: BaseDirectory.Document });
-      console.log(`📁 Saved to Documents/${file}`);
-    } catch (err) {
-      console.error('Failed to save recording:', err);
+async function startRecording() {
+  try {
+    // Ask user where to save the file
+    const savePath = await save({
+      filters: [{
+        name: 'Video',
+        extensions: ['mp4']
+      }]
+    });
+    
+    if (!savePath) return; // User cancelled
+    
+    // Start recording in the backend
+    const result = await invoke('start_stream_recording', { filePath: savePath });
+    
+    if (result) {
+      isRecording.value = true;
+      console.log('Backend video recording started');
+    } else {
+      console.error('Failed to start backend video recording');
     }
-  };
-
-  mediaRecorder.start();
+  } catch (err) {
+    console.error('Error starting recording:', err);
+    alert(`Failed to start recording: ${err}`);
+  }
 }
 
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-  isRecording.value = false;
+async function stopRecording() {
+  try {
+    const result = await invoke('stop_stream_recording');
+    console.log('Backend video recording stopped:', result);
+    isRecording.value = false;
+  } catch (err) {
+    console.error('Error stopping recording:', err);
+    alert(`Failed to stop recording: ${err}`);
+  }
 }
 
 /* ===================================================================

@@ -21,6 +21,7 @@
           <FilterConfigView v-if="primaryView === 'filters'" class="view" />
           <RecordingView v-if="primaryView === 'folder'" class="view" />
           <StreamingView v-if="primaryView === 'streaming'" class="view" />
+          <VideoRecorderView v-if="primaryView === 'videorecord'" class="view" />
           <!-- Additional Views (only in visualization) -->
           <StreamingView v-if="primaryView === 'visualization' && additionalViews.includes('streaming')" class="view" />
           <FilterConfigView v-if="primaryView === 'visualization' && additionalViews.includes('filters')" class="view" />
@@ -62,8 +63,9 @@ import SignalConfigView from './components/views/SignalConfigView.vue';
 import FilterConfigView from './components/views/FilterConfigView.vue';
 import RecordingView from './components/views/RecordingView.vue';
 import StreamingView from './components/views/StreamingView.vue';
+import VideoRecorderView from './components/views/VideoRecorderView.vue';
 import AppHeader from './components/AppHeader.vue';
-const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder', 'streaming'
+const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder', 'streaming', 'videorecord'
 const additionalViews = ref<string[]>([]);
 const collapsed = ref(false);
 

@@ -176,15 +176,58 @@ pub fn stop_recording(state: State<Arc<SerialState>>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_recording_status(state: State<Arc<SerialState>>) -> Result<bool, String> {
-    // Delegate to the implementation in the recording module
-    crate::recording::get_recording_status(state)
+pub fn get_recording_status(
+    state: State<Arc<SerialState>>,
+) -> Result<serde_json::Value, String> {
+    // Return the current recording status including filename and recording state
+    let recording_active = state.recording_active.load(Ordering::SeqCst);
+    let filename = if recording_active {
+        state.recording_filename.lock().unwrap().clone().unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let json = serde_json::json!({
+        "isRecording": recording_active,
+        "filename": filename,
+    });
+
+    Ok(json)
 }
 
 #[tauri::command]
-pub fn get_recording_filename(state: State<Arc<SerialState>>) -> Result<String, String> {
-    // Delegate to the implementation in the recording module
-    crate::recording::get_recording_filename(state)
+pub fn get_connection_status(
+    state: State<Arc<SerialState>>,
+) -> Result<serde_json::Value, String> {
+    // Get outbound_tx to check if we have a serial connection
+    let has_serial = state.outbound_tx.lock().unwrap().is_some();
+    
+    // Check for camera streaming
+    let camera_streaming = state.camera_stream_running.load(Ordering::SeqCst);
+    
+    // Check if signal streaming is active
+    let signal_streaming = state.signal_stream_running.load(Ordering::SeqCst);
+    
+    // Determine connection status based on state
+    let status = if has_serial {
+        "serial"
+    } else if camera_streaming {
+        "stream"
+    } else if signal_streaming {
+        "fake"
+    } else {
+        "disconnected"
+    };
+    
+    // Check if data is being received (any kind of streaming is active)
+    let is_running = camera_streaming || signal_streaming;
+    
+    let json = serde_json::json!({
+        "status": status,
+        "isRunning": is_running,
+    });
+
+    Ok(json)
 }
 
 #[tauri::command]
@@ -208,4 +251,70 @@ pub async fn record_video_stream(
     .map_err(|e| format!("Failed to record stream: {}", e))?;
     
     Ok(result.success)
+}
+
+#[tauri::command]
+pub async fn stop_video_recording(
+    app_handle: tauri::AppHandle,
+) -> Result<bool, String> {
+    println!("[Main App] Stopping video recording");
+    
+    tauri_plugin_record_stream::stop_record(app_handle)
+        .map_err(|e| format!("Failed to stop video recording: {}", e))
+}
+
+#[tauri::command]
+pub async fn push_video_frame(
+    app_handle: tauri::AppHandle,
+    frame_data: String,
+) -> Result<bool, String> {
+    // Don't print the base64 data - it would flood the console
+    println!("[Main App] Pushing video frame...");
+    
+    tauri_plugin_record_stream::push_frame(app_handle, frame_data)
+        .map_err(|e| format!("Failed to push video frame: {}", e))
+}
+
+#[tauri::command]
+pub async fn start_stream_recording(
+    app_handle: tauri::AppHandle,
+    file_path: String,
+    state: tauri::State<'_, Arc<SerialState>>,
+) -> Result<bool, String> {
+    println!("[Main App] Starting video stream recording to: {}", file_path);
+    
+    // Start the recording in the plugin
+    let result = tauri_plugin_record_stream::start_record(
+        app_handle.clone(),
+        tauri_plugin_record_stream::StartRecordRequest { file_path }
+    )
+    .await
+    .map_err(|e| format!("Failed to start video recording: {}", e))?;
+    
+    // If successful, set the recording flag in SerialState
+    if result.success {
+        state.video_recording_active.store(true, std::sync::atomic::Ordering::SeqCst);
+        println!("[Main App] Video recording started successfully");
+    }
+    
+    Ok(result.success)
+}
+
+#[tauri::command]
+pub async fn stop_stream_recording(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<SerialState>>,
+) -> Result<bool, String> {
+    println!("[Main App] Stopping video stream recording");
+    
+    // First set the recording flag to false to stop streaming frames
+    state.video_recording_active.store(false, std::sync::atomic::Ordering::SeqCst);
+    
+    // Then stop the recording in the plugin
+    let result = tauri_plugin_record_stream::stop_record(app_handle)
+        .map_err(|e| format!("Failed to stop video recording: {}", e))?;
+    
+    println!("[Main App] Video recording stopped successfully");
+    
+    Ok(result)
 }

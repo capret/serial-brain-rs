@@ -19,5 +19,31 @@ pub(crate) async fn start_record<R: Runtime>(
 ) -> Result<StartRecordResponse> {
     println!("[record_plugin] Recording Stream is called");
     app.record_stream().start_record(payload)
-    
+}
+
+#[command]
+pub(crate) fn push_frame<R: Runtime>(
+    app: AppHandle<R>,
+    b64_png: String,
+) -> Result<bool> {
+    app.record_stream().push_frame(b64_png)
+}
+
+#[command]
+pub(crate) fn stop_record<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<bool> {
+    println!("[record_plugin] Stopping recording");
+    app.record_stream().stop_record()
+}
+
+#[command]
+pub(crate) fn configure_record<R: Runtime>(
+    app: AppHandle<R>,
+    width: u32,
+    height: u32,
+    fps: f64,
+) -> Result<bool> {
+    println!("[record_plugin] Configuring recording: {}x{} @ {}fps", width, height, fps);
+    crate::configure_record(app, width, height, fps)
 }

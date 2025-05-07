@@ -26,6 +26,28 @@ pub async fn start_record<R: Runtime>(app: tauri::AppHandle<R>, payload: StartRe
   app.record_stream().start_record(payload)
 }
 
+/// Push a frame to the current recording
+pub fn push_frame<R: Runtime>(app: tauri::AppHandle<R>, b64_png: String) -> Result<bool> {
+  app.record_stream().push_frame(b64_png)
+}
+
+/// Stop the current recording
+pub fn stop_record<R: Runtime>(app: tauri::AppHandle<R>) -> Result<bool> {
+  app.record_stream().stop_record()
+}
+
+/// Configure recording parameters
+pub fn configure_record<R: Runtime>(_app: tauri::AppHandle<R>, _width: u32, _height: u32, _fps: f64) -> Result<bool> {
+  #[cfg(mobile)]
+  return _app.record_stream().configure_record(_width, _height, _fps);
+  
+  #[cfg(desktop)]
+  {
+    // Desktop doesn't need separate configure step - will use these values when starting recording
+    Ok(true)
+  }
+}
+
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the record-stream APIs.
 pub trait RecordStreamExt<R: Runtime> {
   fn record_stream(&self) -> &RecordStream<R>;
@@ -40,7 +62,13 @@ impl<R: Runtime, T: Manager<R>> crate::RecordStreamExt<R> for T {
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new("record-stream")
-    .invoke_handler(tauri::generate_handler![commands::ping, commands::start_record])
+    .invoke_handler(tauri::generate_handler![
+      commands::ping, 
+      commands::start_record,
+      commands::push_frame,
+      commands::stop_record,
+      commands::configure_record
+    ])
     .setup(|app, api| {
       #[cfg(mobile)]
       let record_stream = mobile::init(app, api)?;

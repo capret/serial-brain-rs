@@ -115,25 +115,27 @@ pub fn stop_recording(state: State<Arc<SerialState>>) -> Result<(), String> {
 }
 
 /// Returns the current recording status (active or not).
-pub fn get_recording_status(state: State<Arc<SerialState>>) -> Result<bool, String> {
-    Ok(state.recording_active.load(Ordering::SeqCst))
-}
+// #[allow(dead_code)]
+// pub fn get_recording_status(state: State<Arc<SerialState>>) -> Result<bool, String> {
+//     Ok(state.recording_active.load(Ordering::SeqCst))
+// }
 
-/// Returns the current recording filename if there's an active recording.
-pub fn get_recording_filename(state: State<Arc<SerialState>>) -> Result<String, String> {
-    // Get the current recording filename if there's an active recording
-    if !state.recording_active.load(Ordering::SeqCst) {
-        return Ok(String::new()); // Return empty string if not recording
-    }
+// /// Returns the current recording filename if there's an active recording.
+// #[allow(dead_code)]
+// pub fn get_recording_filename(state: State<Arc<SerialState>>) -> Result<String, String> {
+//     // Get the current recording filename if there's an active recording
+//     if !state.recording_active.load(Ordering::SeqCst) {
+//         return Ok(String::new()); // Return empty string if not recording
+//     }
     
-    // Get the current recording information from state
-    if let Some(current_filename) = &*state.recording_filename.lock().unwrap() {
-        return Ok(current_filename.clone());
-    }
+//     // Get the current recording information from state
+//     if let Some(current_filename) = &*state.recording_filename.lock().unwrap() {
+//         return Ok(current_filename.clone());
+//     }
     
-    // Fallback - we're recording but can't get filename
-    Ok(String::new())
-}
+//     // Fallback - we're recording but can't get filename
+//     Ok(String::new())
+// }
 
 /// Spawns a thread to handle recording data to files.
 fn spawn_recording_thread(

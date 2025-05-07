@@ -13,8 +13,8 @@ use std::thread;
 use tauri::{AppHandle, State, Emitter};
 
 // Constants for fake stream image generation
-const W: u32 = 640;
-const H: u32 = 480;
+const W: u32 = 320;
+const H: u32 = 240;
 
 /// Starts a video streaming process, either fake (generated) or from a URL.
 /// 
@@ -64,6 +64,9 @@ fn start_fake_stream(
     let running = state.camera_stream_running.clone();
     let app_clone = app_handle.clone();
     
+    // Clone the Arc before moving into the thread to avoid lifetime issues
+    let state_inner = Arc::clone(&state);
+    
     let handle = thread::spawn(move || {
         let mut rng = thread_rng();
         let mut frame_count = 0;
@@ -101,7 +104,15 @@ fn start_fake_stream(
             let _ = app_clone.emit("frame_analysis", Arc::new(is_bright_enough));
 
             let b64 = STANDARD.encode(&buf);
-            let _ = app_clone.emit("frame", Arc::new(b64));
+            let _ = app_clone.emit("frame", Arc::new(b64.clone()));
+            
+            // Also push frame to video recorder if recording is active
+            if state_inner.video_recording_active.load(Ordering::SeqCst) {
+                // Don't use expect() or unwrap() to avoid crashing the thread if recording fails
+                if let Err(e) = tauri_plugin_record_stream::push_frame(app_clone.clone(), b64) {
+                    println!("Error pushing frame to video recorder: {}", e);
+                }
+            }
             std::thread::sleep(Duration::from_millis(33));
         }
     });
@@ -119,6 +130,9 @@ fn start_real_stream(
     state.camera_stream_running.store(true, Ordering::SeqCst);
     let running = state.camera_stream_running.clone();
     let app_clone = app_handle.clone();
+    
+    // Clone the Arc before moving into the thread to avoid lifetime issues
+    let state_inner = Arc::clone(&state);
     
     let handle = thread::spawn(move || {
         // build HTTP client with timeout
@@ -214,7 +228,15 @@ fn start_real_stream(
                             
                             // Encode the image to base64 and emit to frontend
                             let b64 = STANDARD.encode(&buffer);
-                            let _ = app_clone.emit("frame", Arc::new(b64));
+                            let _ = app_clone.emit("frame", Arc::new(b64.clone()));
+                            
+                            // Also push frame to video recorder if recording is active
+                            if state_inner.video_recording_active.load(Ordering::SeqCst) {
+                                // Don't use expect() or unwrap() to avoid crashing the thread if recording fails
+                                if let Err(e) = tauri_plugin_record_stream::push_frame(app_clone.clone(), b64) {
+                                    println!("Error pushing frame to video recorder: {}", e);
+                                }
+                            }
                         }
                         Err(e) => {
                             let _ = app_clone.emit("stream_error", Arc::new(format!("Error reading frame: {}", e)));

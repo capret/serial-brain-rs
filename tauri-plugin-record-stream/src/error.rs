@@ -9,6 +9,18 @@ pub enum Error {
   #[cfg(mobile)]
   #[error(transparent)]
   PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),
+  #[error("Video writer error: {0}")]
+  VideoWriterError(String),
+  #[error("Image processing error: {0}")]
+  ImageError(String),
+  #[error("Base64 decoding error")]
+  Base64Error(#[from] base64::DecodeError),
+  #[error("OpenCV error")]
+  OpenCvError(#[from] opencv::Error),
+  #[error("Image load error")]
+  ImageLoadError(#[from] image::ImageError),
+  #[error("Mutex lock error")]
+  MutexError,
 }
 
 impl Serialize for Error {
