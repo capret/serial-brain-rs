@@ -31,30 +31,65 @@
     </div>
     
     <!-- File grid with transition animations -->
-    <div v-else class="file-grid grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-      <transition-group name="filter" tag="div" class="contents">
-        <FileCard 
-          v-for="file in files" 
-          :key="file.path" 
-          :file="file"
-          :is-active-recording="isFileActiveRecording(file)"
-          @action="handleFileAction"
-          @update-file-size="handleFileSizeUpdate"
-        />
-      </transition-group>
+    <div v-else :key="componentKey">
+      <div class="file-grid-container">
+        <transition name="page" mode="out-in">
+          <div :key="currentPage" class="file-grid grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <FileCard 
+              v-for="file in paginatedFiles" 
+              :key="file.path" 
+              :file="file"
+              :is-active-recording="fileStore.isActiveRecording(file.path)"
+              @action="handleFileAction"
+              @update-file-size="handleFileSizeUpdate"
+            />
+          </div>
+        </transition>
+      </div>
+      <!-- Pagination Controls with ellipsis for many pages -->
+      <div v-if="totalPages > 1" class="flex justify-center items-center mt-6 space-x-2">
+        <button :disabled="currentPage === 1" @click="goToPage(currentPage - 1)" class="px-3 py-1 rounded bg-gray-700 text-white disabled:opacity-50">Prev</button>
+        
+        <!-- First page button always visible -->
+        <button v-if="totalPages > 0" 
+          @click="goToPage(1)" 
+          :class="['px-3 py-1 rounded', 1 === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white']">
+          1
+        </button>
+        
+        <!-- Left ellipsis -->
+        <span v-if="showLeftEllipsis" class="px-2 text-gray-400">...</span>
+        
+        <!-- Page buttons around current page -->
+        <button v-for="page in middlePages" :key="page" 
+          @click="goToPage(page)" 
+          :class="['px-3 py-1 rounded', page === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white']">
+          {{ page }}
+        </button>
+        
+        <!-- Right ellipsis -->
+        <span v-if="showRightEllipsis" class="px-2 text-gray-400">...</span>
+        
+        <!-- Last page button if not already shown -->
+        <button v-if="totalPages > 1 && !middlePages.includes(totalPages)" 
+          @click="goToPage(totalPages)" 
+          :class="['px-3 py-1 rounded', totalPages === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white']">
+          {{ totalPages }}
+        </button>
+        
+        <button :disabled="currentPage === totalPages" @click="goToPage(currentPage + 1)" class="px-3 py-1 rounded bg-gray-700 text-white disabled:opacity-50">Next</button>
+      </div>
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
+import { computed } from 'vue';
 import { ref, watch, onUnmounted, onMounted } from 'vue';
 import FileCard from './FileCard.vue';
 import { type RecordingFile } from '../../utils/records/types';
-import { loadDirectoryFiles } from '../../utils/records/fileLoader';
 import { syncFile, deleteFile, uploadFile } from '../../utils/records/fileOperations';
-import { isActiveRecordingFile } from '../../utils/records/recordingFileHelpers';
-import { watchImmediate, BaseDirectory } from '@tauri-apps/plugin-fs';
-import { listen } from '@tauri-apps/api/event';
+import fileStore from '../../utils/records/fileStore';
 
 // Props
 const props = defineProps({
@@ -72,182 +107,196 @@ const props = defineProps({
   }
 });
 
-// State
-const files = ref<RecordingFile[]>([]);
-const isLoading = ref(false);
-const errorMessage = ref<string>('');
-let filenameChangeUnsubscribe: (() => void) | null = null;
+// Use the persistent file store
+const files = fileStore.files;
+const isLoading = fileStore.isLoading;
+const errorMessage = fileStore.errorMessage;
 
-// Watch for directory changes to set up watcher
-watch(() => props.recordingDirectory, async (newPath) => {
-  if (newPath) {
-    try {
-      await loadFiles();
-      // Set up periodic refresh for active recordings
-      if (props.isRecording) {
-        console.log('Setting up periodic refresh for file list during recording');
-        const refreshInterval = setInterval(() => {
-          if (props.isRecording) {
-            loadFiles();
-          } else {
-            clearInterval(refreshInterval);
-          }
-        }, 2000); // Refresh every 5 seconds during active recording
-        
-        // Clean up interval when component is unmounted
-        onUnmounted(() => {
-          clearInterval(refreshInterval);
-        });
-      }
-    } catch (error) {
-      console.error('Error setting up directory watcher:', error);
-      errorMessage.value = `Error watching directory: ${error}`;
+// Track if we've loaded metadata for current page
+const currentPageMetadataLoaded = ref(false);
+
+// Pagination state
+const currentPage = ref(1);
+const pageSize = ref(6); // Show 6 files per page (2 rows of 3)
+
+const totalPages = computed(() => Math.max(1, Math.ceil(files.value.length / pageSize.value)));
+
+const paginatedFiles = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const pageFiles = files.value.slice(start, start + pageSize.value);
+  
+  // Set flag to load metadata for this page
+  currentPageMetadataLoaded.value = false;
+  
+  return pageFiles;
+});
+
+// Pagination display logic - which page numbers to show
+const MAX_VISIBLE_PAGES = 3; // Max number of page buttons to show (excluding ellipsis)
+
+const middlePages = computed(() => {
+  if (totalPages.value <= MAX_VISIBLE_PAGES + 2) { // +2 for first and last pages
+    // If few pages, show all pages from 2 to totalPages-1
+    return Array.from({ length: Math.max(0, totalPages.value - 2) }, (_, i) => i + 2);
+  }
+  
+  // Calculate range around current page
+  const rangeStart = Math.max(2, currentPage.value - 1);
+  const rangeEnd = Math.min(totalPages.value - 1, currentPage.value + 1);
+  
+  return Array.from(
+    { length: rangeEnd - rangeStart + 1 },
+    (_, i) => i + rangeStart
+  );
+});
+
+const showLeftEllipsis = computed(() => 
+  totalPages.value > MAX_VISIBLE_PAGES + 2 && middlePages.value[0] > 2
+);
+
+const showRightEllipsis = computed(() => 
+  totalPages.value > MAX_VISIBLE_PAGES + 2 && 
+  middlePages.value[middlePages.value.length - 1] < totalPages.value - 1
+);
+
+function goToPage(page: number) {
+  if (page >= 1 && page <= totalPages.value) {
+    // Scroll back to top when changing pages
+    window.scrollTo(0, 0);
+    currentPage.value = page;
+    
+    // Reset metadata loading state for the new page
+    currentPageMetadataLoaded.value = false;
+  }
+}
+
+// Initialize on mount
+// We need a key to force re-rendering when needed
+const componentKey = ref(0);
+
+// Flag to prevent double initialization
+const isInitialized = ref(false);
+
+// Initialize component - handle both mounting and directory changes
+async function initializeComponent(directoryPath: string) {
+  if (!directoryPath || directoryPath.trim() === '') {
+    console.log('Skipping initialization - empty directory path');
+    return;
+  }
+  
+  console.log('Initializing component with directory:', directoryPath);
+  
+  // Set recording state first
+  fileStore.updateRecordingState(props.isRecording, props.recordingFilename);
+  
+  // Only load files if this is a new directory or first load
+  if (!isInitialized.value || directoryPath !== fileStore.currentDirectory) {
+    await fileStore.setDirectory(directoryPath);
+    isInitialized.value = true;
+    currentPage.value = 1; // Reset to first page on new directory
+    currentPageMetadataLoaded.value = false; // Reset metadata loaded state
+    console.log('Component initialization complete');
+  }
+}
+onMounted(async () => {
+  console.log('RecordedFilesList mounted...');
+  
+  // Check if we have a valid directory on mount
+  if (props.recordingDirectory && props.recordingDirectory.trim() !== '') {
+    console.log(`Directory available on mount: ${props.recordingDirectory}`);
+    await initializeComponent(props.recordingDirectory);
+    
+    // Force a re-render if we have files but UI isn't updating
+    if (files.value.length > 0 && paginatedFiles.value.length === 0) {
+      console.log('Forcing component re-render');
+      componentKey.value++;
+    }
+  } else {
+    // If no directory yet, we'll rely on the watch to initialize when it becomes available
+    console.log('No directory available on mount, waiting for directory to be set');
+  }
+});
+
+// Watch for directory changes
+watch(
+  () => props.recordingDirectory,
+  async (newDirectory, oldDirectory) => {
+    console.log(`Recording directory changed: ${oldDirectory} -> ${newDirectory}`);
+    if (newDirectory && newDirectory !== oldDirectory) {
+      await initializeComponent(newDirectory);
     }
   }
+);
+
+// Watch paginated files to load detailed metadata for current page
+watch(
+  () => paginatedFiles.value,
+  async (newPageFiles) => {
+    if (!currentPageMetadataLoaded.value && newPageFiles.length > 0) {
+      console.log('Loading metadata for current page files...');
+      await fileStore.loadMetadataForPage(newPageFiles);
+      currentPageMetadataLoaded.value = true;
+    }
+  },
+  { immediate: true }
+);
+
+// Watch for directory changes - with special handling for initial directory setting
+watch(() => props.recordingDirectory, async (newPath, oldPath) => {
+  if (!newPath || newPath.trim() === '') {
+    console.log('Ignoring empty directory path');
+    return;
+  }
+  
+  // Handle initial directory setting (when it wasn't available on mount)
+  if (!isInitialized.value) {
+    console.log(`Directory now available: ${newPath}`);
+    await initializeComponent(newPath);
+  }
+  // Handle directory change
+  else if (newPath !== fileStore.currentDirectory) {
+    console.log(`Directory changed from: ${oldPath} to: ${newPath}`);
+    await initializeComponent(newPath);
+  }
 });
 
+// Store the last known recording filename to handle stop recording properly
+const lastRecordingFilename = ref('');
 
-watch(() => props.isRecording, async (isRecording) => {
-  if (isRecording) {
-    await loadFiles();
+// Watch for recording state changes
+watch([() => props.isRecording, () => props.recordingFilename], async ([isRecording, filename]) => {
+  // Skip if not initialized yet (will be handled during initialization)
+  if (!isInitialized.value) return;
+  
+  // Store the last valid filename when we have one
+  if (filename && filename.trim() !== '') {
+    lastRecordingFilename.value = filename;
+    console.log('Saved recording filename:', lastRecordingFilename.value);
+  }
+  
+  // When recording stops but filename is empty, use the last known filename
+  if (!isRecording && (!filename || filename.trim() === '') && lastRecordingFilename.value) {
+    console.log('Recording stopped with empty filename, using last known filename:', lastRecordingFilename.value);
+    fileStore.updateRecordingState(isRecording, lastRecordingFilename.value);
   } else {
-    setTimeout(() => loadFiles(), 1000); // Small delay to ensure file is closed
+    console.log('Recording state changed:', isRecording, filename);
+    fileStore.updateRecordingState(isRecording, filename);
   }
 });
 
-
-onMounted(async () => {
-  console.log('Record Files List Page OnMount')
-  filenameChangeUnsubscribe = await listen('recording-filename-changed', (event) => {
-    console.log('RecordedFilesList: Recording filename changed to:', event.payload);
-    setTimeout(() => loadFiles(), 500);
-  });
-});
-
-// Clean up event listeners
+// Clean up on unmount
 onUnmounted(() => {
-  if (filenameChangeUnsubscribe) {
-    filenameChangeUnsubscribe();
-    filenameChangeUnsubscribe = null;
-  }
+  fileStore.cleanup();
 });
 
 // Methods
-async function loadFiles() {
-  if (!props.recordingDirectory) return;
-  
-  // Only show loading indicator if we have no files yet
-  if (files.value.length === 0) {
-    isLoading.value = true;
-  }
-  errorMessage.value = '';
-  
-  try {
-    const newFiles = await loadDirectoryFiles(props.recordingDirectory, BaseDirectory.Document);
-    updateFilesList(newFiles);
-  } catch (error) {
-    console.error('Error loading files:', error);
-    errorMessage.value = `Failed to load files: ${error}`;
-    isLoading.value = false;
-  }
-}
-
-// Efficiently update files list by finding new and deleted files
-function updateFilesList(newFiles: RecordingFile[]) {
-  if (!newFiles || newFiles.length === 0) {
-    if (files.value.length > 0) {
-      // All files were deleted
-      files.value = [];
-    }
-    isLoading.value = false;
-    return;
-  }
-  
-  // Create maps for quick lookups
-  const currentFilesMap = new Map(files.value.map(file => [file.path, file]));
-  const newFilesMap = new Map(newFiles.map(file => [file.path, file]));
-  
-  // 1. Find files that were deleted (in current but not in new)
-  const filesToRemove = files.value.filter(file => !newFilesMap.has(file.path));
-  
-  // 2. Find files that were added (in new but not in current)
-  const filesToAdd = newFiles.filter(file => !currentFilesMap.has(file.path));
-  
-  // 3. Find files that were updated (in both, but changed)
-  const filesToUpdate: {index: number, file: RecordingFile}[] = [];
-  files.value.forEach((file, index) => {
-    const newFile = newFilesMap.get(file.path);
-    if (newFile) {
-      // Check if any metadata changed
-      if (file.rawSize !== newFile.rawSize || 
-          (file.dateObject?.getTime() !== newFile.dateObject?.getTime()) ||
-          file.duration !== newFile.duration) {
-        filesToUpdate.push({index, file: newFile});
-      }
-    }
-  });
-  
-  // If there's nothing to change, exit early
-  if (filesToRemove.length === 0 && filesToAdd.length === 0 && filesToUpdate.length === 0) {
-    isLoading.value = false;
-    return;
-  }
-  
-  console.log(`Files to add: ${filesToAdd.length}, remove: ${filesToRemove.length}, update: ${filesToUpdate.length}`);
-  
-  // Apply updates in this order: remove, update, add
-  // 1. Remove deleted files
-  if (filesToRemove.length > 0) {
-    const pathsToRemove = new Set(filesToRemove.map(f => f.path));
-    files.value = files.value.filter(file => !pathsToRemove.has(file.path));
-  }
-  
-  // 2. Update changed files in place
-  filesToUpdate.forEach(({index, file}) => {
-    // Only update if the index is still valid
-    if (index < files.value.length) {
-      files.value[index] = {
-        ...files.value[index],
-        rawSize: file.rawSize,
-        size: file.size,
-        dateObject: file.dateObject,
-        modified: file.modified,
-        duration: file.duration
-      };
-    }
-  });
-  
-  // 3. Add new files
-  if (filesToAdd.length > 0) {
-    // Make sure the new files are also sorted properly
-    sortFilesByNewest(filesToAdd);
-    
-    // Create final array with remaining files + new files
-    const remainingFiles = files.value;
-    const finalFiles = [...filesToAdd, ...remainingFiles];
-    
-    // Sort the entire array by date again to ensure newest files are always first
-    sortFilesByNewest(finalFiles);
-    
-    // Add each file with animation (one at a time if wanted)
-    files.value = finalFiles;
-  }
-  
-  isLoading.value = false;
-}
-
 async function refreshFiles() {
-  await loadFiles();
+  await fileStore.loadFiles();
+  currentPage.value = 1; // Reset to first page on refresh
+  componentKey.value++; // Force re-render after refresh
 }
 
-// Check if a file is the current active recording
-function isFileActiveRecording(file: RecordingFile): boolean {
-  return isActiveRecordingFile(
-    file.name, 
-    props.recordingFilename,
-    props.isRecording
-  );
-}
+// No longer needed as we're using fileStore.isActiveRecording directly in the template
 
 // Handle file actions (open, delete, upload)
 async function handleFileAction({ action, file }: { action: string, file: RecordingFile }) {
@@ -257,7 +306,7 @@ async function handleFileAction({ action, file }: { action: string, file: Record
         await syncFile(file.path);
         break;
       case 'delete':
-        await deleteFile(file.path, loadFiles);
+        await deleteFile(file.path, fileStore.loadFiles);
         break;
       case 'upload':
         await uploadFile(file.path);
@@ -273,45 +322,14 @@ async function handleFileAction({ action, file }: { action: string, file: Record
 
 // Handle file size updates from active recording
 function handleFileSizeUpdate({ path, size, formattedSize }: { path: string, size: number, formattedSize: string }) {
-  // Find the file in our collection by path
-  const fileIndex = files.value.findIndex(file => file.path === path);
-  
-  if (fileIndex !== -1) {
-    // Update the file size in-place
-    files.value[fileIndex] = {
-      ...files.value[fileIndex],
-      rawSize: size,
-      size: formattedSize
-    };
-    console.log(`Updated file size for ${path} to ${formattedSize}`);
-    
-    // Re-sort files to ensure newest is always first
-    sortFilesByNewest(files.value);
-  }
+  fileStore.updateFileSize(path, size, formattedSize);
 }
 
-// Helper function to sort files with newest first
-function sortFilesByNewest(fileArray: RecordingFile[]): void {
-  fileArray.sort((a, b) => {
-    // First try to sort by date objects if available
-    if (a.dateObject instanceof Date && b.dateObject instanceof Date) {
-      return b.dateObject.getTime() - a.dateObject.getTime();
-    }
-    
-    // Fall back to timestamp in filename
-    const getTimestamp = (file: RecordingFile) => {
-      const match = file.name.match(/serial_recording_(\d+)/);
-      return match ? parseInt(match[1]) : 0;
-    };
-    
-    // Newest first (higher timestamp = newer)
-    return getTimestamp(b) - getTimestamp(a);
-  });
-}
+
 </script>
 
 <style scoped>
-/* Filter card add/delete animations */
+/* Filter card add/delete animations - for normal file updates */
 .filter-enter-active, .filter-leave-active {
   transition: all 200ms ease-in-out;
 }
@@ -324,13 +342,29 @@ function sortFilesByNewest(fileArray: RecordingFile[]): void {
   transform: scale(1);
 }
 
-/* Prevent flicker during updates */
+/* Page change animation - clean fade between pages */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 150ms ease;
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
+
+/* Fixed height container to prevent layout shifts */
+.file-grid-container {
+  position: relative;
+  min-height: 232px; /* Accommodates 2 rows of cards */
+}
+
 .file-grid {
   position: relative;
-  min-height: 100px; /* Ensure grid has minimum height while loading */
+  width: 100%;
 }
 
 .contents > * {
-  will-change: opacity, transform;
+  will-change: opacity;
 }
 </style>

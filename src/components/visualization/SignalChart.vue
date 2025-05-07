@@ -91,7 +91,17 @@ function recalcPlotHeight(): void {
    ==================================================== */
 const Dpr = window.devicePixelRatio || 1;
 const windowWidth = ref(window.innerWidth);
-const isSmallScreen = ref(platform() === "android");
+const isSmallScreen = ref(false);
+
+// Check if running on Android platform
+onMounted(async () => {
+  try {
+    const currentPlatform = await platform();
+    isSmallScreen.value = currentPlatform === "android";
+  } catch (e) {
+    console.error("Failed to determine platform:", e);
+  }
+});
 
 // Update window width on resize
 function updateWindowWidth() {

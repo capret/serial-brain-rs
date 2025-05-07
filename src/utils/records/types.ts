@@ -12,6 +12,7 @@ export interface RecordingFile {
   rawSize: number;
   dateObject: Date | null;
   key: string;
+  hasDetailedMetadata?: boolean; // Flag to track if detailed metadata has been loaded
 }
 
 /**
