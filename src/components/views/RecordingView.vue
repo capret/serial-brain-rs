@@ -48,6 +48,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { exists, mkdir, BaseDirectory, stat } from '@tauri-apps/plugin-fs';
 import * as path from '@tauri-apps/api/path';
 import { 
   recordingDirectory, 
@@ -56,8 +57,7 @@ import {
   recordingFormat,
   autoStartRecording
 } from '../../store/appState';
-import { 
-  formatDuration,
+import {
   setupRecordingFileWatcher,
   findAndUpdateActiveRecordingFile,
   UnsubscribeFn
@@ -77,6 +77,9 @@ const isRecording = ref<boolean>(false);
 const recordingFilename = ref<string>('');
 const activeRecordingPath = ref<string>('');
 const fileWatchUnsubscribe = ref<UnsubscribeFn | null>(null);
+
+// Track if the Android service is running
+const isServiceRunning = ref<boolean>(false);
 
 // Event listener unsubscribe function
 let recordingCompletedUnsubscribe: (() => void) | null = null;
@@ -101,22 +104,31 @@ async function setupEventListeners() {
     
     // Only restart if shouldRestartRecording is true
     if (payload.shouldRestartRecording) {
-      console.log('Auto-starting new recording...');
+      console.log('Auto-starting new recording segment...');
       
-      // Update UI state to show recording is temporarily stopped
+      // Temporarily set recording state to false
+      // but we'll keep the Android service running
       isRecording.value = false;
       
-      // Start a new recording with the same parameters
+      // Start a new recording segment with the same parameters
+      // but don't restart the Android service
       try {
         // Small delay to ensure the previous recording is properly closed
         setTimeout(async () => {
-          await startRecording(payload.format, payload.directory, payload.maxDurationMinutes);
+          await startRecording(payload.format, payload.directory, payload.maxDurationMinutes, true);
         }, 500);
       } catch (error) {
         console.error('Failed to auto-restart recording:', error);
         alert(`Failed to auto-restart recording: ${error}`);
       }
     }
+  });
+  
+  // Listen for recording filename changes (especially important for segment changes)
+  await listen('recording-filename-changed', (event) => {
+    const newFilename = event.payload as string;
+    console.log('Recording filename changed to:', newFilename);
+    recordingFilename.value = newFilename;
   });
 }
 
@@ -243,17 +255,41 @@ onUnmounted(() => {
   }
 });
 
-// Use AppData directory for recordings
+// Use Document directory with signal_data folder for recordings
 async function selectDirectory(): Promise<void> {
-  const home = await path.documentDir();
-  recordingDirectory.value = home;
-  console.log('Using documents directory for recordings:', home);
+  try {
+    // Get the document directory full path
+    const documentDir = await path.documentDir();
+    
+    // Check if signal_data directory exists
+    const folderExists = await exists('signal_data', {
+      baseDir: BaseDirectory.Document,
+    });
+    
+    // Create the directory if it doesn't exist
+    if (!folderExists) {
+      console.log('Creating signal_data directory in Documents');
+      await mkdir('signal_data', {
+        baseDir: BaseDirectory.Document,
+      });
+    }
+    
+    // Join the document dir with signal_data folder to get the full path
+    const fullPath = await path.join(documentDir, 'signal_data');
+    
+    // Set the recording directory path to the full absolute path
+    recordingDirectory.value = fullPath;
+    console.log('Using full path for recordings:', fullPath);
+  } catch (error) {
+    console.error('Error setting up signal_data directory:', error);
+    alert(`Failed to set up recordings directory: ${error}`);
+  }
 }
 
-async function startRecording(format?: string, directory?: string, duration?: number): Promise<void> {
+async function startRecording(format?: string, directory?: string, duration?: number, isSegmentChange: boolean = false): Promise<void> {
   // Use provided parameters or defaults from UI controls
   const recordFormat = format || recordingFormat.value;
-  const recordDir = directory || recordingDirectory.value;
+  const recordDir = directory || recordingDirectory.value; // This is now a full path
   const recordDuration = duration || maxRecordingDuration.value;
   
   if (!recordDir) {
@@ -276,11 +312,17 @@ async function startRecording(format?: string, directory?: string, duration?: nu
     console.log('Received filename from backend:', actualFilename);
     recordingFilename.value = actualFilename;
     
-    try {
-      await invoke('plugin:android-forward-service|start_forward_service');
-      console.log('Android foreground service started');
-    } catch (e) {
-      console.warn('Forward service not available or failed to start:', e);
+    // Only start the Android service if it's not already running
+    if (!isServiceRunning.value && !isSegmentChange) {
+      try {
+        await invoke('plugin:android-forward-service|start_forward_service');
+        console.log('Android foreground service started');
+        isServiceRunning.value = true;
+      } catch (e) {
+        console.warn('Forward service not available or failed to start:', e);
+      }
+    } else {
+      console.log('Android service already running or segment change - not restarting service');
     }
     
     isRecording.value = true;
@@ -317,11 +359,14 @@ async function stopRecording(): Promise<void> {
     await invoke('stop_recording');
     
     // Stop Android foreground service
-    try {
-      await invoke('plugin:android-forward-service|stop_forward_service');
-      console.log('Android foreground service stopped');
-    } catch (e) {
-      console.warn('Forward service not available or failed to stop:', e);
+    if (isServiceRunning.value) {
+      try {
+        await invoke('plugin:android-forward-service|stop_forward_service');
+        console.log('Android foreground service stopped');
+        isServiceRunning.value = false;
+      } catch (e) {
+        console.warn('Forward service not available or failed to stop:', e);
+      }
     }
     
     // Clean up file watcher if active

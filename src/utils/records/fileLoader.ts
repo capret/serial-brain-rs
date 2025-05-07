@@ -1,19 +1,24 @@
 // Functions for loading and processing recording files
-import { stat, readDir } from '@tauri-apps/plugin-fs';
+import { stat, readDir, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { RecordingFile } from './types';
 import { formatFileSize, updateFileDuration } from './formatters';
 
 /**
  * Load all recording files from a directory
+ * @param directoryPath The directory path to read files from
+ * @param baseDir Optional BaseDirectory to use (e.g., BaseDirectory.Document)
  */
 export async function loadDirectoryFiles(
-  directoryPath: string
+  directoryPath: string,
+  baseDir?: BaseDirectory
 ): Promise<RecordingFile[]> {
   if (!directoryPath) return [];
   
   try {
-    // Read all files in the directory
-    const entries = await readDir(directoryPath);
+    // Read all files in the directory using baseDir if provided
+    const entries = baseDir ? 
+      await readDir(directoryPath, { baseDir }) : 
+      await readDir(directoryPath);
     
     // Filter for recording files (CSV, JSON, binary)
     const recordingEntries = entries.filter(entry => {
@@ -27,8 +32,15 @@ export async function loadDirectoryFiles(
     const filesWithStats = await Promise.all(
       recordingEntries.map(async entry => {
         try {
-          const fullPath = `${directoryPath}/${entry.name}`;
-          const fileStat = await stat(fullPath);
+          // Construct full path, adjusting based on whether we're using BaseDirectory
+          const fullPath = baseDir ? 
+            `${directoryPath}/${entry.name}` : // When using BaseDirectory, the path is relative
+            `${directoryPath}/${entry.name}`; // For absolute paths (legacy support)
+            
+          // Get file stats (pass baseDir if it's provided)
+          const fileStat = baseDir ? 
+            await stat(fullPath, { baseDir }) : 
+            await stat(fullPath);
           
           // Get the modified date from FileInfo
           const modifiedDate = fileStat.mtime || fileStat.birthtime;

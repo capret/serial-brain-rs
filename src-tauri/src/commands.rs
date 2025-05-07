@@ -404,29 +404,85 @@ pub fn start_recording(
         
         let handle = thread::spawn(move || {
             let mut first_json_entry = true;
+            let mut segment_start_time = start_time;
             
             while state_clone.recording_active.load(Ordering::SeqCst) {
-                // Check if max duration is reached
-                if let Ok(elapsed) = SystemTime::now().duration_since(start_time) {
+                // Check if the current segment exceeded the configured duration
+                if let Ok(elapsed) = SystemTime::now().duration_since(segment_start_time) {
                     if elapsed > max_duration {
-                        // Emit an event to notify the frontend that recording has completed
-                        // due to reaching max duration, so frontend can start a new recording
+                        // Finalize the current segment file (flush + close JSON array if needed)
+                        {
+                            let mut recording_file = state_clone.recording_file.lock().unwrap();
+                            if let Some((ref mut file, ref fmt)) = *recording_file {
+                                if fmt == "json" {
+                                    let _ = file.write_all(b"]");
+                                }
+                                let _ = file.flush();
+                            }
+                        }
+
+                        // Create a new filename based on the same format & directory
+                        let now = SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap_or_else(|_| Duration::from_secs(0));
+                        let timestamp = now.as_millis();
+                        let new_filename = match format_clone.as_str() {
+                            "csv" => format!("serial_recording_{}.csv", timestamp),
+                            "json" => format!("serial_recording_{}.json", timestamp),
+                            _ => format!("serial_recording_{}.bin", timestamp),
+                        };
+
+                        let mut new_path = PathBuf::from(&directory_clone);
+                        new_path.push(&new_filename);
+
+                        if let Ok(mut new_file) = OpenOptions::new()
+                            .write(true)
+                            .create(true)
+                            .truncate(true)
+                            .open(&new_path)
+                        {
+                            // CSV: write header; JSON: open array
+                            if format_clone == "csv" {
+                                let mut header = String::from("timestamp");
+                                for i in 0..8 {
+                                    header.push_str(&format!(",channel_{}", i));
+                                }
+                                let _ = writeln!(new_file, "{}", header);
+                            } else if format_clone == "json" {
+                                let _ = new_file.write_all(b"[");
+                            }
+
+                            // Swap file handle and update filename in shared state
+                            *state_clone.recording_file.lock().unwrap() =
+                                Some((new_file, format_clone.clone()));
+                            *state_clone.recording_filename.lock().unwrap() = Some(new_filename.clone());
+                            
+                            // Log the segment change
+                            println!("Recording segment changed to: {}", new_filename);
+                        }
+
+                        // Emit event to frontend to notify filename change
                         if let Some(app_handle) = state_clone.app_handle.lock().unwrap().as_ref() {
-                            let _ = app_handle.emit("recording-completed", {
+                            // Emit the existing event with full payload
+                            let _ = app_handle.emit("recording-file-changed", {
                                 json!({
-                                    "format": format_clone,
+                                    "filename": new_filename.clone(),
                                     "directory": directory_clone,
-                                    "maxDurationMinutes": max_duration_minutes,
-                                    "shouldRestartRecording": true
+                                    "format": format_clone
                                 })
                             });
+                            
+                            // Emit a more specific event for updating just the filename
+                            let _ = app_handle.emit("recording-filename-changed", new_filename.clone());
                         }
-                        
-                        state_clone.recording_active.store(false, Ordering::SeqCst);
-                        break;
+
+                        // Reset per-segment flags and timer
+                        first_json_entry = true;
+                        segment_start_time = SystemTime::now();
+                        continue; // Skip to next loop to immediately write to the new segment
                     }
                 }
-                
+
                 // Get data from the recording buffer with timestamps
                 let timestamped_data = state_clone.get_recording_data();
                 if timestamped_data.is_empty() {

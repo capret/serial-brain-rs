@@ -47,13 +47,14 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, onUnmounted } from 'vue';
+import { ref, watch, onUnmounted, onMounted } from 'vue';
 import FileCard from './FileCard.vue';
 import { type RecordingFile } from '../../utils/records/types';
 import { loadDirectoryFiles } from '../../utils/records/fileLoader';
 import { syncFile, deleteFile, uploadFile } from '../../utils/records/fileOperations';
 import { isActiveRecordingFile } from '../../utils/records/recordingFileHelpers';
-import { setupDirectoryWatcher } from '../../utils/records/fileWatcher';
+import { watchImmediate, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { listen } from '@tauri-apps/api/event';
 
 // Props
 const props = defineProps({
@@ -76,6 +77,7 @@ const files = ref<RecordingFile[]>([]);
 const isLoading = ref(false);
 const errorMessage = ref<string>('');
 const directoryWatchUnsubscribe = ref<(() => void) | null>(null);
+let filenameChangeUnsubscribe: (() => void) | null = null;
 
 // Watch for directory changes to set up watcher
 watch(() => props.recordingDirectory, async (newPath) => {
@@ -86,32 +88,53 @@ watch(() => props.recordingDirectory, async (newPath) => {
       directoryWatchUnsubscribe.value = null;
     }
     
-    // Set up new watcher
-    await setupDirectoryWatcher(
-      newPath,
-      async () => { await loadFiles(); },
-      (unsubscribe) => { directoryWatchUnsubscribe.value = unsubscribe; },
-      (error) => { errorMessage.value = `Error watching directory: ${error}`; }
-    );
-    
-    // Load files initially
-    await loadFiles();
-    
-    // Set up periodic refresh for active recordings
-    if (props.isRecording) {
-      console.log('Setting up periodic refresh for file list during recording');
-      const refreshInterval = setInterval(() => {
-        if (props.isRecording) {
-          loadFiles();
-        } else {
-          clearInterval(refreshInterval);
-        }
-      }, 5000); // Refresh every 5 seconds during active recording
+    try {
+      // We know we're watching the signal_data folder in Document directory
+      // No need to extract it from the path - just use the hardcoded name
+      const folderName = 'signal_data';
       
-      // Clean up interval when component is unmounted
-      onUnmounted(() => {
-        clearInterval(refreshInterval);
-      });
+      console.log(`Setting up watcher for directory: ${folderName} (from full path: ${newPath})`);
+      
+      // Use watchImmediate for immediate file system events
+      // We need to use just the folder name, not the full path
+      const unsubscribeFunction = await watchImmediate(
+        'signal_data', // Use the actual folder name, not the full path
+        (event) => {
+          console.log('Directory change event:', event);
+          // Reload files when directory content changes
+          loadFiles();
+        },
+        {
+          baseDir: BaseDirectory.Document, // This tells Tauri to look in the Documents directory
+          recursive: false // Only watch top-level files in the directory
+        }
+      );
+      
+      // Store the unsubscribe function
+      directoryWatchUnsubscribe.value = unsubscribeFunction;
+      
+      // Load files initially
+      await loadFiles();
+      
+      // Set up periodic refresh for active recordings
+      if (props.isRecording) {
+        console.log('Setting up periodic refresh for file list during recording');
+        const refreshInterval = setInterval(() => {
+          if (props.isRecording) {
+            loadFiles();
+          } else {
+            clearInterval(refreshInterval);
+          }
+        }, 2000); // Refresh every 5 seconds during active recording
+        
+        // Clean up interval when component is unmounted
+        onUnmounted(() => {
+          clearInterval(refreshInterval);
+        });
+      }
+    } catch (error) {
+      console.error('Error setting up directory watcher:', error);
+      errorMessage.value = `Error watching directory: ${error}`;
     }
   }
 }, { immediate: true });
@@ -127,6 +150,24 @@ watch(() => props.isRecording, async (isRecording) => {
   }
 });
 
+// Set up event listener for recording-filename-changed
+onMounted(async () => {
+  // Set up listener for recording filename changes to update the file list
+  filenameChangeUnsubscribe = await listen('recording-filename-changed', (event) => {
+    console.log('RecordedFilesList: Recording filename changed to:', event.payload);
+    // Trigger a file list refresh when a new recording segment is created
+    setTimeout(() => loadFiles(), 500); // Small delay to ensure the file is created
+  });
+});
+
+// Clean up event listeners
+onUnmounted(() => {
+  if (filenameChangeUnsubscribe) {
+    filenameChangeUnsubscribe();
+    filenameChangeUnsubscribe = null;
+  }
+});
+
 // Methods
 async function loadFiles() {
   if (!props.recordingDirectory) return;
@@ -138,7 +179,9 @@ async function loadFiles() {
   errorMessage.value = '';
   
   try {
-    const newFiles = await loadDirectoryFiles(props.recordingDirectory);
+    // Pass the BaseDirectory.Document as a hint to loadDirectoryFiles
+    // This indicates we're using the new fs plugin approach
+    const newFiles = await loadDirectoryFiles(props.recordingDirectory, BaseDirectory.Document);
     updateFilesList(newFiles);
   } catch (error) {
     console.error('Error loading files:', error);
