@@ -48,7 +48,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { exists, mkdir, BaseDirectory, stat } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
 import * as path from '@tauri-apps/api/path';
 import { 
   recordingDirectory, 
