@@ -3,27 +3,13 @@ use crate::reader::{
 };
 use crate::state::SerialState;
 use crate::types::{ChannelData, FakeDataConfig};
-use base64::{engine::general_purpose::STANDARD, Engine};
-use image::{ImageBuffer, Rgb, ColorType};
-
-use image::codecs::png::PngEncoder;
-use image::ImageEncoder;
-use rand::{thread_rng, Rng};
-use reqwest::blocking::Client;
 use serialport;
-use serde_json::json;
-use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
 use std::{
     sync::{atomic::Ordering, mpsc, Arc},
     thread,
 };
 use tauri::{AppHandle, Emitter, State};
 
-const W: u32 = 640;
-const H: u32 = 480;
 
 #[tauri::command]
 pub fn connect_serial(

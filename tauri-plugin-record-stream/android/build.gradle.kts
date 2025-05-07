@@ -30,6 +30,12 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    
+    sourceSets {
+        main {
+            jniLibs.srcDirs += "$System.env.OPENCV_ANDROID_SDK/sdk/native/libs"
+        }
+    }
 }
 
 dependencies {

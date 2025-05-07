@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::{atomic::Ordering, Arc};
 use std::thread::{self, JoinHandle};
 use std::time::{SystemTime, Duration};
-use tauri::State;
+use tauri::{State, Emitter};
 
 /// Starts recording data to a file in the specified format.
 /// 
@@ -288,7 +288,7 @@ fn handle_segment_rotation(
 }
 
 /// Writes data in CSV format to the specified file.
-fn write_csv_data(file: &mut File, timestamped_data: &[(SystemTime, Vec<f32>)]) {
+fn write_csv_data(file: &mut File, timestamped_data: &[(SystemTime, [f32; 8])]) {
     // Process each data point with its timestamp
     for (timestamp, channel_data) in timestamped_data {
         // Convert timestamp to milliseconds
@@ -315,7 +315,7 @@ fn write_csv_data(file: &mut File, timestamped_data: &[(SystemTime, Vec<f32>)]) 
 }
 
 /// Writes data in JSON format to the specified file.
-fn write_json_data(file: &mut File, timestamped_data: &[(SystemTime, Vec<f32>)], first_json_entry: &mut bool) {
+fn write_json_data(file: &mut File, timestamped_data: &[(SystemTime, [f32; 8])], first_json_entry: &mut bool) {
     // Process each data point with its timestamp
     for (timestamp, channel_data) in timestamped_data {
         // Convert timestamp to milliseconds
@@ -345,7 +345,7 @@ fn write_json_data(file: &mut File, timestamped_data: &[(SystemTime, Vec<f32>)],
 }
 
 /// Writes data in binary format to the specified file.
-fn write_binary_data(file: &mut File, timestamped_data: &[(SystemTime, Vec<f32>)]) {
+fn write_binary_data(file: &mut File, timestamped_data: &[(SystemTime, [f32; 8])]) {
     // Process each data point with its timestamp
     for (timestamp, channel_data) in timestamped_data {
         // Convert timestamp to milliseconds

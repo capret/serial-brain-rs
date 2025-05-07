@@ -1,14 +1,16 @@
 use crate::state::SerialState;
 use base64::{engine::general_purpose::STANDARD, Engine};
-use image::{ImageBuffer, Rgb, RgbImage, GenericImageView, imageops, ImageFormat, ColorType, PngEncoder};
+use image::{ImageBuffer, Rgb, GenericImageView, ColorType};
+use image::codecs::png::PngEncoder;
+use image::ImageEncoder;
 use rand::{Rng, thread_rng};
-use reqwest::Client;
-use serde_json::json;
-use std::io::{BufRead, BufReader, Read, Write};
+use reqwest::blocking::Client;
+
+use std::io::{BufRead, BufReader, Read};
 use std::sync::{atomic::Ordering, Arc};
 use std::time::Duration;
 use std::thread;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, Emitter};
 
 // Constants for fake stream image generation
 const W: u32 = 640;
@@ -87,8 +89,8 @@ fn start_fake_stream(
             
             let mut buf = Vec::new();
             let raw = img.clone().into_raw();
-            PngEncoder::new(&mut buf)
-                .write_image(&raw, W, H, ColorType::Rgb8.into())
+            let encoder = PngEncoder::new(&mut buf);
+            encoder.write_image(&raw, W, H, ColorType::Rgb8.into())
                 .unwrap();
                 
             let total_pixels = (W * H) as u64;
@@ -178,9 +180,12 @@ fn start_real_stream(
                         break;
                     }
                     
-                    if let Some(val) = h.split(':').nth(1) {
-                        if h.to_lowercase().starts_with("content-length") {
-                            content_length = val.trim().parse::<usize>().unwrap_or(0);
+                    let mut parts = h.splitn(2, ':');
+                    if let Some(key) = parts.next() {
+                        if let Some(val) = parts.next() {
+                            if key.to_lowercase() == "content-length" {
+                                content_length = val.trim().parse::<usize>().unwrap_or(0);
+                            }
                         }
                     }
                 }
