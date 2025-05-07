@@ -656,3 +656,20 @@ pub fn get_signal_quality(state: State<Arc<SerialState>>) -> Result<Vec<bool>, S
     // Use the on-demand check_signal_quality method instead of just getting current values
     Ok(state.check_signal_quality())
 }
+
+#[tauri::command]
+pub async fn record_stream(
+    app_handle: tauri::AppHandle,
+    file_path: String,
+) -> Result<bool, String> {
+    println!("[Main App] Calling record stream plugin with path: {}", file_path);
+    
+    let result = tauri_plugin_record_stream::start_record(
+        app_handle,
+        tauri_plugin_record_stream::StartRecordRequest { file_path }
+    )
+    .await
+    .map_err(|e| format!("Failed to record stream: {}", e))?;
+    
+    Ok(result.success)
+}

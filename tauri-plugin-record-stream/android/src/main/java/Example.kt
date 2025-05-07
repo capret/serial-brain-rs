@@ -7,4 +7,10 @@ class Example {
         Log.i("Pong", value)
         return value
     }
+
+    fun startRecord(filePath: String): Boolean {
+        // TODO: Implement OpenCV-based video recording to the specified file.
+        Log.i("StartRecord", "Recording to $filePath")
+        return true
+    }
 }

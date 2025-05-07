@@ -19,4 +19,10 @@ impl<R: Runtime> RecordStream<R> {
       value: payload.value,
     })
   }
+
+  pub fn start_record(&self, _payload: StartRecordRequest) -> crate::Result<StartRecordResponse> {
+    // TODO: implement desktop recording functionality.
+    println!("[record_plugin] desktop impl called");
+    Ok(StartRecordResponse { success: true })
+  }
 }

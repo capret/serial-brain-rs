@@ -86,23 +86,46 @@ async function ping(value: string): Promise<string | null> {
   }).then((r) => (r.value ? r.value : null));
 }
 async function func_test(){
-  console.log("Starting forward service...");
+  console.log("Starting record_stream test function...");
   try {
-    await invoke('plugin:android-forward-service|start_forward_service');
-    console.log("Forward service started successfully");
+    // Determine appropriate file path based on platform
+    let filePath = "/sdcard/DCIM/Camera/test_record.mp4";
     
-    // Wait 3 seconds before stopping
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // For desktop platforms, use a different path
+    if (navigator.userAgent.indexOf("Windows") !== -1) {
+      filePath = "C:\\temp\\test_record.mp4";
+    } else if (navigator.userAgent.indexOf("Mac") !== -1) {
+      filePath = "/tmp/test_record.mp4";
+    } else if (navigator.userAgent.indexOf("Linux") !== -1) {
+      filePath = "/tmp/test_record.mp4";
+    }
     
-    console.log("Stopping forward service...");
-    await invoke('plugin:android-forward-service|stop_forward_service');
-    console.log("Forward service stopped successfully");
+    console.log(`Starting recording to: ${filePath}`);
+    
+    // Create a params object with the exact expected field name
+    // Use camelCase 'filePath' instead of snake_case 'file_path'
+    const params = { 
+      filePath: filePath 
+    };
+    console.log('Params for record_stream:', params);
+    
+    // Call the record_stream function with the params object
+    const result = await invoke('record_stream', params);
+    
+    console.log(`Recording started successfully: ${result}`);
+    
+    // Wait 5 seconds
+    console.log("Recording for 1 seconds...");
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // TODO: Add a stop_record function if needed
+    console.log("Recording test completed");
   } catch (error) {
-    console.error("Error with forward service:", error);
+    console.error("Error with record_stream test:", error);
   }
 }
 function reportIssue() {
-  console.log(ping("10"));
+  // console.log(ping("10"));
   func_test()
   // console.log("Report issue clicked - debug information will be added here");
 }

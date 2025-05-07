@@ -13,6 +13,11 @@ class PingArgs {
   var value: String? = null
 }
 
+@InvokeArg
+class StartRecordArgs {
+  var filePath: String? = null
+}
+
 @TauriPlugin
 class ExamplePlugin(private val activity: Activity): Plugin(activity) {
     private val implementation = Example()
@@ -23,6 +28,15 @@ class ExamplePlugin(private val activity: Activity): Plugin(activity) {
 
         val ret = JSObject()
         ret.put("value", implementation.pong(args.value ?: "default value :("))
+        invoke.resolve(ret)
+    }
+
+    @Command
+    fun startRecord(invoke: Invoke) {
+        val args = invoke.parseArgs(StartRecordArgs::class.java)
+        val success = implementation.startRecord(args.filePath ?: "")
+        val ret = JSObject()
+        ret.put("success", success)
         invoke.resolve(ret)
     }
 }

@@ -7,7 +7,7 @@ mod types;
 mod file_utils;
 use commands::{
     connect_serial, connect_socket, get_available_ports, get_recent_data, get_recording_filename,
-    get_recording_status, get_signal_quality, send_serial, start_fake_data, start_recording, 
+    get_recording_status, get_signal_quality, record_stream, send_serial, start_fake_data, start_recording, 
     start_streaming, stop_data_acquisition, stop_recording, stop_streaming,
 };
 use file_utils::get_file_stats;
@@ -21,10 +21,12 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_android_forward_service::init())
+        .plugin(tauri_plugin_record_stream::init())
         .manage(serial_state.clone())
         .setup(move |app| {
             // Store the app handle in the serial state for event emission
             let app_handle = app.handle();
+            // tauri_plugin_record_stream::
             *serial_state.app_handle.lock().unwrap() = Some(app_handle.clone());
             Ok(())
         })
@@ -44,7 +46,8 @@ pub fn run() {
             get_recording_status,
             get_recording_filename,
             get_signal_quality,
-            get_file_stats
+            get_file_stats,
+            record_stream
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -31,4 +31,11 @@ impl<R: Runtime> RecordStream<R> {
       .run_mobile_plugin("ping", payload)
       .map_err(Into::into)
   }
+
+  pub fn start_record(&self, payload: StartRecordRequest) -> crate::Result<StartRecordResponse> {
+    self
+      .0
+      .run_mobile_plugin("startRecord", payload)
+      .map_err(Into::into)
+  }
 }
