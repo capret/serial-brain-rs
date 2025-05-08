@@ -57,7 +57,7 @@ import { serialSettings, tcpSettings, fakeDataSettings } from './store/appState'
 
 // Import components
 import AppSidebar from './components/AppSidebar.vue';
-import VisualizationView from './components/views/VisualizationView.vue';
+import VisualizationView from './components/views/SignalPlottingView.vue';
 import SignalConfigView from './components/views/SignalConfigView.vue';
 import FilterConfigView from './components/views/FilterConfigView.vue';
 import RecordingView from './components/views/RecordingView.vue';

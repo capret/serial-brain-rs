@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import SignalVisualization from '../visualization/SignalVisualization.vue';
+import SignalVisualization from '../signals/SignalVisualization.vue';
 import { ref, computed, onMounted } from 'vue';
 import { isRunning, isConnected, fetchConnectionState } from '../../store/appState';
 import { invoke } from '@tauri-apps/api/core';
