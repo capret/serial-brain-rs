@@ -135,7 +135,7 @@ class RecordStreamPlugin(private val activity: Activity) : Plugin(activity) {
                     }
                         
                     // If H264 fails, fall back to MJPG in AVI container
-                    if (videoWriter?.isOpened() == false) {
+                    if (videoWriter?.isOpened == false) {
                         Log.w("RecordStreamPlugin", "Failed to open H264 writer, trying MJPG")
                         useH264 = false
                         useMJPG = true
@@ -148,7 +148,7 @@ class RecordStreamPlugin(private val activity: Activity) : Plugin(activity) {
                 }
                     
                 // Use MJPG if specified or if H264 failed
-                if (useMJPG && (videoWriter?.isOpened() == false || videoWriter == null)) {
+                if (useMJPG && (videoWriter?.isOpened == false || videoWriter == null)) {
                     try {
                         val aviFilePath = if (extension == "mp4") {
                             filePath.replace(".mp4", ".avi")
