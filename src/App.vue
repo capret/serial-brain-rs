@@ -1,8 +1,12 @@
 <template>
-  <div id="main" class="flex flex-col h-screen w-screen overflow-hidden">
+  <!-- Login Page (shown when not authenticated) -->
+  <LoginPage v-if="!isAuthenticated" @login-success="handleLoginSuccess" />
+  
+  <!-- Main Application (shown after authentication) -->
+  <div v-else id="main" class="flex flex-col h-screen w-screen overflow-hidden">
     <div
       class="bg-gradient-to-br from-gray-900 to-gray-800 px-6 rounded-lg shadow-2xl max-[800px]:px-0 font-sans text-white flex flex-col flex-grow overflow-hidden" style="border-radius: 0.5rem;">
-      <AppHeader />
+      <AppHeader @logout="handleLogout" :user="currentUser" />
       <div class="flex gap-8 flex-grow h-full overflow-hidden max-[800px]:flex-col">
         <!-- Sidebar Component -->
         <AppSidebar v-model:activeView="primaryView" v-model:additionalViews="additionalViews" v-model:collapsed="collapsed" :class="[
@@ -54,6 +58,8 @@ document.addEventListener('touchmove', function(event) {
 // Import the Window API from Tauri
 import { onMounted, ref } from 'vue';
 import { serialSettings, tcpSettings, fakeDataSettings } from './store/appState';
+import { isAuthenticated, currentUser, login, logout, initAuthState } from './store/authState';
+import LoginPage from './components/auth/LoginPage.vue';
 
 // Import components
 import AppSidebar from './components/AppSidebar.vue';
@@ -78,8 +84,23 @@ function onDataSourceChanged(source: 'serial' | 'tcp' | 'fake') {
   console.log(`Data source changed to: ${source}`);
 }
 
+// Authentication handlers
+function handleLoginSuccess(userData: { email: string }) {
+  console.log('Login successful:', userData);
+  login(userData);
+}
+
+function handleLogout() {
+  console.log('Logging out');
+  logout();
+}
+
 onMounted(() => {
   console.log("Mounted! Checking DOM...");
+  
+  // Initialize authentication state from localStorage
+  initAuthState();
+  
   // Apply styles to ensure no margins
   const mainContainer = document.getElementById('main');
   if (mainContainer) {
