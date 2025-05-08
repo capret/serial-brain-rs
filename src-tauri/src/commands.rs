@@ -234,12 +234,14 @@ pub async fn stop_video_recording(
 #[tauri::command]
 pub async fn push_video_frame(
     app_handle: tauri::AppHandle,
-    frame_data: String,
+    frame_data: Vec<u8>,
+    width: u32,
+    height: u32,
 ) -> Result<bool, String> {
-    // Don't print the base64 data - it would flood the console
-    println!("[Main App] Pushing video frame...");
+    // Don't print the raw data - it would flood the console
+    println!("[Main App] Pushing video frame...({} x {})", width, height);
     
-    tauri_plugin_record_stream::push_frame(app_handle, frame_data)
+    tauri_plugin_record_stream::push_frame(app_handle, frame_data, width, height)
         .map_err(|e| format!("Failed to push video frame: {}", e))
 }
 

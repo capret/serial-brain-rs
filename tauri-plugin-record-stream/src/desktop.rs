@@ -1,5 +1,6 @@
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use opencv::core::AlgorithmHint;
 use opencv::{core, prelude::*, videoio};
+// use opencv::imgproc;
 use serde::de::DeserializeOwned;
 use std::sync::{Arc, Mutex};
 use tauri::{plugin::PluginApi, AppHandle, Runtime};
@@ -99,121 +100,75 @@ impl VideoRecorder {
         Ok(true)
     }
 
-    pub fn push_frame(&mut self, b64_png: String) -> crate::Result<bool> {
+    pub fn push_frame(&mut self, rgb: Vec<u8>, width: u32, height: u32) -> crate::Result<bool> {
+        use opencv::imgproc;
+
         if !self.is_recording || self.writer.is_none() {
             return Ok(false); // Not recording
         }
 
-        // Decode base64 PNG
-        let png_data = STANDARD.decode(b64_png)?;
-        
-        // Convert PNG to image
-        let mut img = image::load_from_memory(&png_data)?
-            .to_rgb8();
-        
-        // Get actual image dimensions
-        let img_width = img.width() as i32;
-        let img_height = img.height() as i32;
-        
-        // Make sure we don't have zero dimensions
-        if img_width <= 0 || img_height <= 0 {
-            return Err(crate::Error::VideoWriterError(format!("Invalid image dimensions: {}x{}", img_width, img_height)));
+        // basic validation
+        if rgb.is_empty() || width == 0 || height == 0 {
+            return Ok(false);
         }
-        
-        // Check if image dimensions match the expected video dimensions
-        // This is crucial for proper recording - we need to ensure consistent frame sizes
-        if img_width != self.width || img_height != self.height {
-            println!("[record_plugin] Image dimensions ({}x{}) don't match video dimensions ({}x{}). Resizing...",
-                img_width, img_height, self.width, self.height);
-                
-            // Resize the image to match the video dimensions
-            // Create a new buffer with the correct dimensions
-            let resized = image::imageops::resize(
-                &img, 
-                self.width as u32, 
-                self.height as u32, 
-                image::imageops::FilterType::Triangle
-            );
-            img = resized;
-        }
-        
-        // Get the raw image data after potential resize
-        let img_data = img.as_raw();
-        
-        // Calculate expected sizes based on dimensions
-        let expected_size = (self.width * self.height * 3) as usize;
-        let actual_size = img_data.len();
-        
-        // Verify sizes match expectations
-        if expected_size != actual_size {
-            println!("[record_plugin] Warning after resize: Expected size {}, actual size {}", 
-                    expected_size, actual_size);
-            return Err(crate::Error::VideoWriterError(
-                format!("Size mismatch after resize: expected {}, got {}", expected_size, actual_size)
-            ));
-        }
-        
-        // Create a new matrix with proper dimensions
-        let mat = unsafe {
-            // Create a matrix of the right size
-            let mut m = core::Mat::new_rows_cols(self.height, self.width, core::CV_8UC3)?;
+
+        let img_width = width as i32;
+        let img_height = height as i32;
+
+        // Build Mat from raw bytes (RGB)
+        let src_mat = unsafe {
+            // Create a Mat of the right size
+            let mut mat = core::Mat::new_rows_cols(img_height, img_width, core::CV_8UC3)?;
             
-            // Get a pointer to the matrix data - this returns a raw pointer
-            let data_ptr = m.data_mut();
-            
-            // Make sure the pointer is valid
-            if !data_ptr.is_null() {
-                // Copy data safely - both pointers are known to be valid for their respective sizes
-                let src_ptr = img_data.as_ptr();
-                
-                // Use copy_nonoverlapping which is safer for non-overlapping memory regions
-                std::ptr::copy_nonoverlapping(src_ptr, data_ptr, expected_size);
-            } else {
-                return Err(crate::Error::VideoWriterError("Failed to get valid matrix pointer".into()));
+            // Copy the raw byte data directly to the Mat
+            let byte_size = (img_width * img_height * 3) as usize;
+            if rgb.len() >= byte_size {
+                let mat_data = mat.data_mut();
+                if !mat_data.is_null() {
+                    std::ptr::copy_nonoverlapping(rgb.as_ptr(), mat_data, byte_size);
+                }
             }
-            
-            m
+            mat
         };
+
+        // Convert to BGR for OpenCV writer
+        let mut bgr_mat = core::Mat::default();
         
-        // Instead of using cvt_color which has inconsistent signatures,
-        // let's just manually swap R and B channels which is what we need
-        // RGB to BGR conversion
-        let height = mat.rows();
-        let width = mat.cols();
-        let mut bgr_mat = mat.clone();
-        
-        // Manual RGB to BGR conversion (swap R and B channels)
-        for y in 0..height {
-            for x in 0..width {
-                let pixel = mat.at_2d::<core::Vec3b>(y, x)?;
-                let mut new_pixel = pixel.clone();
-                // Swap R and B (BGR format needs B in 0, G in 1, R in 2)
-                new_pixel[0] = pixel[2]; // B <- R
-                new_pixel[2] = pixel[0]; // R <- B
-                let bgr_ptr = bgr_mat.at_2d_mut::<core::Vec3b>(y, x)?;
-                // Copy each value individually
-                bgr_ptr[0] = new_pixel[0];
-                bgr_ptr[1] = new_pixel[1];
-                bgr_ptr[2] = new_pixel[2];
-            }
+        // Simple approach: try the 4-argument version that works with most OpenCV versions
+        imgproc::cvt_color(&src_mat, &mut bgr_mat, imgproc::COLOR_RGB2BGR, 0, AlgorithmHint::ALGO_HINT_DEFAULT)?;
+        // src_mat wraps external data; ensure bytes live until here
+        std::mem::drop(src_mat);
+
+        // If incoming frame size doesn't match configured video size, resize
+        if img_width != self.width || img_height != self.height {
+            let mut resized = core::Mat::default();
+            imgproc::resize(
+                &bgr_mat,
+                &mut resized,
+                core::Size::new(self.width, self.height),
+                0.0,
+                0.0,
+                imgproc::INTER_LINEAR,
+            )?;
+            bgr_mat = resized;
         }
-        
+
         // Get current time for frame timestamp
         let now = Instant::now();
-        
+
         // Add frame to the queue with its timestamp
         let frame_copy = bgr_mat.clone();
         self.frame_queue.push_back((now, frame_copy));
-        
+
         // Also update last frame reference
         self.last_frame = Some(bgr_mat);
-        
+
         // Update timing information
         self.last_frame_time = Some(now);
-        
+
         // Process frame queue and write frames as needed
         self.process_frame_queue()?;
-        
+
         Ok(true)
     }
     
@@ -352,9 +307,9 @@ impl<R: Runtime> RecordStream<R> {
     }
   }
   
-  pub fn push_frame(&self, b64_png: String) -> crate::Result<bool> {
+  pub fn push_frame(&self, rgb: Vec<u8>, width: u32, height: u32) -> crate::Result<bool> {
     let mut recorder = self.recorder.lock().map_err(|_| crate::Error::MutexError)?;
-    recorder.push_frame(b64_png)
+    recorder.push_frame(rgb, width, height)
   }
   
   pub fn stop_record(&self) -> crate::Result<bool> {

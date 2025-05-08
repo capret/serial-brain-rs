@@ -113,7 +113,7 @@ fn start_fake_stream(
             // Also push frame to video recorder if recording is active
             if state_inner.video_recording_active.load(Ordering::SeqCst) {
                 // Don't use expect() or unwrap() to avoid crashing the thread if recording fails
-                if let Err(e) = tauri_plugin_record_stream::push_frame(app_clone.clone(), b64) {
+                if let Err(e) = tauri_plugin_record_stream::push_frame(app_clone.clone(), raw.clone(), W, H) {
                     println!("Error pushing frame to video recorder: {}", e);
                 }
             }
@@ -236,9 +236,14 @@ fn start_real_stream(
                             
                             // Also push frame to video recorder if recording is active
                             if state_inner.video_recording_active.load(Ordering::SeqCst) {
-                                // Don't use expect() or unwrap() to avoid crashing the thread if recording fails
-                                if let Err(e) = tauri_plugin_record_stream::push_frame(app_clone.clone(), b64) {
-                                    println!("Error pushing frame to video recorder: {}", e);
+                                // Convert to raw RGB bytes for recording instead of using base64 PNG
+                                if let Ok(img) = image::load_from_memory(&buffer) {
+                                    let rgb = img.to_rgb8();
+                                    let dims = img.dimensions();
+                                    // Don't use expect() or unwrap() to avoid crashing the thread if recording fails
+                                    if let Err(e) = tauri_plugin_record_stream::push_frame(app_clone.clone(), rgb.into_raw(), dims.0, dims.1) {
+                                        println!("Error pushing frame to video recorder: {}", e);
+                                    }
                                 }
                             }
                         }

@@ -8,7 +8,7 @@
         <div class="w-full max-w-md bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
           <!-- Logo/Header -->
           <div class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-blue-400 mb-2">Account</h1>
+            <h1 class="text-4xl font-bold text-blue-400 mb-2">Signal Brain</h1>
             <p class="text-gray-400">Signal Processing & Visualization</p>
           </div>
 

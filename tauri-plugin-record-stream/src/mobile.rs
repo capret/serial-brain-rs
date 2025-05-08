@@ -69,12 +69,19 @@ impl<R: Runtime> RecordStream<R> {
     Ok(response.success)
   }
   
-  pub fn push_frame(&self, b64_png: String) -> crate::Result<bool> {
+  pub fn push_frame(&self, rgb: Vec<u8>, width: u32, height: u32) -> crate::Result<bool> {
     use serde_json::json;
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     
-    // Create a simple JSON object
+    // For mobile, encode the RGB buffer as base64 string to pass through JNI
+    // Future improvement: use binary protocol if/when Tauri supports it
+    let b64_rgb = STANDARD.encode(&rgb);
+    
+    // Create a simple JSON object with the RGB data and dimensions
     let params = json!({
-      "b64_png": b64_png
+      "rgb": b64_rgb,
+      "width": width,
+      "height": height
     });
     
     let response: BooleanResponse = self

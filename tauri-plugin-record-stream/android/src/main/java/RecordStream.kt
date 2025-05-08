@@ -1,6 +1,7 @@
 package com.plugin.record_stream
 
 import android.util.Log
+import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
@@ -181,26 +182,47 @@ class RecordStream {
     }
     
     /**
-     * Push a frame to the video recording
+     * Push a frame to the video recording - directly with RGB data
      */
-    fun pushFrame(b64Png: String): Boolean {
+    fun pushFrame(rgbBytes: ByteArray, width: Int, height: Int): Boolean {
         if (!isRecording || videoWriter == null) {
             return false
         }
         
-        if (b64Png.isEmpty()) {
+        if (rgbBytes.isEmpty()) {
             return false
         }
         
         // Process frame in a separate thread to avoid blocking UI
         recordingThread?.execute {
             try {
-                // Decode and process frame
-                // (Note: This part would need to be implemented with OpenCV image processing)
-                // For completeness, this would handle decoding the base64 PNG and converting to a Mat
+                // Convert raw RGB bytes to Mat
+                val rgbMat = Mat(height, width, CvType.CV_8UC3)
+                rgbMat.put(0, 0, rgbBytes)
                 
-                // Add frame to queue with timestamp
-                val now = System.currentTimeMillis()
+                // Convert RGB to BGR for OpenCV
+                val bgrMat = Mat()
+                Imgproc.cvtColor(rgbMat, bgrMat, Imgproc.COLOR_RGB2BGR)
+                
+                // If incoming frame size doesn't match video size, resize
+                if (width != this.width || height != this.height) {
+                    val resized = Mat()
+                    Imgproc.resize(bgrMat, resized, Size(this.width.toDouble(), this.height.toDouble()))
+                    bgrMat.release()
+                    rgbMat.release()
+                    
+                    // Add frame to queue with timestamp
+                    val now = System.currentTimeMillis()
+                    frameQueue.add(Pair(now, resized))
+                    lastFrame = resized
+                } else {
+                    rgbMat.release()
+                    // Add frame to queue with timestamp
+                    val now = System.currentTimeMillis()
+                    frameQueue.add(Pair(now, bgrMat))
+                    lastFrame = bgrMat
+                }
+                
                 synchronized(this) {
                     if (videoWriter?.isOpened == true) {
                         // Process frame queue to maintain consistent FPS
@@ -208,7 +230,7 @@ class RecordStream {
                     }
                 }
             } catch (e: Exception) {
-                Log.e("RecordStream", "Error writing video frame", e)
+                Log.e("RecordStream", "Error processing RGB frame", e)
             }
         }
         

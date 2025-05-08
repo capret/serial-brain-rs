@@ -15,6 +15,7 @@ import app.tauri.plugin.Invoke
 import app.tauri.plugin.Plugin
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
+import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
@@ -256,10 +257,13 @@ class RecordStreamPlugin(private val activity: Activity) : Plugin(activity) {
             return result
         }
         
-        // Extract the b64_png parameter from the invoke object
+        // Extract the RGB data and dimensions from the invoke object
         val args = invoke.getArgs()
-        val b64Png = args.optString("b64_png", "")
-        if (b64Png.isEmpty()) {
+        val b64Rgb = args.optString("rgb", "")
+        val frameWidth = args.optInt("width", width)
+        val frameHeight = args.optInt("height", height)
+        
+        if (b64Rgb.isEmpty()) {
             result.put("success", false)
             return result
         }
@@ -267,39 +271,35 @@ class RecordStreamPlugin(private val activity: Activity) : Plugin(activity) {
         // Process frame in a separate thread to avoid blocking UI
         recordingThread?.execute {
             try {
-                // Decode base64 string to byte array
-                Log.d("RecordStreamPlugin", "Decoding frame of length: ${b64Png.length}")
-                val imageBytes = Base64.decode(b64Png, Base64.DEFAULT)
+                // Decode base64 string to RGB byte array
+                Log.d("RecordStreamPlugin", "Decoding RGB data of length: ${b64Rgb.length}, size: ${frameWidth}x${frameHeight}")
+                val rgbBytes = Base64.decode(b64Rgb, Base64.DEFAULT)
                 
-                // Convert to Bitmap
-                val bitmap = BitmapFactory.decodeStream(ByteArrayInputStream(imageBytes))
-                if (bitmap == null) {
-                    Log.e("RecordStreamPlugin", "Failed to decode bitmap from base64")
-                    mainHandler.post {
-                        val response = JSObject()
-                        response.put("success", false)
-                        invoke.resolve(response)
-                    }
-                    return@execute
-                }
+                // Convert RGB bytes directly to OpenCV Mat
+                val rgbMat = Mat(frameHeight, frameWidth, CvType.CV_8UC3)
+                rgbMat.put(0, 0, rgbBytes)
                 
-                Log.d("RecordStreamPlugin", "Decoded bitmap: ${bitmap.width}x${bitmap.height}")
+                Log.d("RecordStreamPlugin", "Created Mat: ${rgbMat.width()}x${rgbMat.height()}, channels: ${rgbMat.channels()}")
                 
-                // Resize bitmap if needed
-                val scaledBitmap = if (bitmap.width != width || bitmap.height != height) {
-                    Log.d("RecordStreamPlugin", "Resizing bitmap from ${bitmap.width}x${bitmap.height} to ${width}x${height}")
-                    Bitmap.createScaledBitmap(bitmap, width, height, true)
+                // Resize if needed
+                val resizedMat = if (frameWidth != width || frameHeight != height) {
+                    Log.d("RecordStreamPlugin", "Resizing frame from ${frameWidth}x${frameHeight} to ${width}x${height}")
+                    val resized = Mat()
+                    Imgproc.resize(rgbMat, resized, Size(width.toDouble(), height.toDouble()), 0.0, 0.0, Imgproc.INTER_LINEAR)
+                    rgbMat.release() // Free the original mat
+                    resized
                 } else {
-                    bitmap
+                    rgbMat // Use as-is
                 }
-                
-                // Convert Bitmap to Mat
-                val mat = Mat()
-                Utils.bitmapToMat(scaledBitmap, mat)
                 
                 // Convert RGB to BGR for OpenCV
                 val bgrMat = Mat()
-                Imgproc.cvtColor(mat, bgrMat, Imgproc.COLOR_RGBA2BGR)
+                Imgproc.cvtColor(resizedMat, bgrMat, Imgproc.COLOR_RGB2BGR)
+                
+                // Free the resized mat if it's not the same as rgbMat (we already free rgbMat in the resize block)
+                if (resizedMat != rgbMat) {
+                    resizedMat.release()
+                }
                 
                 Log.d("RecordStreamPlugin", "Converted mat: ${bgrMat.width()}x${bgrMat.height()}, channels: ${bgrMat.channels()}")
                 
@@ -335,12 +335,7 @@ class RecordStreamPlugin(private val activity: Activity) : Plugin(activity) {
                 // Clean up temporary resources
                 // Note: We don't release processedMat here since it's now in our queue
                 // We'll release frames when they're removed from the queue
-                mat.release()
-                bgrMat.release()
-                if (scaledBitmap != bitmap) {
-                    scaledBitmap.recycle()
-                }
-                bitmap.recycle()
+                bgrMat.release() // bgrMat is explicitly cloned or released above
                 
                 // Return success response
                 val response = JSObject()

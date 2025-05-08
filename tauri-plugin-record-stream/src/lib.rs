@@ -27,8 +27,8 @@ pub async fn start_record<R: Runtime>(app: tauri::AppHandle<R>, payload: StartRe
 }
 
 /// Push a frame to the current recording
-pub fn push_frame<R: Runtime>(app: tauri::AppHandle<R>, b64_png: String) -> Result<bool> {
-  app.record_stream().push_frame(b64_png)
+pub fn push_frame<R: Runtime>(app: tauri::AppHandle<R>, rgb: Vec<u8>, width: u32, height: u32) -> Result<bool> {
+  app.record_stream().push_frame(rgb, width, height)
 }
 
 /// Stop the current recording

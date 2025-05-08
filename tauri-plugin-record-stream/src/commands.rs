@@ -24,9 +24,11 @@ pub(crate) async fn start_record<R: Runtime>(
 #[command]
 pub(crate) fn push_frame<R: Runtime>(
     app: AppHandle<R>,
-    b64_png: String,
+    rgb: Vec<u8>,
+    width: u32, 
+    height: u32,
 ) -> Result<bool> {
-    app.record_stream().push_frame(b64_png)
+    app.record_stream().push_frame(rgb, width, height)
 }
 
 #[command]
