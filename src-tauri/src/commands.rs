@@ -349,24 +349,21 @@ pub fn toggle_fake_data(
 pub fn get_signal_config_state(
     state: State<Arc<SerialState>>,
 ) -> Result<serde_json::Value, String> {
-    // Get connection status information
+    // Get signal connection status information
     let has_serial = state.outbound_tx.lock().unwrap().is_some();
-    let camera_streaming = state.camera_stream_running.load(Ordering::SeqCst);
     let signal_streaming = state.signal_stream_running.load(Ordering::SeqCst);
     
-    // Determine connection status based on state
+    // Determine data source based on state
     let status = if has_serial {
         "serial"
-    } else if camera_streaming {
-        "stream"
     } else if signal_streaming {
         "fake"
     } else {
         "disconnected"
     };
     
-    // Check if data is being received (any kind of streaming is active)
-    let is_running = camera_streaming || signal_streaming || has_serial;
+    // Check if signal data is being received
+    let is_running = signal_streaming || has_serial;
     
     // Get fake data status directly from the state
     let is_fake_enabled = state.fake_data_enabled.load(Ordering::SeqCst);
@@ -393,24 +390,8 @@ pub fn get_signal_config_state(
 pub fn get_streaming_view_state(
     state: State<Arc<SerialState>>,
 ) -> Result<serde_json::Value, String> {
-    // Get connection status information
-    let has_serial = state.outbound_tx.lock().unwrap().is_some();
+    // Get camera streaming status specifically
     let camera_streaming = state.camera_stream_running.load(Ordering::SeqCst);
-    let signal_streaming = state.signal_stream_running.load(Ordering::SeqCst);
-    
-    // Determine connection status based on state
-    let status = if has_serial {
-        "serial"
-    } else if camera_streaming {
-        "stream"
-    } else if signal_streaming {
-        "fake"
-    } else {
-        "disconnected"
-    };
-    
-    // Check if data is being received (any kind of streaming is active)
-    let is_streaming = camera_streaming || signal_streaming;
     
     // Get fake data status directly from the state
     let is_fake_enabled = state.fake_data_enabled.load(Ordering::SeqCst);
@@ -429,13 +410,12 @@ pub fn get_streaming_view_state(
     
     // Combine all state information into a single JSON response
     let json = serde_json::json!({
-        "isStreaming": is_streaming,
+        "isStreaming": camera_streaming,
         "isFakeEnabled": is_fake_enabled,
         "isRecording": is_recording,
-        "connectionStatus": status,
-        "recordingFilename": filename,
         "videoRecordingActive": video_recording_active,
-        "regularRecordingActive": recording_active
+        "regularRecordingActive": recording_active,
+        "recordingFilename": filename
     });
 
     Ok(json)
