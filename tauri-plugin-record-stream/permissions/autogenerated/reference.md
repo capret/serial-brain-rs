@@ -19,6 +19,32 @@ Default permissions for the plugin
 <tr>
 <td>
 
+`record-stream:allow-configure-record`
+
+</td>
+<td>
+
+Enables the configure_record command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`record-stream:deny-configure-record`
+
+</td>
+<td>
+
+Denies the configure_record command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `record-stream:allow-ping`
 
 </td>
@@ -45,6 +71,32 @@ Denies the ping command without any pre-configured scope.
 <tr>
 <td>
 
+`record-stream:allow-push-frame`
+
+</td>
+<td>
+
+Enables the push_frame command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`record-stream:deny-push-frame`
+
+</td>
+<td>
+
+Denies the push_frame command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `record-stream:allow-start-record`
 
 </td>
@@ -64,6 +116,32 @@ Enables the start_record command without any pre-configured scope.
 <td>
 
 Denies the start_record command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`record-stream:allow-stop-record`
+
+</td>
+<td>
+
+Enables the stop_record command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`record-stream:deny-stop-record`
+
+</td>
+<td>
+
+Denies the stop_record command without any pre-configured scope.
 
 </td>
 </tr>

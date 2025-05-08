@@ -223,30 +223,12 @@ impl VideoRecorder {
         }
         
         let now = Instant::now();
-        
-        // Only process if we have a reference time
         if let Some(initial_next_time) = self.next_frame_time {
-            // Use a mutable copy of the next_time
             let mut current_frame_time = initial_next_time;
-            
-            // If it's time to write a frame (or past time)
             while current_frame_time <= now {
-                // Get a frame to write - either from queue or repeat last frame
                 let frame_to_write = if !self.frame_queue.is_empty() {
-                    // Take the oldest frame from the queue
                     let (frame_time, frame) = self.frame_queue.pop_front().unwrap();
-                    
-                    // Calculate how far behind schedule we are in milliseconds
-                    if let Some(expected_time) = self.next_frame_time {
-                        // Only report significant timing differences to avoid log spam
-                        if frame_time > expected_time {
-                            let delay = frame_time.duration_since(expected_time).as_millis();
-                            if delay > 100 { // Only log significant delays
-                                println!("[record_plugin] Frame arrived {}ms late", delay);
-                            }
-                        }
-                    }
-                    
+
                     Some(frame)
                 } else if let Some(ref last_frame) = self.last_frame {
                     // No new frames available, duplicate the last one
@@ -276,15 +258,9 @@ impl VideoRecorder {
                         }
                     }
                 }
-                
-                // Calculate the next frame time based on the current one
                 current_frame_time += self.frame_interval;
                 
-                // Update the object's next_frame_time
                 self.next_frame_time = Some(current_frame_time);
-                
-                // Safety check: don't get stuck in the loop if we're very far behind
-                // Only write up to 10 frames at once to catch up
                 if now.duration_since(current_frame_time) > Duration::from_secs(1) {
                     // println!("[record_plugin] Warning: Over 1 second behind in frame processing. Skipping ahead.");
                     self.next_frame_time = Some(now + self.frame_interval);

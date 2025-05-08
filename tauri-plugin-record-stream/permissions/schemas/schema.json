@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the configure_record command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-configure-record",
+          "markdownDescription": "Enables the configure_record command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the configure_record command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-configure-record",
+          "markdownDescription": "Denies the configure_record command without any pre-configured scope."
+        },
+        {
           "description": "Enables the ping command without any pre-configured scope.",
           "type": "string",
           "const": "allow-ping",
@@ -307,6 +319,18 @@
           "markdownDescription": "Denies the ping command without any pre-configured scope."
         },
         {
+          "description": "Enables the push_frame command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-push-frame",
+          "markdownDescription": "Enables the push_frame command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the push_frame command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-push-frame",
+          "markdownDescription": "Denies the push_frame command without any pre-configured scope."
+        },
+        {
           "description": "Enables the start_record command without any pre-configured scope.",
           "type": "string",
           "const": "allow-start-record",
@@ -317,6 +341,18 @@
           "type": "string",
           "const": "deny-start-record",
           "markdownDescription": "Denies the start_record command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stop_record command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop-record",
+          "markdownDescription": "Enables the stop_record command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_record command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop-record",
+          "markdownDescription": "Denies the stop_record command without any pre-configured scope."
         },
         {
           "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-start-record`",

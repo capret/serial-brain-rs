@@ -76,7 +76,8 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
+import * as path from '@tauri-apps/api/path';
+import { mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
 
 /* -------------------------------------------------------------------
    constants
@@ -154,15 +155,28 @@ async function toggleRecording() {
 
 async function startRecording() {
   try {
-    // Ask user where to save the file
-    const savePath = await save({
-      filters: [{
-        name: 'Video',
-        extensions: ['mp4']
-      }]
-    });
+    // Get document directory
+    const documentDir = await path.documentDir();
     
-    if (!savePath) return; // User cancelled
+    // Create video_data directory if it doesn't exist
+    try {
+      await mkdir('video_data', {
+        baseDir: BaseDirectory.Document,
+      });
+    } catch (error) {
+      // Directory might already exist, ignore that error
+      console.log('Directory setup note:', error);
+    }
+    
+    // Join the document dir with video_data folder to get the full path
+    const fullPath = await path.join(documentDir, 'video_data');
+    
+    // Create a filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `video_${timestamp}.mp4`;
+    const savePath = await path.join(fullPath, filename);
+    
+    console.log('Using path for video recording:', savePath);
     
     // Start recording in the backend
     const result = await invoke('start_stream_recording', { filePath: savePath });

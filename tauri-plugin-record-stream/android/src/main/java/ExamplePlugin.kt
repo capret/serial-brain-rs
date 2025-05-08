@@ -1,4 +1,4 @@
-package com.plugin.record-stream
+package com.plugin.record_stream
 
 import android.app.Activity
 import app.tauri.annotation.Command

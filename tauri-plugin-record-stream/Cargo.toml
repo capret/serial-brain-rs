@@ -11,16 +11,18 @@ links = "tauri-plugin-record-stream"
 [dependencies]
 tauri = { version = "2.5.0" }
 serde = "1.0"
+serde_json = "1.0"
 thiserror = "2"
+image = "0.24"
+base64 = "0.21"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
 opencv = { version = "0.94.4", default-features = false, features = [
   "clang-runtime",   # (optional) bundles libclang, handy on Windows/macOS
   "imgcodecs",
   "videoio",
   "imgproc"
 ] }
-image = "0.24"
-base64 = "0.21"
-# once_cell      = "1"
-# anyhow         = "1"
+
 [build-dependencies]
 tauri-plugin = { version = "2.2.0", features = ["build"] }

@@ -13,7 +13,7 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
   api: PluginApi<R, C>,
 ) -> crate::Result<RecordStream<R>> {
   #[cfg(target_os = "android")]
-  let handle = api.register_android_plugin("com.plugin.record-stream", "RecordStreamPlugin")?;
+  let handle = api.register_android_plugin("com.plugin.record_stream", "RecordStreamPlugin")?;
   #[cfg(target_os = "ios")]
   let handle = api.register_ios_plugin(init_plugin_record_stream)?;
   Ok(RecordStream(handle))
@@ -22,62 +22,78 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
 /// Access to the record-stream APIs.
 pub struct RecordStream<R: Runtime>(PluginHandle<R>);
 
-#[derive(serde::Serialize)]
-struct PushFrameRequest {
-  b64_png: String,
-}
-
-#[derive(serde::Serialize)]
-struct ConfigureRequest {
-  width: u32,
-  height: u32,
-  fps: f64,
-}
-
+// Response type for boolean results
 #[derive(serde::Deserialize)]
 struct BooleanResponse {
   success: bool,
 }
+
+
 
 impl<R: Runtime> RecordStream<R> {
   pub fn ping(&self, payload: PingRequest) -> crate::Result<PingResponse> {
     self
       .0
       .run_mobile_plugin("ping", payload)
-      .map_err(Into::into)
+      .map_err(|e| crate::Error::from(e))
   }
 
   pub fn start_record(&self, payload: StartRecordRequest) -> crate::Result<StartRecordResponse> {
+    use serde_json::json;
+    
+    // Create a simple JSON object instead of a typed struct
+    let params = json!({
+      "file_path": payload.file_path
+    });
+    
     self
       .0
-      .run_mobile_plugin("startRecord", payload)
-      .map_err(Into::into)
+      .run_mobile_plugin("startRecord", params)
+      .map_err(|e| crate::Error::from(e))
   }
   
   pub fn configure_record(&self, width: u32, height: u32, fps: f64) -> crate::Result<bool> {
-    let payload = ConfigureRequest { width, height, fps };
+    use serde_json::json;
+    
+    // Create a simple JSON object
+    let params = json!({
+      "width": width,
+      "height": height,
+      "fps": fps
+    });
+    
     let response: BooleanResponse = self
       .0
-      .run_mobile_plugin("configureRecord", payload)
-      .map_err(Into::into)?;
+      .run_mobile_plugin("configureRecord", params)
+      .map_err(|e| crate::Error::from(e))?;
     Ok(response.success)
   }
   
   pub fn push_frame(&self, b64_png: String) -> crate::Result<bool> {
-    let payload = PushFrameRequest { b64_png };
+    use serde_json::json;
+    
+    // Create a simple JSON object
+    let params = json!({
+      "b64_png": b64_png
+    });
+    
     let response: BooleanResponse = self
       .0
-      .run_mobile_plugin("pushFrame", payload)
-      .map_err(Into::into)?;
+      .run_mobile_plugin("pushFrame", params)
+      .map_err(|e| crate::Error::from(e))?;
     Ok(response.success)
   }
   
   pub fn stop_record(&self) -> crate::Result<bool> {
-    // For stop, we can just pass an empty object
+    use serde_json::json;
+    
+    // Create an empty JSON object
+    let params = json!({});
+    
     let response: BooleanResponse = self
       .0
-      .run_mobile_plugin::<_, _>("stopRecord", ())
-      .map_err(Into::into)?;
+      .run_mobile_plugin("stopRecord", params)
+      .map_err(|e| crate::Error::from(e))?;
     Ok(response.success)
   }
 }

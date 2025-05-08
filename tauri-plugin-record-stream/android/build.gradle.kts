@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.plugin.record-stream"
+    namespace = "com.plugin.record_stream"
     compileSdk = 34
 
     defaultConfig {
@@ -30,12 +30,6 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
-    
-    sourceSets {
-        main {
-            jniLibs.srcDirs += "$System.env.OPENCV_ANDROID_SDK/sdk/native/libs"
-        }
-    }
 }
 
 dependencies {
@@ -47,4 +41,5 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     implementation(project(":tauri-android"))
+    implementation("org.opencv:opencv:4.10.0")
 }

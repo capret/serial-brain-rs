@@ -15,7 +15,7 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
   api: PluginApi<R, C>,
 ) -> crate::Result<AndroidForwardService<R>> {
   #[cfg(target_os = "android")]
-  let handle = api.register_android_plugin("com.plugin.android_forward_service", "ExamplePlugin")?;
+  let handle = api.register_android_plugin("com.plugin.android_forward_service", "SerialForwardPlugin")?;
   #[cfg(target_os = "ios")]
   let handle = api.register_ios_plugin(init_plugin_android_forward_service)?;
   Ok(AndroidForwardService(handle))

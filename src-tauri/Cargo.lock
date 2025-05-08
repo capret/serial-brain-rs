@@ -4965,6 +4965,7 @@ dependencies = [
  "image 0.24.9",
  "opencv",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-plugin",
  "thiserror 2.0.12",

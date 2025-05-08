@@ -15,6 +15,7 @@ pub enum Error {
   ImageError(String),
   #[error("Base64 decoding error")]
   Base64Error(#[from] base64::DecodeError),
+  #[cfg(not(target_os = "android"))]
   #[error("OpenCV error")]
   OpenCvError(#[from] opencv::Error),
   #[error("Image load error")]
