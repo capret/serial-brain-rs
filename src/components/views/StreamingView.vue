@@ -78,6 +78,8 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import * as path from '@tauri-apps/api/path';
 import { mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
+// Import only what we need from appState, but don't use the connection states
+// as those are for signal processing, not camera streaming
 
 /* -------------------------------------------------------------------
    constants
@@ -88,12 +90,13 @@ const SRC_H = 240;           // incoming frame height
 /* -------------------------------------------------------------------
    reactive state
 ------------------------------------------------------------------- */
+// Camera-specific state variables - separate from signal connection state
 const streamUrl      = ref('http://192.168.1.123:81/stream');
-const isStreaming    = ref(false);
-const fakeEnabled    = ref(false);
+const isStreaming    = ref(false); // Camera streaming state
+const fakeEnabled    = ref(false); // Camera fake data state
 const isBrightEnough = ref(true);
 
-const isRecording    = ref(false);
+const isRecording    = ref(false); // Camera recording state
 
 /* -------------------------------------------------------------------
    canvas / contexts
@@ -116,7 +119,7 @@ let errorUnlisten: () => void;
 let analysisUnlisten: () => void;
 
 /* ===================================================================
-   streaming controls
+   camera streaming controls
 =================================================================== */
 function toggleStreaming() {
   if (isStreaming.value) {
@@ -124,12 +127,20 @@ function toggleStreaming() {
       .then(() => {
         isStreaming.value = false;
         if (isRecording.value) stopRecording();   // safety
+        console.log('Camera streaming stopped');
       })
-      .catch(console.error);
+      .catch((error) => {
+        console.error('Error stopping camera streaming:', error);
+      });
   } else {
     invoke('start_streaming', { path: streamUrl.value, fake: fakeEnabled.value })
-      .then(() => { isStreaming.value = true; })
-      .catch(console.error);
+      .then(() => { 
+        isStreaming.value = true; 
+        console.log('Camera streaming started');
+      })
+      .catch((error) => {
+        console.error('Error starting camera streaming:', error);
+      });
   }
 }
 
@@ -147,9 +158,9 @@ async function toggleFake() {
       await invoke('start_streaming', { path: streamUrl.value, fake: fakeEnabled.value });
     }
     
-    console.log(`Fake data ${fakeEnabled.value ? 'enabled' : 'disabled'}`);
+    console.log(`Camera fake data ${fakeEnabled.value ? 'enabled' : 'disabled'}`);
   } catch (error) {
-    console.error('Error toggling fake data:', error);
+    console.error('Error toggling camera fake data:', error);
   }
 }
 
@@ -218,19 +229,20 @@ onMounted(async () => {
   // preview context
   prevCtx = canvas.value!.getContext('2d')!;
 
-  // Get all streaming view state from backend in a single call
+  // Get camera streaming view state from backend in a single call
   try {
     // Get all state information in a single call
     const viewState = await invoke<any>('get_streaming_view_state');
     
     // Update component state with values from backend
+    // These are camera-specific states, separate from signal connection
     isStreaming.value = viewState.isStreaming;
     fakeEnabled.value = viewState.isFakeEnabled;
     isRecording.value = viewState.isRecording;
     
-    console.log('Initial states from backend:', viewState);
+    console.log('Initial camera states from backend:', viewState);
   } catch (error) {
-    console.error('Error fetching initial states:', error);
+    console.error('Error fetching initial camera states:', error);
   }
 
   /* ---------- frame listener ---------- */
