@@ -69,7 +69,7 @@ impl<R: Runtime> RecordStream<R> {
     Ok(response.success)
   }
   
-  pub fn push_frame(&self, rgb: Vec<u8>, width: u32, height: u32) -> crate::Result<bool> {
+  pub fn push_frame(&self, rgb: Vec<u8>, width: u32, height: u32) -> crate::Result<crate::FrameAnalysisResponse> {
     use serde_json::json;
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     
@@ -84,11 +84,24 @@ impl<R: Runtime> RecordStream<R> {
       "height": height
     });
     
-    let response: BooleanResponse = self
+    // Define a struct for deserializing the mobile response
+    #[derive(serde::Deserialize)]
+    struct MobileFrameAnalysisResponse {
+      success: bool,
+      is_covered: bool,
+      edge_count: i32,
+    }
+    
+    let response: MobileFrameAnalysisResponse = self
       .0
       .run_mobile_plugin("pushFrame", params)
       .map_err(|e| crate::Error::from(e))?;
-    Ok(response.success)
+    
+    Ok(crate::FrameAnalysisResponse {
+      success: response.success,
+      is_covered: response.is_covered,
+      edge_count: response.edge_count,
+    })
   }
   
   pub fn stop_record(&self) -> crate::Result<bool> {

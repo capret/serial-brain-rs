@@ -27,7 +27,7 @@ pub(crate) fn push_frame<R: Runtime>(
     rgb: Vec<u8>,
     width: u32, 
     height: u32,
-) -> Result<bool> {
+) -> Result<crate::FrameAnalysisResponse> {
     app.record_stream().push_frame(rgb, width, height)
 }
 

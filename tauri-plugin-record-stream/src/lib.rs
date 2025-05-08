@@ -26,8 +26,16 @@ pub async fn start_record<R: Runtime>(app: tauri::AppHandle<R>, payload: StartRe
   app.record_stream().start_record(payload)
 }
 
-/// Push a frame to the current recording
-pub fn push_frame<R: Runtime>(app: tauri::AppHandle<R>, rgb: Vec<u8>, width: u32, height: u32) -> Result<bool> {
+/// Response from frame analysis
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct FrameAnalysisResponse {
+  pub success: bool,
+  pub is_covered: bool,
+  pub edge_count: i32,
+}
+
+/// Push a frame to the current recording and analyze if camera is covered 
+pub fn push_frame<R: Runtime>(app: tauri::AppHandle<R>, rgb: Vec<u8>, width: u32, height: u32) -> Result<FrameAnalysisResponse> {
   app.record_stream().push_frame(rgb, width, height)
 }
 

@@ -58,7 +58,7 @@
 
 <script setup lang="ts">
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { onMounted, defineEmits } from 'vue';
+import { onMounted } from 'vue';
 
 // Define props and emits
 defineProps({

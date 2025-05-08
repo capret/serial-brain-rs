@@ -99,22 +99,14 @@ fn start_fake_stream(
             let encoder = PngEncoder::new(&mut buf);
             encoder.write_image(&raw, W, H, ColorType::Rgb8.into())
                 .unwrap();
-                
-            let total_pixels = (W * H) as u64;
-            let sum: u64 = raw.chunks(3).map(|p| (p[0] as u64 + p[1] as u64 + p[2] as u64) / 3).sum();
-            let avg = if total_pixels > 0 { sum / total_pixels } else { 0 };
-
-            let is_bright_enough = avg >= 80;
-            let _ = app_clone.emit("frame_analysis", Arc::new(is_bright_enough));
-
             let b64 = STANDARD.encode(&buf);
             let _ = app_clone.emit("frame", Arc::new(b64.clone()));
-            
-            // Also push frame to video recorder if recording is active
             if state_inner.video_recording_active.load(Ordering::SeqCst) {
-                // Don't use expect() or unwrap() to avoid crashing the thread if recording fails
-                if let Err(e) = tauri_plugin_record_stream::push_frame(app_clone.clone(), raw.clone(), W, H) {
-                    println!("Error pushing frame to video recorder: {}", e);
+                match tauri_plugin_record_stream::push_frame(app_clone.clone(), raw.clone(), W, H) {
+                    Ok(analysis) => {
+                        let _ = app_clone.emit("frame_analysis", Arc::new(!analysis.is_covered));
+                    },
+                    Err(e) => println!("Error pushing frame to video recorder: {}", e)
                 }
             }
             std::thread::sleep(Duration::from_millis(33));
@@ -213,23 +205,6 @@ fn start_real_stream(
                     let mut buffer = vec![0u8; content_length];
                     match reader.read_exact(&mut buffer) {
                         Ok(_) => {
-                            // Try to analyze the image for brightness
-                            let result = image::load_from_memory(&buffer);
-                            if let Ok(img) = result {
-                                // Calculate average brightness
-                                let dims = img.dimensions();
-                                let total_pixels = dims.0 * dims.1;
-                                if total_pixels > 0 {
-                                    let mut sum: u64 = 0;
-                                    for pixel in img.to_rgb8().pixels() {
-                                        sum += (pixel[0] as u64 + pixel[1] as u64 + pixel[2] as u64) / 3;
-                                    }
-                                    let avg = sum / total_pixels as u64;
-                                    let is_bright_enough = avg >= 80;
-                                    let _ = app_clone.emit("frame_analysis", Arc::new(is_bright_enough));
-                                }
-                            }
-                            
                             // Encode the image to base64 and emit to frontend
                             let b64 = STANDARD.encode(&buffer);
                             let _ = app_clone.emit("frame", Arc::new(b64.clone()));
@@ -240,9 +215,11 @@ fn start_real_stream(
                                 if let Ok(img) = image::load_from_memory(&buffer) {
                                     let rgb = img.to_rgb8();
                                     let dims = img.dimensions();
-                                    // Don't use expect() or unwrap() to avoid crashing the thread if recording fails
-                                    if let Err(e) = tauri_plugin_record_stream::push_frame(app_clone.clone(), rgb.into_raw(), dims.0, dims.1) {
-                                        println!("Error pushing frame to video recorder: {}", e);
+                                    match tauri_plugin_record_stream::push_frame(app_clone.clone(), rgb.into_raw(), dims.0, dims.1) {
+                                        Ok(analysis) => {
+                                            let _ = app_clone.emit("frame_analysis", Arc::new(!analysis.is_covered));
+                                        },
+                                        Err(e) => println!("Error pushing frame to video recorder: {}", e)
                                     }
                                 }
                             }

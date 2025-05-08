@@ -100,16 +100,23 @@ impl VideoRecorder {
         Ok(true)
     }
 
-    pub fn push_frame(&mut self, rgb: Vec<u8>, width: u32, height: u32) -> crate::Result<bool> {
+    pub fn push_frame(&mut self, rgb: Vec<u8>, width: u32, height: u32) -> crate::Result<crate::FrameAnalysisResponse> {
         use opencv::imgproc;
 
+        // Default response for early returns
+        let failed_response = crate::FrameAnalysisResponse {
+            success: false,
+            is_covered: false,
+            edge_count: 0,
+        };
+
         if !self.is_recording || self.writer.is_none() {
-            return Ok(false); // Not recording
+            return Ok(failed_response); // Not recording
         }
 
         // basic validation
         if rgb.is_empty() || width == 0 || height == 0 {
-            return Ok(false);
+            return Ok(failed_response);
         }
 
         let img_width = width as i32;
@@ -131,12 +138,26 @@ impl VideoRecorder {
             mat
         };
 
-        // Convert to BGR for OpenCV writer
+        // Convert to BGR for OpenCV writer and analysis
         let mut bgr_mat = core::Mat::default();
-        
-        // Simple approach: try the 4-argument version that works with most OpenCV versions
         imgproc::cvt_color(&src_mat, &mut bgr_mat, imgproc::COLOR_RGB2BGR, 0, AlgorithmHint::ALGO_HINT_DEFAULT)?;
-        // src_mat wraps external data; ensure bytes live until here
+
+        // Create a grayscale version for edge detection
+        let mut gray = core::Mat::default();
+        imgproc::cvt_color(&bgr_mat, &mut gray, imgproc::COLOR_BGR2GRAY, 0, AlgorithmHint::ALGO_HINT_DEFAULT)?;
+
+        // Perform edge detection using Canny
+        let mut edges = core::Mat::default();
+        imgproc::canny(&gray, &mut edges, 50.0, 150.0, 3, false)?;
+
+        // Count edge pixels - if very few edges, camera might be covered
+        let edge_count = core::count_non_zero(&edges)?;
+        let is_covered = edge_count < 500; // Threshold for considering camera covered
+        
+        // Log the edge detection results
+        println!("[record_plugin] Edge detection: {} edges found, covered: {}", edge_count, is_covered);
+
+        // src_mat is no longer needed
         std::mem::drop(src_mat);
 
         // If incoming frame size doesn't match configured video size, resize
@@ -169,7 +190,12 @@ impl VideoRecorder {
         // Process frame queue and write frames as needed
         self.process_frame_queue()?;
 
-        Ok(true)
+        // Return success with edge detection results
+        Ok(crate::FrameAnalysisResponse {
+            success: true,
+            is_covered,
+            edge_count,
+        })
     }
     
     fn process_frame_queue(&mut self) -> crate::Result<()> {
@@ -307,7 +333,7 @@ impl<R: Runtime> RecordStream<R> {
     }
   }
   
-  pub fn push_frame(&self, rgb: Vec<u8>, width: u32, height: u32) -> crate::Result<bool> {
+  pub fn push_frame(&self, rgb: Vec<u8>, width: u32, height: u32) -> crate::Result<crate::FrameAnalysisResponse> {
     let mut recorder = self.recorder.lock().map_err(|_| crate::Error::MutexError)?;
     recorder.push_frame(rgb, width, height)
   }

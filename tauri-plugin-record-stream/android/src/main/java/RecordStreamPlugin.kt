@@ -15,6 +15,7 @@ import app.tauri.plugin.Invoke
 import app.tauri.plugin.Plugin
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
+import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Size
@@ -332,14 +333,35 @@ class RecordStreamPlugin(private val activity: Activity) : Plugin(activity) {
                     }
                 }
                 
+                // Create a grayscale version of the frame for edge detection
+                val grayMat = Mat()
+                Imgproc.cvtColor(processedMat, grayMat, Imgproc.COLOR_BGR2GRAY)
+                
+                // Apply Canny edge detection to find edges in the image
+                val edgesMat = Mat()
+                Imgproc.Canny(grayMat, edgesMat, 50.0, 150.0, 3, false)
+                
+                // Count edge pixels - if very few edges, camera might be covered
+                val edgeCount = Core.countNonZero(edgesMat)
+                val isCovered = edgeCount < 500 // Threshold for considering camera covered
+                
+                // Log the edge detection results
+                Log.d("RecordStreamPlugin", "Edge detection: $edgeCount edges found, covered: $isCovered")
+                
+                // Clean up edge detection resources
+                grayMat.release()
+                edgesMat.release()
+                
                 // Clean up temporary resources
                 // Note: We don't release processedMat here since it's now in our queue
                 // We'll release frames when they're removed from the queue
                 bgrMat.release() // bgrMat is explicitly cloned or released above
                 
-                // Return success response
+                // Return success response with edge detection analysis
                 val response = JSObject()
                 response.put("success", true)
+                response.put("is_covered", isCovered)
+                response.put("edge_count", edgeCount)
                 mainHandler.post {
                     invoke.resolve(response)
                 }

@@ -237,7 +237,7 @@ pub async fn push_video_frame(
     frame_data: Vec<u8>,
     width: u32,
     height: u32,
-) -> Result<bool, String> {
+) -> Result<tauri_plugin_record_stream::FrameAnalysisResponse, String> {
     // Don't print the raw data - it would flood the console
     println!("[Main App] Pushing video frame...({} x {})", width, height);
     
