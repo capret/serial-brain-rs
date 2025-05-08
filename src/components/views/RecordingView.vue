@@ -56,7 +56,8 @@ import {
   maxRecordingDuration,
   recordingFormat,
   autoStartRecording,
-  isRunning
+  isConnected,
+  fetchConnectionState
 } from '../../store/appState';
 import {
   setupRecordingFileWatcher,
@@ -74,11 +75,6 @@ import {
 } from '../records';
 
 // Define interfaces for backend response types
-interface ConnectionStatusResponse {
-  status: string;
-  isRunning: boolean;
-}
-
 interface RecordingStatusResponse {
   isRecording: boolean;
   filename: string;
@@ -217,19 +213,15 @@ onMounted(async () => {
     // First, set up the recordings directory in AppData
     await selectDirectory();
     
-    // Check the current connection status from the backend
+    // Fetch the connection state from the backend using our shared function
     try {
       console.log('Fetching connection status from backend...');
-      const connStatus = await invoke('get_connection_status') as ConnectionStatusResponse;
+      await fetchConnectionState();
       
-      // Update the frontend connection status based on backend state
-      if (connStatus) {
-        console.log(`Backend reports connection status: ${connStatus.status}`);
-        connectionStatus.value = connStatus.status;
-        
-        console.log(`Backend reports running state: ${connStatus.isRunning}`);
-        isRunning.value = connStatus.isRunning;
-      }
+      // Update the connection status based on isConnected
+      // This ensures consistency with the other views
+      connectionStatus.value = isConnected.value ? 'connected' : 'disconnected';
+      console.log('Updated connection status to:', connectionStatus.value);
     } catch (error) {
       console.warn('Failed to get connection status from backend:', error);
     }

@@ -56,27 +56,13 @@
         <div class="flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10" stroke-opacity="0.5"></circle>
-            <path d="M8 12l6-3v6l-6-3"></path>
+            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
           </svg>
           <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">Streaming</h3>
         </div>
       </div>
       
-      <!-- Video Recorder Button -->
-      <div @click="setActiveView('videorecord')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
-        activeView === 'videorecord'
-          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
-          : 'bg-gray-700 hover:bg-gray-600']">
-        <div class="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="23 7 16 12 23 17 23 7"></polygon>
-            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-          </svg>
-          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">Video Recorder</h3>
-        </div>
-      </div>
     </div>
     <div class="mt-auto max-[800px]:mt-0 max-[800px]:flex max-[800px]:space-x-3 max-[800px]:ml-auto">
       <div @click="setActiveView('signal')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,

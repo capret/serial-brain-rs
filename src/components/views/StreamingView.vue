@@ -133,16 +133,23 @@ function toggleStreaming() {
   }
 }
 
-function toggleFake() {
-  if (isStreaming.value) {
-    invoke('stop_streaming')
-      .then(() => {
-        fakeEnabled.value = !fakeEnabled.value;
-        return invoke('start_streaming', { path: streamUrl.value, fake: fakeEnabled.value });
-      })
-      .catch(console.error);
-  } else {
-    fakeEnabled.value = !fakeEnabled.value;
+async function toggleFake() {
+  try {
+    // Toggle fake data state in the backend
+    const newFakeState = await invoke<boolean>('toggle_fake_data');
+    
+    // Update local state to match backend state
+    fakeEnabled.value = newFakeState;
+    
+    // If currently streaming, restart with the new fake state
+    if (isStreaming.value) {
+      await invoke('stop_streaming');
+      await invoke('start_streaming', { path: streamUrl.value, fake: fakeEnabled.value });
+    }
+    
+    console.log(`Fake data ${fakeEnabled.value ? 'enabled' : 'disabled'}`);
+  } catch (error) {
+    console.error('Error toggling fake data:', error);
   }
 }
 
@@ -210,6 +217,21 @@ async function stopRecording() {
 onMounted(async () => {
   // preview context
   prevCtx = canvas.value!.getContext('2d')!;
+
+  // Get all streaming view state from backend in a single call
+  try {
+    // Get all state information in a single call
+    const viewState = await invoke<any>('get_streaming_view_state');
+    
+    // Update component state with values from backend
+    isStreaming.value = viewState.isStreaming;
+    fakeEnabled.value = viewState.isFakeEnabled;
+    isRecording.value = viewState.isRecording;
+    
+    console.log('Initial states from backend:', viewState);
+  } catch (error) {
+    console.error('Error fetching initial states:', error);
+  }
 
   /* ---------- frame listener ---------- */
   frameUnlisten = await listen<string>('frame', ({ payload }) => {

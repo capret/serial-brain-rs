@@ -57,8 +57,8 @@
 
 <script setup lang="ts">
 import SignalVisualization from '../visualization/SignalVisualization.vue';
-import { ref, computed } from 'vue';
-import { isRunning, connectionStatus } from '../../store/appState';
+import { ref, computed, onMounted } from 'vue';
+import { isRunning, isConnected, fetchConnectionState } from '../../store/appState';
 import { invoke } from '@tauri-apps/api/core';
 // Define the interface with only the methods we need to access
 interface SignalVisualizationExposed {
@@ -130,5 +130,24 @@ function reportIssue() {
   // console.log("Report issue clicked - debug information will be added here");
 }
 
-const isLaunchDisabled = computed(() => connectionStatus.value !== 'connected');
+// Disable the launch button if not connected
+const isLaunchDisabled = computed(() => !isConnected.value);
+
+// When the component is mounted, fetch the connection state and ensure visualization is not running by default
+onMounted(async () => {
+  try {
+    // Fetch the connection state from the backend
+    await fetchConnectionState();
+    
+    console.log('VisualizationView - Connection state loaded:', { 
+      connected: isConnected.value
+    });
+    
+    // Reset the visualization running state to false when the component is mounted
+    // This ensures the visualization doesn't start automatically when navigating to this view
+    isRunning.value = false;
+  } catch (error) {
+    console.error('Error loading connection state in VisualizationView:', error);
+  }
+});
 </script>

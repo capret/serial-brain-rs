@@ -91,7 +91,7 @@ import FakeDataSettings from '../settings/FakeDataSettings.vue';
 
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { connectionStatus, tcpSettings, serialSettings, fakeDataSettings } from '../../store/appState.ts';
+import { connectionStatus, isRunning, tcpSettings, serialSettings, fakeDataSettings, fetchConnectionState } from '../../store/appState.ts';
 
 const props = defineProps({
   selectedDataSource: {
@@ -107,6 +107,21 @@ function onDataSourceChanged(source) {
 }
 
 // Connection status stored globally
+
+// Fetch the connection state from the backend when the component is mounted
+onMounted(async () => {
+  try {
+    // Fetch the initial connection state from the backend
+    await fetchConnectionState();
+    
+    console.log('Initial connection state loaded:', { 
+      status: connectionStatus.value, 
+      isRunning: isRunning.value 
+    });
+  } catch (error) {
+    console.error('Error loading initial connection state:', error);
+  }
+});
 
 // Button label based on status
 const buttonLabel = computed(() => {

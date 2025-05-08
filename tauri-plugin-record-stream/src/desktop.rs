@@ -227,7 +227,7 @@ impl VideoRecorder {
             let mut current_frame_time = initial_next_time;
             while current_frame_time <= now {
                 let frame_to_write = if !self.frame_queue.is_empty() {
-                    let (frame_time, frame) = self.frame_queue.pop_front().unwrap();
+                    let (_frame_time, frame) = self.frame_queue.pop_front().unwrap();
 
                     Some(frame)
                 } else if let Some(ref last_frame) = self.last_frame {

@@ -37,6 +37,10 @@ pub fn start_streaming(
         }
     }
     
+    // Update the fake_data_enabled flag to match the current request
+    state.fake_data_enabled.store(fake, Ordering::SeqCst);
+    println!("[Streaming] Setting fake data enabled to: {}", fake);
+    
     if fake {
         start_fake_stream(app_handle, state)
     } else {

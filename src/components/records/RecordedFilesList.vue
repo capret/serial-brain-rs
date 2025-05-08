@@ -48,7 +48,17 @@
       </div>
       <!-- Pagination Controls with ellipsis for many pages -->
       <div v-if="totalPages > 1" class="flex justify-center items-center mt-6 space-x-2">
-        <button :disabled="currentPage === 1" @click="goToPage(currentPage - 1)" class="px-3 py-1 rounded bg-gray-700 text-white disabled:opacity-50">Prev</button>
+        <button 
+          :disabled="currentPage === 1" 
+          @click="goToPage(currentPage - 1)" 
+          class="px-2 py-1 rounded bg-gray-700 text-white disabled:opacity-50 flex items-center justify-center" 
+          aria-label="Previous page"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
         
         <!-- First page button always visible -->
         <button v-if="totalPages > 0" 
@@ -58,7 +68,7 @@
         </button>
         
         <!-- Left ellipsis -->
-        <span v-if="showLeftEllipsis" class="px-2 text-gray-400">...</span>
+        <span v-if="showLeftEllipsis" class="px-1 text-gray-400">...</span>
         
         <!-- Page buttons around current page -->
         <button v-for="page in middlePages" :key="page" 
@@ -68,7 +78,7 @@
         </button>
         
         <!-- Right ellipsis -->
-        <span v-if="showRightEllipsis" class="px-2 text-gray-400">...</span>
+        <span v-if="showRightEllipsis" class="px-1 text-gray-400">...</span>
         
         <!-- Last page button if not already shown -->
         <button v-if="totalPages > 1 && !middlePages.includes(totalPages)" 
@@ -77,7 +87,17 @@
           {{ totalPages }}
         </button>
         
-        <button :disabled="currentPage === totalPages" @click="goToPage(currentPage + 1)" class="px-3 py-1 rounded bg-gray-700 text-white disabled:opacity-50">Next</button>
+        <button 
+          :disabled="currentPage === totalPages" 
+          @click="goToPage(currentPage + 1)" 
+          class="px-2 py-1 rounded bg-gray-700 text-white disabled:opacity-50 flex items-center justify-center"
+          aria-label="Next page"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
       </div>
     </div>
   </div>

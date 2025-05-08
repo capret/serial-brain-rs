@@ -1,9 +1,30 @@
 import { ref, reactive, watch } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 
 // Connection status
 export const connectionStatus = ref<string>('disconnected');
+// Separate connection running state from visualization running state
+export const isConnected = ref<boolean>(false);
+// Visualization running state - this controls whether the chart is actively plotting
 export const isRunning = ref<boolean>(false);
 export const chartDataBuffer = reactive<number[][]>([]);
+
+// Function to fetch the connection state from the backend
+export async function fetchConnectionState(): Promise<void> {
+  try {
+    const state = await invoke<any>('get_signal_config_state');
+    
+    // Update the connection status
+    connectionStatus.value = state.connectionStatus;
+    // Update the connection state
+    isConnected.value = state.isRunning;
+    // Do NOT update isRunning here - that's controlled by the visualization component
+    
+    console.log('Connection state from backend:', state);
+  } catch (error) {
+    console.error('Error fetching connection state:', error);
+  }
+}
 
 // Chart configuration
 export const windowSize = ref<number>(5000); // Display window size (samples)

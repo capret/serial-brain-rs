@@ -28,6 +28,7 @@ pub struct SerialState {
     pub recording_file: Mutex<Option<(File, String)>>,
     pub recording_filename: Mutex<Option<String>>, // Store current recording filename
     pub video_recording_active: Arc<AtomicBool>, // Flag for video recording
+    pub fake_data_enabled: Arc<AtomicBool>, // Flag to track if fake data is enabled
     pub app_handle: Mutex<Option<AppHandle>>, // For emitting events
 }
 
@@ -50,6 +51,7 @@ impl SerialState {
             recording_file: Mutex::new(None),
             recording_filename: Mutex::new(None),
             video_recording_active: Arc::new(AtomicBool::new(false)),
+            fake_data_enabled: Arc::new(AtomicBool::new(false)), // Initialize fake data as disabled
             app_handle: Mutex::new(None),
         };
         
