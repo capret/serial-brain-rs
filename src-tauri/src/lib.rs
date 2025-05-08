@@ -8,7 +8,7 @@ mod file_utils;
 mod streaming;
 mod recording;
 use commands::{
-    connect_serial, connect_socket, get_available_ports, get_recent_data, get_connection_status,
+    connect_serial, connect_socket, get_available_ports, get_recent_data,
     get_recording_status, get_signal_config_state, get_signal_quality, get_streaming_view_state, 
     is_video_recording_active, push_video_frame, record_video_stream, send_serial, start_fake_data, 
     start_recording, start_stream_recording, start_streaming, stop_data_acquisition, stop_recording, 
@@ -44,7 +44,6 @@ pub fn run() {
             start_fake_data,
             stop_data_acquisition,
             start_streaming,
-            get_connection_status,
             stop_streaming,
             start_recording,
             stop_recording,

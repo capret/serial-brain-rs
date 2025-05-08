@@ -199,41 +199,6 @@ pub fn get_recording_status(
 }
 
 #[tauri::command]
-pub fn get_connection_status(
-    state: State<Arc<SerialState>>,
-) -> Result<serde_json::Value, String> {
-    // Get outbound_tx to check if we have a serial connection
-    let has_serial = state.outbound_tx.lock().unwrap().is_some();
-    
-    // Check for camera streaming
-    let camera_streaming = state.camera_stream_running.load(Ordering::SeqCst);
-    
-    // Check if signal streaming is active
-    let signal_streaming = state.signal_stream_running.load(Ordering::SeqCst);
-    
-    // Determine connection status based on state
-    let status = if has_serial {
-        "serial"
-    } else if camera_streaming {
-        "stream"
-    } else if signal_streaming {
-        "fake"
-    } else {
-        "disconnected"
-    };
-    
-    // Check if data is being received (any kind of streaming is active)
-    let is_running = camera_streaming || signal_streaming;
-    
-    let json = serde_json::json!({
-        "status": status,
-        "isRunning": is_running,
-    });
-
-    Ok(json)
-}
-
-#[tauri::command]
 pub fn get_signal_quality(state: State<Arc<SerialState>>) -> Result<Vec<bool>, String> {
     // Use the on-demand check_signal_quality method instead of just getting current values
     Ok(state.check_signal_quality())
