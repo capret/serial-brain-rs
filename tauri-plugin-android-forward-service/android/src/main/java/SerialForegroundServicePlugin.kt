@@ -23,7 +23,7 @@ class MessageArgs {
  * This plugin enables background recording and serial data handling on Android devices
  */
 @TauriPlugin
-class SerialForwardPlugin(private val activity: Activity): Plugin(activity) {
+class SerialForegroundServicePlugin(private val activity: Activity): Plugin(activity) {
     private val serialUtility = SerialUtility()
 
     /**

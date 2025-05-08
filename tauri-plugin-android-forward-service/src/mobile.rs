@@ -15,7 +15,7 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
   api: PluginApi<R, C>,
 ) -> crate::Result<AndroidForwardService<R>> {
   #[cfg(target_os = "android")]
-  let handle = api.register_android_plugin("com.plugin.android_forward_service", "SerialForwardPlugin")?;
+  let handle = api.register_android_plugin("com.plugin.android_forward_service", "SerialForegroundServicePlugin")?;
   #[cfg(target_os = "ios")]
   let handle = api.register_ios_plugin(init_plugin_android_forward_service)?;
   Ok(AndroidForwardService(handle))
@@ -36,7 +36,7 @@ impl<R: Runtime> AndroidForwardService<R> {
     self
       .0
       .run_mobile_plugin(
-        "startService",
+        "startRecordingService",
         StartServiceRequest {},
       )
       .map(|_: ()| ())
@@ -47,7 +47,7 @@ impl<R: Runtime> AndroidForwardService<R> {
     self
       .0
       .run_mobile_plugin(
-        "stopService",
+        "stopRecordingService",
         StopServiceRequest {},
       )
       .map(|_: ()| ())
