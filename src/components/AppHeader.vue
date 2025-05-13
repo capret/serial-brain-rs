@@ -4,6 +4,21 @@
       Serial<span class="text-blue-400">Brain</span>
     </h1>
     <div class="flex items-center gap-4">
+      <!-- Language Switch Button -->
+      <div class="relative language-menu-container">
+        <button @click="toggleLanguageMenu" class="language-button flex items-center gap-1 text-gray-400 hover:text-white p-1 transition-colors duration-200">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
+          <span class="max-[800px]:hidden">{{ currentLanguage === 'en' ? 'Language' : '语言' }}</span>
+        </button>
+        <div v-show="showLanguageMenu" class="absolute z-50 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg overflow-hidden">
+          <button @click="changeLanguage('en')" class="w-full px-4 py-2 text-left hover:bg-gray-700" :class="{'bg-gray-700': currentLanguage === 'en'}">English</button>
+          <button @click="changeLanguage('zh')" class="w-full px-4 py-2 text-left hover:bg-gray-700" :class="{'bg-gray-700': currentLanguage === 'zh'}">中文</button>
+        </div>
+      </div>
       <!-- User info and logout button -->
       <div v-if="user" class="flex items-center gap-3 mr-2">
         <div class="flex items-center gap-2">
@@ -23,7 +38,7 @@
             <polyline points="16 17 21 12 16 7"></polyline>
             <line x1="21" y1="12" x2="9" y2="12"></line>
           </svg>
-          <span class="max-[800px]:hidden">Logout</span>
+          <span class="max-[800px]:hidden">{{ $t('app.logout') }}</span>
         </button>
       </div>
       
@@ -58,7 +73,8 @@
 
 <script setup lang="ts">
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
+import { getLanguage, setLanguage } from '../i18n';
 
 // Define props and emits
 defineProps({
@@ -71,7 +87,58 @@ defineProps({
 defineEmits(['logout']);
 
 
+// Language state
+const showLanguageMenu = ref(false);
+const currentLanguage = ref(getLanguage());
+
+// Force update when language changes
+const updateLanguageDisplay = () => {
+  currentLanguage.value = getLanguage();
+  console.log('Current language updated:', currentLanguage.value);
+};
+
+// Toggle language menu visibility
+function toggleLanguageMenu() {
+  showLanguageMenu.value = !showLanguageMenu.value;
+}
+
+// Change language function
+function changeLanguage(lang: 'en' | 'zh') {
+  console.log(`Changing language to ${lang}`);
+  // Update language in i18n and localStorage
+  setLanguage(lang);
+  // Update local state
+  currentLanguage.value = lang;
+  // Close the menu
+  showLanguageMenu.value = false;
+  
+  // Force DOM update
+  setTimeout(() => {
+    updateLanguageDisplay();
+  }, 100);
+}
+
+// Close language menu when clicking outside
+function handleClickOutside(event: MouseEvent) {
+  // Only process if menu is open
+  if (!showLanguageMenu.value) return;
+  
+  // Get the clicked element
+  const target = event.target as HTMLElement;
+  
+  // Check if click is outside the language menu area
+  const languageMenuArea = document.querySelector('.relative');
+  if (languageMenuArea && !languageMenuArea.contains(target)) {
+    showLanguageMenu.value = false;
+  }
+}
+
 onMounted(() => {
+  // Initialize the current language
+  updateLanguageDisplay();
+  
+  // Add click event listener to document to close language menu when clicking outside
+  document.addEventListener('click', handleClickOutside);
   const appWindow = getCurrentWindow();
   console.log("AppHeader mounted")
   document.getElementById('titlebar-minimize')?.addEventListener('click', () => {
@@ -96,6 +163,13 @@ onMounted(() => {
       } else {
         appWindow.startDragging();
       }
+    }
+  });
+  
+  // Add a keydown event handler to close dropdown on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && showLanguageMenu.value) {
+      showLanguageMenu.value = false;
     }
   });
 });

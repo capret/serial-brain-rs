@@ -1,6 +1,6 @@
 <template>
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
-    <h2 class="text-3xl font-bold text-blue-400 mb-4">Camera Streaming</h2>
+    <h2 class="text-3xl font-bold text-blue-400 mb-4">{{ $t('streaming.title') }}</h2>
 
     <div class="flex flex-wrap gap-6">
       <!-- ■■■ Preview panel ■■■ -->
@@ -19,23 +19,23 @@
           <div
             class="absolute top-2 left-2 w-6 h-6 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
             :class="isBrightEnough ? 'bg-green-500' : 'bg-red-500'"
-            :title="isBrightEnough ? 'Average brightness ≥ 80' : 'Average brightness < 80'"
+            :title="isBrightEnough ? $t('streaming.brightnessHighTitle') : $t('streaming.brightnessLowTitle')"
           >
             <span class="text-xs text-white font-bold">
-              {{ isBrightEnough ? 'OK' : 'LO' }}
+              {{ isBrightEnough ? $t('streaming.brightnessOK') : $t('streaming.brightnessLow') }}
             </span>
           </div>
         </div>
-        <p class="mt-2 text-sm">Streaming RGB @ 30 fps from Rust</p>
+        <p class="mt-2 text-sm">{{ $t('streaming.status') }}</p>
       </div>
 
       <!-- ■■■ Controls ■■■ -->
       <div class="flex flex-col flex-1 min-w-[220px]">
-        <label class="text-sm text-gray-300 mb-1">Stream Path</label>
+        <label class="text-sm text-gray-300 mb-1">{{ $t('streaming.path') }}</label>
         <input
           v-model="streamUrl"
           type="text"
-          placeholder="MJPEG URL"
+          :placeholder="$t('streaming.placeholder')"
           class="bg-gray-700 text-sm p-2 rounded-md w-full"
         />
 
@@ -44,14 +44,14 @@
             @click="toggleStreaming"
             class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md"
           >
-            {{ isStreaming ? 'Pause' : 'Connect' }}
+            {{ isStreaming ? $t('streaming.pause') : $t('streaming.connect') }}
           </button>
 
           <button
             @click="toggleFake"
             class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md"
           >
-            {{ fakeEnabled ? 'Disable Fake' : 'Enable Fake' }}
+            {{ fakeEnabled ? $t('streaming.disableFake') : $t('streaming.enableFake') }}
           </button>
 
           <button
@@ -61,7 +61,7 @@
               : 'bg-yellow-600 hover:bg-yellow-700'"
             class="px-4 py-2 rounded-md"
           >
-            {{ isRecording ? 'Stop Recording' : 'Record Video Only' }}
+            {{ isRecording ? $t('streaming.stopRecording') : $t('streaming.startRecording') }}
           </button>
         </div>
       </div>
@@ -74,10 +74,16 @@
    imports
 ------------------------------------------------------------------- */
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import * as path from '@tauri-apps/api/path';
 import { mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
+
+/* -------------------------------------------------------------------
+   initialize i18n
+------------------------------------------------------------------- */
+useI18n();
 
 /* -------------------------------------------------------------------
    constants

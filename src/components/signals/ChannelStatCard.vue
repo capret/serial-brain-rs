@@ -29,7 +29,7 @@
         <div 
           class="ml-1 w-2 h-2 rounded-xl z-20" 
           :class="props.signalQuality ? 'bg-green-500' : 'bg-red-500'"
-          :title="props.signalQuality ? 'Good signal quality' : 'Poor signal quality'"
+          :title="props.signalQuality ? $t('visualization.goodSignal') : $t('visualization.poorSignal')"
         ></div>
       </div>
       <p class="font-semibold m-0 truncate text-xs">{{ currentValue }}</p>
@@ -39,6 +39,10 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+// Initialize i18n
+useI18n();
 
 const props = defineProps<{ 
   channelTitle: string; 

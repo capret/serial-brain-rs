@@ -19,7 +19,7 @@
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
           </svg>
-          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">Visualization</h3>
+          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">{{ $t('sidebar.visualization') }}</h3>
         </div>
       </div>
 
@@ -32,7 +32,7 @@
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
           </svg>
-          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">Filters</h3>
+          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">{{ $t('sidebar.filters') }}</h3>
         </div>
       </div>
 
@@ -45,7 +45,7 @@
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
           </svg>
-          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">Recording</h3>
+          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">{{ $t('sidebar.folder') }}</h3>
         </div>
       </div>
 
@@ -59,7 +59,7 @@
             <polygon points="23 7 16 12 23 17 23 7"></polygon>
             <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
           </svg>
-          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">Streaming</h3>
+          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">{{ $t('sidebar.streaming') }}</h3>
         </div>
       </div>
       
@@ -78,7 +78,7 @@
               d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
             </path>
           </svg>
-          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">Settings</h3>
+          <h3 v-if="!collapsed" class="font-bold max-[800px]:hidden">{{ $t('sidebar.signal') }}</h3>
         </div>
       </div>
     </div>

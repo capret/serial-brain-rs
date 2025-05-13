@@ -1,21 +1,21 @@
 <template>
   <div>
-    <h3 class="text-lg font-semibold">TCP Connection Settings</h3>
+    <h3 class="text-lg font-semibold">{{ $t('settings.tcpTitle') }}</h3>
     
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block text-sm mb-1">Host</label>
-        <input type="text" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model="tcpSettings.host" placeholder="0.0.0.0" />
+        <label class="block text-sm mb-1">{{ $t('settings.host') }}</label>
+        <input type="text" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model="tcpSettings.host" :placeholder="$t('settings.hostPlaceholder')" />
       </div>
       
       <div>
-        <label class="block text-sm mb-1">Port</label>
-        <input type="number" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model.number="tcpSettings.port" placeholder="8234" />
+        <label class="block text-sm mb-1">{{ $t('signal.port') }}</label>
+        <input type="number" class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model.number="tcpSettings.port" :placeholder="$t('settings.portPlaceholder')" />
       </div>
     </div>
     
     <div class="mb-4">
-      <label class="block text-sm mb-1">Protocol</label>
+      <label class="block text-sm mb-1">{{ $t('streaming.protocol') }}</label>
       <select class="w-full bg-gray-800 p-2 rounded border border-gray-500" v-model="tcpSettings.protocol">
         <option value="tcp">TCP</option>
         <option value="udp">UDP</option>
@@ -27,7 +27,7 @@
     
     <!-- Connection status and status messages -->
     <div class="mt-4 bg-gray-900 p-3 rounded">
-      <h4 class="text-sm font-medium mb-2">Connection Status:</h4>
+      <h4 class="text-sm font-medium mb-2">{{ $t('settings.connectionStatus') }}:</h4>
       
       <!-- Auto-reconnect status removed as the system is always in listening mode -->
 
@@ -41,15 +41,15 @@
             'bg-red-500': !tcpSettings.isConnected
           }"></div>
         <span class="text-xs">
-          <span v-if="tcpSettings.isConnected && hasClientConnected">Client connected</span>
-          <span v-else-if="tcpSettings.isConnected && !hasClientConnected">Listening for connections</span>
-          <span v-else>Not connected</span>
+          <span v-if="tcpSettings.isConnected && hasClientConnected">{{ $t('settings.clientConnected') }}</span>
+          <span v-else-if="tcpSettings.isConnected && !hasClientConnected">{{ $t('settings.listeningForConnections') }}</span>
+          <span v-else>{{ $t('settings.notConnected') }}</span>
         </span>
       </div>
       
       <!-- Current Host:Port display -->
       <div class="text-xs mb-2" v-if="tcpSettings.isConnected">
-        <span class="text-gray-400">Configured endpoint: </span>
+        <span class="text-gray-400">{{ $t('settings.configuredEndpoint') }}: </span>
         <span class="text-blue-400">{{ tcpSettings.host }}:{{ tcpSettings.port }}</span>
       </div>
       
@@ -77,7 +77,11 @@
 <script setup>
 import { tcpSettings, socketMessages, hasClientConnected, addSocketMessage } from '../../store/appState';
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { listen } from '@tauri-apps/api/event';
+
+// Initialize i18n
+useI18n();
 
 // Set up listener for socket status events
 let unlistenSocketStatus;

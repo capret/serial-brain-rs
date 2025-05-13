@@ -58,13 +58,13 @@
     
     <!-- File metadata -->
     <div class="flex justify-between text-xs text-gray-400 mb-2">
-      <div>Size: <span class="text-gray-300" :class="{'text-green-300': isActiveRecording}">{{ file.size }}</span></div>
-      <div>Duration: <span class="text-gray-300" :class="{'text-green-300': isActiveRecording}">{{ liveDuration }}</span></div>
+      <div>{{ $t('recording.size') }}: <span class="text-gray-300" :class="{'text-green-300': isActiveRecording}">{{ file.size }}</span></div>
+      <div>{{ $t('recording.duration') }}: <span class="text-gray-300" :class="{'text-green-300': isActiveRecording}">{{ liveDuration }}</span></div>
     </div>
     
     <!-- Created date and time -->
     <div class="text-xs text-gray-400">
-      Created: <span class="text-gray-300">{{ formattedDate }} {{ formattedTime }}</span>
+      {{ $t('recording.created') }}: <span class="text-gray-300">{{ formattedDate }} {{ formattedTime }}</span>
     </div>
     
     <!-- Active recording indicator - moved to bottom right -->
@@ -84,6 +84,7 @@
 
 <script lang="ts" setup>
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { formatDate, formatTime, formatDuration, formatFileSize } from '../../utils/records/formatters';
 import type { RecordingFile } from '../../utils/records/types';
@@ -103,14 +104,12 @@ const props = defineProps({
 // Define emits
 const emit = defineEmits(['action', 'update-file-size']);
 
-// Computed properties
-const formattedDate = computed(() => {
-  return formatDate(props.file);
-});
+// Initialize i18n
+const { t } = useI18n();
 
-const formattedTime = computed(() => {
-  return formatTime(props.file);
-});
+// Computed properties
+const formattedDate = computed(() => formatDate(props.file));
+const formattedTime = computed(() => formatTime(props.file));
 
 // For live duration updating during recording
 const startTime = ref<number | null>(null);
@@ -249,7 +248,8 @@ function uploadFile() {
 }
 
 function confirmDelete() {
-  if (confirm(`Are you sure you want to delete ${props.file.name}?`)) {
+  // We need to add the confirm delete translation to our language files
+  if (confirm(`${t('recording.confirmDeletePrefix')} ${props.file.name}?`)) {
     emit('action', { action: 'delete', file: props.file });
   }
 }

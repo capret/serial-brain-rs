@@ -46,6 +46,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { exists, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
@@ -79,6 +80,9 @@ interface RecordingStatusResponse {
   isRecording: boolean;
   filename: string;
 }
+
+// Initialize i18n
+useI18n();
 
 // State variables for recording
 const isRecording = ref<boolean>(false);

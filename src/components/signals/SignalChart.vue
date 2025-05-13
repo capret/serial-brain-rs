@@ -3,7 +3,7 @@
   <div class="mb-2 flex flex-wrap items-center justify-between gap-4">
     <div class="flex-1 min-w-[300px]">
       <label for="windowSize">
-        Display Window Size:
+        {{ $t('visualization.windowSize') }}:
         <span class="font-bold  w-12 inline-block">{{ windowSize }}</span>
       </label>
       <div class="flex items-center gap-2 mt-1">
@@ -64,6 +64,7 @@ import {
   watch,
   nextTick,
 } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { WebglPlot, WebglLine, ColorRGBA } from 'webgl-plot';
 import { chartDataBuffer, windowSize } from '../../store/appState';
@@ -75,6 +76,9 @@ const emit = defineEmits<{
   (event: 'quality-update', payload: boolean[]): void;
 }>();
 const props = defineProps<{ running: boolean }>();
+
+// Initialize i18n
+useI18n();
 
 /* ====================================================
    1. Plot‑sizing — single source of truth

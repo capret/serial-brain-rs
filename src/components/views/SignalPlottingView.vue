@@ -2,7 +2,7 @@
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
     <div class="flex flex-wrap justify-between items-start mb-6">
       <div>
-        <h2 class="text-3xl font-bold text-blue-400">Signal Visualization</h2>
+        <h2 class="text-3xl font-bold text-blue-400">{{ $t('visualization.title') }}</h2>
       </div>
       <div class="flex flex-wrap items-center gap-3 max-[800px]:mt-4">
         <button @click="toggleRunning"
@@ -22,10 +22,10 @@
             <line x1="6" y1="4" x2="6" y2="20"></line>
             <line x1="18" y1="4" x2="18" y2="20"></line>
           </svg>
-          {{ isRunning ? 'Pause' : 'Launch' }}
+          {{ isRunning ? $t('visualization.pause') : $t('visualization.launch') }}
         </button>
         <button @click="clearPlot" class="px-6 py-3 rounded-md font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg bg-gray-600 hover:bg-gray-700 text-white">
-          Clear Plot
+          {{ $t('visualization.clearPlot') }}
         </button>
         <details class="relative inline-block">
           <summary
@@ -40,10 +40,10 @@
           <div
             class="absolute right-0 mt-2 w-48 bg-gray-700 rounded-md shadow-xl z-20 overflow-hidden text-sm border border-gray-600">
             <a href="#" class="block px-4 py-2 hover:bg-gray-600 transition-colors duration-200">
-              Export Data
+              {{ $t('visualization.exportData') }}
             </a>
             <a href="#" @click.prevent="reportIssue" class="block px-4 py-2 hover:bg-gray-600 transition-colors duration-200">
-              Report Issue
+              {{ $t('visualization.reportIssue') }}
             </a>
           </div>
         </details>
@@ -58,8 +58,12 @@
 <script setup lang="ts">
 import SignalVisualization from '../signals/SignalVisualization.vue';
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { isRunning, isConnected, fetchConnectionState } from '../../store/appState';
 import { invoke } from '@tauri-apps/api/core';
+// Initialize i18n
+useI18n();
+
 // Define the interface with only the methods we need to access
 interface SignalVisualizationExposed {
   clearPlot: () => void;

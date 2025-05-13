@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h3 class="text-lg font-semibold mb-4">Recording Format</h3>
+    <h3 class="text-lg font-semibold mb-4">{{ $t('recording.format') }}</h3>
     <div class="grid grid-cols-3 gap-4">
       <div 
         class="bg-gray-700 p-4 rounded-lg cursor-pointer" 
@@ -8,9 +8,9 @@
         @click="updateFormat('csv')">
         <div class="flex items-center gap-2">
           <input type="radio" name="format" :checked="modelValue === 'csv'" id="csv" />
-          <label for="csv" class="font-medium">CSV</label>
+          <label for="csv" class="font-medium">{{ $t('recording.csv') }}</label>
         </div>
-        <p class="text-xs text-gray-400 mt-1">Standard format compatible with most analysis tools</p>
+        <p class="text-xs text-gray-400 mt-1">{{ $t('recording.csvDescription') }}</p>
       </div>
       <div 
         class="bg-gray-700 p-4 rounded-lg cursor-pointer" 
@@ -18,9 +18,9 @@
         @click="updateFormat('binary')">
         <div class="flex items-center gap-2">
           <input type="radio" name="format" :checked="modelValue === 'binary'" id="binary" />
-          <label for="binary" class="font-medium">Binary</label>
+          <label for="binary" class="font-medium">{{ $t('recording.binary') }}</label>
         </div>
-        <p class="text-xs text-gray-400 mt-1">Compact storage for large datasets</p>
+        <p class="text-xs text-gray-400 mt-1">{{ $t('recording.binaryDescription') }}</p>
       </div>
       <div 
         class="bg-gray-700 p-4 rounded-lg cursor-pointer" 
@@ -28,9 +28,9 @@
         @click="updateFormat('json')">
         <div class="flex items-center gap-2">
           <input type="radio" name="format" :checked="modelValue === 'json'" id="json" />
-          <label for="json" class="font-medium">JSON</label>
+          <label for="json" class="font-medium">{{ $t('recording.json') }}</label>
         </div>
-        <p class="text-xs text-gray-400 mt-1">Structured format with metadata</p>
+        <p class="text-xs text-gray-400 mt-1">{{ $t('recording.jsonDescription') }}</p>
       </div>
     </div>
   </div>

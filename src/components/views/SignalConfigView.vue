@@ -2,7 +2,7 @@
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6 flex flex-col">
     <div class="flex flex-wrap justify-between items-start mb-6 gap-4">
       <div class="mb-2">
-        <h2 class="text-3xl font-bold text-blue-400">Signal Configuration</h2>
+        <h2 class="text-3xl font-bold text-blue-400">{{ $t('signal.title') }}</h2>
       </div>
       <div class="flex w-full md:w-auto">
         <button
@@ -25,7 +25,7 @@
     
     <!-- Data Source Selection Panel -->
     <div class="mb-6">
-      <h3 class="text-lg font-semibold mb-4">Select Data Source</h3>
+      <h3 class="text-lg font-semibold mb-4">{{ $t('signal.source') }}</h3>
       <div class="flex flex-wrap gap-4">
         <div 
           @click="onDataSourceChanged('serial')"
@@ -33,9 +33,9 @@
           :class="{'border-2 border-blue-500': selectedDataSource === 'serial'}"
         >
           <div>
-            <label class="font-medium cursor-pointer">Serial Connection</label>
+            <label class="font-medium cursor-pointer">{{ $t('signal.serialConnection') }}</label>
           </div>
-          <p class="text-xs text-gray-400 mt-1">Connect to devices via USB serial port</p>
+          <p class="text-xs text-gray-400 mt-1">{{ $t('signal.serialDescription') }}</p>
         </div>
         
         <div 
@@ -44,9 +44,9 @@
           :class="{'border-2 border-blue-500': selectedDataSource === 'tcp'}"
         >
           <div>
-            <label class="font-medium cursor-pointer">TCP Connection</label>
+            <label class="font-medium cursor-pointer">{{ $t('signal.tcpConnection') }}</label>
           </div>
-          <p class="text-xs text-gray-400 mt-1">Connect to devices over network</p>
+          <p class="text-xs text-gray-400 mt-1">{{ $t('signal.tcpDescription') }}</p>
         </div>
         
         <div 
@@ -55,16 +55,16 @@
           :class="{'border-2 border-blue-500': selectedDataSource === 'fake'}"
         >
           <div>
-            <label class="font-medium cursor-pointer">Fake Data Generator</label>
+            <label class="font-medium cursor-pointer">{{ $t('signal.fakeDataGenerator') }}</label>
           </div>
-          <p class="text-xs text-gray-400 mt-1">Generate test signals for development</p>
+          <p class="text-xs text-gray-400 mt-1">{{ $t('signal.fakeDescription') }}</p>
         </div>
       </div>
     </div>
     
     <!-- Source Settings Section -->
     <div class="mb-6 flex flex-col flex-grow">
-      <h3 class="text-lg font-semibold mb-4">Source Settings</h3>
+      <h3 class="text-lg font-semibold mb-4">{{ $t('signal.settings') }}</h3>
       
       <!-- Load the appropriate settings component based on selectedDataSource -->
       <div class="bg-gray-700 p-4 rounded-lg">
@@ -90,8 +90,12 @@ import TCPSettings from '../settings/TCPSettings.vue';
 import FakeDataSettings from '../settings/FakeDataSettings.vue';
 
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { connectionStatus, isRunning, tcpSettings, serialSettings, fakeDataSettings, fetchConnectionState } from '../../store/appState.ts';
+
+// Initialize i18n
+const { t } = useI18n();
 
 const props = defineProps({
   selectedDataSource: {
@@ -126,10 +130,10 @@ onMounted(async () => {
 // Button label based on status
 const buttonLabel = computed(() => {
   switch (connectionStatus.value) {
-    case 'connected': return 'Disconnect';
-    case 'failed': return 'Reconnect';
-    case 'connecting': return 'Connecting...';
-    default: return 'Connect';
+    case 'connected': return $t('signal.disconnect');
+    case 'failed': return $t('signal.reconnect');
+    case 'connecting': return $t('signal.connecting');
+    default: return $t('signal.connect');
   }
 });
 

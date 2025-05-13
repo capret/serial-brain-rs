@@ -1,13 +1,13 @@
 <template>
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
     <div class="flex flex-wrap items-center mb-6 gap-3">
-      <h2 class="text-3xl font-bold text-blue-400 flex-shrink-0">Filter Configuration</h2>
+      <h2 class="text-3xl font-bold text-blue-400 flex-shrink-0">{{ $t('filter.title') }}</h2>
       <div class="flex items-center gap-3 flex-grow min-w-0">
         <select v-model="newFilterType" class="bg-gray-700 text-white p-2 rounded">
           <option v-for="opt in filterTypes" :key="opt.value" :value="opt.value">{{opt.label}}</option>
         </select>
         <button @click="addFilter" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md font-medium">
-          + Add New Filter
+          + {{ $t('filter.addNew') }}
         </button>
       </div>
       <button @click="saveConfig" class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105 shadow-lg flex-grow min-w-0 justify-center">
@@ -17,7 +17,7 @@
           <polyline points="17 21 17 13 7 13 7 21"></polyline>
           <polyline points="7 3 7 8 15 8"></polyline>
         </svg>
-        Save Config
+        {{ $t('filter.saveConfig') }}
       </button>
     </div>
     <div class="mb-6">
@@ -28,7 +28,7 @@
             <h4 class="font-medium">{{ displayName(filter.type) }}</h4>
             <div class="flex items-center gap-2">
               <button @click="toggleActive(filter)" :class="['text-xs px-2 py-1 rounded', filter.active ? 'bg-green-500' : 'bg-gray-500']">
-                {{ filter.active ? 'Active' : 'Not Active' }}
+                {{ filter.active ? $t('filter.active') : $t('filter.notActive') }}
               </button>
               <button @click="deleteFilter(filter)" class="text-xs p-1 rounded bg-gray-500 hover:bg-gray-400 text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -41,7 +41,7 @@
           </div>
           <template v-if="filter.type==='lowpass'||filter.type==='highpass'">
             <div class="flex items-center gap-2 mb-2">
-              <label class="text-sm text-gray-400">Value:</label>
+              <label class="text-sm text-gray-400">{{ $t('filter.value') }}:</label>
               <input type="number" min="1" max="200" v-model.number="filter.value" class="w-20  text-white p-1 rounded"/>
               <span class="text-sm text-gray-400">Hz</span>
             </div>
@@ -55,27 +55,27 @@
           </template>
           <template v-else-if="filter.type==='bandpass'">
             <div class="flex items-center gap-2 mb-2">
-              <label class="text-sm text-gray-400">Low:</label>
+              <label class="text-sm text-gray-400">{{ $t('filter.low') }}:</label>
               <input type="number" min="1" max="200" v-model.number="filter.lowValue" @input="ensureHigh(filter)" class="w-16 text-white p-1 rounded"/>
               <span class="text-sm text-gray-400">Hz</span>
-              <label class="text-sm text-gray-400">High:</label>
+              <label class="text-sm text-gray-400">{{ $t('filter.high') }}:</label>
               <input type="number" min="1" max="200" v-model.number="filter.highValue" @input="ensureLow(filter)" class="w-16 text-white p-1 rounded"/>
               <span class="text-sm text-gray-400">Hz</span>
             </div>
             <div class="mt-3 space-y-3">
               <div>
-                <label class="text-xs text-gray-400">Low cutoff</label>
+                <label class="text-xs text-gray-400">{{ $t('filter.lowCutoff') }}</label>
                 <input type="range" min="1" max="200" v-model.number="filter.lowValue" @input="ensureHigh(filter)" class="w-full accent-blue-500"/>
               </div>
               <div>
-                <label class="text-xs text-gray-400">High cutoff</label>
+                <label class="text-xs text-gray-400">{{ $t('filter.highCutoff') }}</label>
                 <input type="range" min="1" max="200" v-model.number="filter.highValue" @input="ensureLow(filter)" class="w-full accent-blue-500"/>
               </div>
             </div>
           </template>
           <template v-else-if="filter.type==='notch'">
             <div class="flex items-center gap-2 mb-2">
-              <label class="text-sm text-gray-400">Value:</label>
+              <label class="text-sm text-gray-400">{{ $t('filter.value') }}:</label>
               <input type="number" min="1" max="200" v-model.number="filter.value" class="w-20  text-white p-1 rounded"/>
               <span class="text-sm text-gray-400">Hz</span>
             </div>
@@ -95,12 +95,16 @@
 
 <script setup>
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+// Initialize i18n
+const { t } = useI18n();
 
 const filterTypes = [
-  { value: 'lowpass', label: 'Low Pass' },
-  { value: 'highpass', label: 'High Pass' },
-  { value: 'bandpass', label: 'Band Pass' },
-  { value: 'notch', label: 'Notch Pass' }
+  { value: 'lowpass', label: t('filter.lowPass') },
+  { value: 'highpass', label: t('filter.highPass') },
+  { value: 'bandpass', label: t('filter.bandPass') },
+  { value: 'notch', label: t('filter.notchPass') }
 ];
 
 function createFilter(type) {

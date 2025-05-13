@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-wrap justify-between items-start mb-6">
     <div class="max-[800px]:w-full">
-      <h2 class="text-3xl font-bold text-blue-400">Recording Setup</h2>
+      <h2 class="text-3xl font-bold text-blue-400">{{ $t('recording.setup') }}</h2>
     </div>
     <div class="flex gap-3 max-[800px]:w-full max-[800px]:mt-4">
       <button 
@@ -14,7 +14,7 @@
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="5 3 19 12 5 21 5 3"></polygon>
         </svg>
-        Start Recording
+        {{ $t('streaming.start') }}
       </button>
       <button 
         v-else
@@ -24,19 +24,19 @@
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="6" y="6" width="12" height="12"></rect>
         </svg>
-        Stop Recording
+        {{ $t('streaming.stop') }}
       </button>
     </div>
   </div>
 
   <div class="space-y-6">
     <div>
-      <h3 class="text-lg font-semibold mb-4">Storage Location</h3>
+      <h3 class="text-lg font-semibold mb-4">{{ $t('recording.storageLocation') }}</h3>
       <div class="mt-2">
         <div class="flex">
           <input 
             type="text" 
-            :placeholder="recordingDirectory ? recordingDirectory : 'No folder selected'" 
+            :placeholder="recordingDirectory ? recordingDirectory : $t('recording.noFolderSelected')" 
             :value="recordingDirectory"
             readonly
             class="bg-gray-700 px-3 py-2 rounded-md flex-grow text-gray-300" />

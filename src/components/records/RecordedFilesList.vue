@@ -2,7 +2,7 @@
   <div>
     <!-- Section header with title and refresh button -->
     <div class="flex justify-between items-center mb-6">
-      <h2 class="text-3xl font-bold text-blue-400">Recorded Files</h2>
+      <h2 class="text-3xl font-bold text-blue-400">{{ $t('recording.files') }}</h2>
       <button 
         @click="refreshFiles" 
         class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md flex items-center gap-2">
@@ -10,7 +10,7 @@
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
         </svg>
-        Refresh
+        {{ $t('common.refresh') }}
       </button>
     </div>
     
@@ -26,8 +26,8 @@
     
     <!-- Empty state -->
     <div v-else-if="files.length === 0" class="bg-gray-700 p-6 rounded-md text-center">
-      <p v-if="recordingDirectory">No recording files found in the selected directory.</p>
-      <p v-else>Select a directory to view recorded files.</p>
+      <p v-if="recordingDirectory">{{ $t('recording.noFiles') }}</p>
+      <p v-else>{{ $t('recording.selectDirectory') }}</p>
     </div>
     
     <!-- File grid with transition animations -->

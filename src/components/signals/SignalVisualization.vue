@@ -10,7 +10,7 @@
       <ChannelStatCard
         v-for="(channel, index) in channelStats"
         :key="index"
-        :channelTitle="`Channel ${index + 1}`"
+        :channelTitle="$t('visualization.channelTitle', {n: index + 1})"
         :currentValue="formatValue(channel.current)"
         :color="channelColors[index]"
         :visible="channelVisibility[index]"
@@ -24,10 +24,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 import SignalChart from './SignalChart.vue';
 import ChannelStatCard from './ChannelStatCard.vue';
 import { channelColors, channelVisibility } from './channelSettings';
 import { isRunning } from '../../store/appState';
+
+// Initialize i18n
+useI18n();
 
 // Define state for channel statistics
 const channelStats = ref([

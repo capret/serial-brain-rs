@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h3 class="text-lg font-semibold mb-4">Recording Options</h3>
+    <h3 class="text-lg font-semibold mb-4">{{ $t('recording.options') }}</h3>
     <div class="space-y-4">
       <div class="flex items-center">
         <input 
@@ -10,11 +10,11 @@
           :disabled="disabled"
           class="mr-3 w-5 h-5" />
         <label for="autostart" class="text-gray-300">
-          Auto-start recording when connection is established
+          {{ $t('recording.autoStart') }}
         </label>
       </div>
       <div class="flex items-center gap-3">
-        <label for="maxDuration" class="text-gray-300">Maximum recording duration (min):</label>
+        <label for="maxDuration" class="text-gray-300">{{ $t('recording.maxDuration') }}:</label>
         <input 
           type="number" 
           id="maxDuration" 
