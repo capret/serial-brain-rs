@@ -130,10 +130,10 @@ onMounted(async () => {
 // Button label based on status
 const buttonLabel = computed(() => {
   switch (connectionStatus.value) {
-    case 'connected': return $t('signal.disconnect');
-    case 'failed': return $t('signal.reconnect');
-    case 'connecting': return $t('signal.connecting');
-    default: return $t('signal.connect');
+    case 'connected': return t('signal.disconnect');
+    case 'failed': return t('signal.reconnect');
+    case 'connecting': return t('signal.connecting');
+    default: return t('signal.connect');
   }
 });
 
