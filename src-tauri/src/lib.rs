@@ -24,10 +24,11 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_blec::init())
         .plugin(tauri_plugin_android_forward_service::init())
         .plugin(tauri_plugin_record_stream::init())
         .manage(serial_state.clone())
-        .setup(move |app| {
+        .setup(move | app| {
             // Store the app handle in the serial state for event emission
             let app_handle = app.handle();
             // tauri_plugin_record_stream::
