@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Emitter};
 use libmdns::Responder;
 
 use crate::state::AppState;
@@ -92,11 +92,9 @@ pub fn start_mdns_service(app: AppHandle, port: u16) -> anyhow::Result<()> {
         let mut active_guard = state.mdns.active.lock().unwrap();
         *active_guard = true;
     }
-    
-    println!(
-        "[mDNS] Published petbrain._iot._tcp.local. at {}:{}",
-        host_ip, port
-    );
+    let report_msg = format!("[mDNS] Published petbrain._iot._tcp.local. at {}:{}", host_ip, port);
+    app.emit("socket_status", report_msg.clone()).unwrap();
+    println!("{}", report_msg);
     
     // Create a separate Arc for the background thread
     let state_for_thread = Arc::clone(&state);
@@ -115,12 +113,16 @@ pub fn start_mdns_service(app: AppHandle, port: u16) -> anyhow::Result<()> {
             }
             
             if should_exit {
-                println!("[mDNS] Background thread exiting");
+                let report_msg = String::from("[mDNS] Background thread exiting");
+                app.emit("socket_status", report_msg.clone()).unwrap();
+                println!("{}", report_msg);
                 break;
             }
             
             // Just log that we're still active
-            println!("[mDNS] Service still active");
+            let report_msg = String::from("[mDNS] Service still active");
+            app.emit("socket_status", report_msg.clone()).unwrap();
+            println!("{}", report_msg);
         }
     });
     
@@ -137,6 +139,7 @@ pub fn stop_mdns_service(app: &AppHandle) -> anyhow::Result<()> {
         let active_guard = state.mdns.active.lock().unwrap();
         if !*active_guard {
             println!("[mDNS] No active service to stop");
+            app.emit("socket_status", String::from("[mDNS] No active service to stop")).unwrap();
             return Ok(());
         }
     }
@@ -148,13 +151,8 @@ pub fn stop_mdns_service(app: &AppHandle) -> anyhow::Result<()> {
         
         // Just drop the service and responder
         // The service is automatically unregistered when dropped
-        if service_guard.is_some() {
-            service_guard.take();
-        }
-        
-        if responder_guard.is_some() {
-            responder_guard.take();
-        }
+        if service_guard.is_some() { service_guard.take(); }
+        if responder_guard.is_some() { responder_guard.take(); }
     }
     
     // Mark as inactive
@@ -164,5 +162,6 @@ pub fn stop_mdns_service(app: &AppHandle) -> anyhow::Result<()> {
     }
     
     println!("[mDNS] Service stopped");
+    app.emit("socket_status", String::from("[mDNS] Service stopped")).unwrap();
     Ok(())
 }

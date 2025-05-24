@@ -9,12 +9,12 @@
     </button>
 
     <div
-      class="space-y-3 max-[800px]:space-y-0 max-[800px]:flex max-[800px]:flex-row max-[800px]:space-x-3 max-[800px]:justify-center">
-      <div @click="setActiveView('visualization')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+      class="space-y-3 max-[800px]:space-y-0 max-[800px]:flex max-[800px]:flex-row max-[800px]:space-x-3 max-[800px]:justify-center max-[800px]:min-h-[56px]">
+      <div @click="setActiveView('visualization')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1 max-[800px]:hover:translate-x-0 max-[800px]:hover:shadow-lg max-[800px]:hover:shadow-blue-500/20 max-[800px]:w-14 max-[800px]:h-14 max-[800px]:flex max-[800px]:items-center max-[800px]:justify-center`,
         activeView === 'visualization'
-          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
+          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg max-[800px]:border-l-0 max-[800px]:border-t-4 max-[800px]:rounded-lg'
           : 'bg-gray-700 hover:bg-gray-600']">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 max-[800px]:justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
@@ -23,11 +23,11 @@
         </div>
       </div>
 
-      <div @click="onActionClick('filters')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+      <div @click="onActionClick('filters')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1 max-[800px]:hover:translate-x-0 max-[800px]:hover:shadow-lg max-[800px]:hover:shadow-blue-500/20 max-[800px]:w-14 max-[800px]:h-14 max-[800px]:flex max-[800px]:items-center max-[800px]:justify-center`,
         (activeView === 'filters' || (activeView === 'visualization' && additionalViews.includes('filters')))
-          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
+          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg max-[800px]:border-l-0 max-[800px]:border-t-4 max-[800px]:rounded-lg'
           : 'bg-gray-700 hover:bg-gray-600']">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 max-[800px]:justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
@@ -36,11 +36,11 @@
         </div>
       </div>
 
-      <div @click="onActionClick('folder')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+      <div @click="onActionClick('folder')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1 max-[800px]:hover:translate-x-0 max-[800px]:hover:shadow-lg max-[800px]:hover:shadow-blue-500/20 max-[800px]:w-14 max-[800px]:h-14 max-[800px]:flex max-[800px]:items-center max-[800px]:justify-center`,
         (activeView === 'folder' || (activeView === 'visualization' && additionalViews.includes('folder')))
-          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
+          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg max-[800px]:border-l-0 max-[800px]:border-t-4 max-[800px]:rounded-lg'
           : 'bg-gray-700 hover:bg-gray-600']">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 max-[800px]:justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
@@ -49,11 +49,11 @@
         </div>
       </div>
 
-      <div @click="onActionClick('streaming')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+      <div @click="onActionClick('streaming')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1 max-[800px]:hover:translate-x-0 max-[800px]:hover:shadow-lg max-[800px]:hover:shadow-blue-500/20 max-[800px]:w-14 max-[800px]:h-14 max-[800px]:flex max-[800px]:items-center max-[800px]:justify-center`,
         (activeView === 'streaming' || (activeView === 'visualization' && additionalViews.includes('streaming')))
-          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
+          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg max-[800px]:border-l-0 max-[800px]:border-t-4 max-[800px]:rounded-lg'
           : 'bg-gray-700 hover:bg-gray-600']">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 max-[800px]:justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="23 7 16 12 23 17 23 7"></polygon>
@@ -65,11 +65,11 @@
       
     </div>
     <div class="mt-auto max-[800px]:mt-0 max-[800px]:flex max-[800px]:space-x-3 max-[800px]:ml-auto">
-      <div @click="setActiveView('signal')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1`,
+      <div @click="setActiveView('signal')" :class="[`p-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:translate-x-1 max-[800px]:hover:translate-x-0 max-[800px]:hover:shadow-lg max-[800px]:hover:shadow-blue-500/20 max-[800px]:w-14 max-[800px]:h-14 max-[800px]:flex max-[800px]:items-center max-[800px]:justify-center`,
         activeView === 'signal'
-          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg'
+          ? 'bg-blue-600 bg-opacity-20 border-l-4 border-blue-500 rounded-r-lg max-[800px]:border-l-0 max-[800px]:border-t-4 max-[800px]:rounded-lg'
           : 'bg-gray-700 hover:bg-gray-600']">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 max-[800px]:justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
             class="feather feather-settings">
