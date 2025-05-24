@@ -7,6 +7,7 @@ mod types;
 mod file_utils;
 mod streaming;
 mod recording;
+mod mdns;
 use commands::{
     connect_serial, connect_socket, get_available_ports, get_recent_data,
     get_recording_status, get_signal_config_state, get_signal_quality, get_streaming_view_state, 
@@ -16,10 +17,12 @@ use commands::{
 };
 use file_utils::get_file_stats;
 use state::SerialState;
+use mdns::MdnsState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let serial_state = Arc::new(SerialState::new());
+    let mdns_state = Arc::new(MdnsState::new());
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
@@ -28,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_android_forward_service::init())
         .plugin(tauri_plugin_record_stream::init())
         .manage(serial_state.clone())
+        .manage(mdns_state.clone())
         .setup(move | app| {
             // Store the app handle in the serial state for event emission
             let app_handle = app.handle();

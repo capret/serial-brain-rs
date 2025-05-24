@@ -3,6 +3,7 @@ use crate::reader::{
 };
 use crate::state::SerialState;
 use crate::types::{ChannelData, FakeDataConfig};
+use crate::mdns;
 use serialport;
 use std::{
     sync::{atomic::Ordering, mpsc, Arc},
@@ -59,6 +60,15 @@ pub fn connect_socket(
         if let Some(handle) = state.signal_stream_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
+    }
+
+    // Start mDNS service to advertise the socket connection
+    // This will make the app discoverable on the local network
+    if let Err(e) = mdns::start_mdns_service(app_handle.clone(), 8080) {
+        println!("[SOCKET] Warning: Failed to start mDNS service: {}", e);
+        // Continue even if mDNS fails, as it's not critical for the connection
+    } else {
+        println!("[SOCKET] mDNS service started successfully");
     }
 
     // Create the reader but don't set it up yet - setup will be done in reader_loop

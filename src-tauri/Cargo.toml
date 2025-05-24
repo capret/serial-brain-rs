@@ -26,6 +26,9 @@ rand = "0.8"
 encoding_rs = "0.8"
 image = "0.25.6"
 base64 = "0.22.1"
+libmdns = "0.7.5"
+hostname    = "0.3"
+anyhow      = "1"
 sci-rs = "0.4.1"
 tokio = { version = "1", features = ["full", "time"] }
 reqwest = { version = "0.11", default-features = false, features = ["blocking", "rustls-tls"] }
