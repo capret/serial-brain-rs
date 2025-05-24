@@ -1,16 +1,15 @@
-use crate::state::SerialState;
+use crate::state::AppState;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use image::{ImageBuffer, Rgb, GenericImageView, ColorType};
 use image::codecs::png::PngEncoder;
 use image::ImageEncoder;
 use rand::{Rng, thread_rng};
 use reqwest::blocking::Client;
-
 use std::io::{BufRead, BufReader, Read};
 use std::sync::{atomic::Ordering, Arc};
 use std::time::Duration;
 use std::thread;
-use tauri::{AppHandle, State, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 // Constants for fake stream image generation
 const W: u32 = 320;
@@ -22,37 +21,39 @@ const H: u32 = 240;
 /// * `app_handle` - Tauri app handle for emitting events back to the frontend
 /// * `path` - URL path for the stream source (only used if fake=false)
 /// * `fake` - Whether to generate a fake stream or use the provided URL
-/// * `state` - Application state containing shared data
 pub fn start_streaming(
     app_handle: AppHandle,
     path: String,
-    fake: bool,
-    state: State<Arc<SerialState>>,
+    fake: bool
 ) -> Result<(), String> {
     // stop any existing stream and wait for it to finish
-    if state.camera_stream_running.load(Ordering::SeqCst) {
-        state.camera_stream_running.store(false, Ordering::SeqCst);
-        if let Some(handle) = state.camera_stream_handle.lock().unwrap().take() {
+    let state = app_handle.state::<Arc<AppState>>();
+    if state.stream.camera_stream_running.load(Ordering::SeqCst) {
+        state.stream.camera_stream_running.store(false, Ordering::SeqCst);
+        if let Some(handle) = state.stream.camera_stream_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
     }
     
     // Update the fake_data_enabled flag to match the current request
-    state.fake_data_enabled.store(fake, Ordering::SeqCst);
+    state.stream.fake_data_enabled.store(fake, Ordering::SeqCst);
     println!("[Streaming] Setting fake data enabled to: {}", fake);
     
     if fake {
-        start_fake_stream(app_handle, state)
+        start_fake_stream(app_handle)
     } else {
-        start_real_stream(app_handle, path, state)
+        start_real_stream(app_handle, path)
     }
 }
 
 /// Stops an active streaming process.
-pub fn stop_streaming(state: State<Arc<SerialState>>) -> Result<(), String> {
-    if state.camera_stream_running.load(Ordering::SeqCst) {
-        state.camera_stream_running.store(false, Ordering::SeqCst);
-        if let Some(handle) = state.camera_stream_handle.lock().unwrap().take() {
+pub fn stop_streaming(app_handle: AppHandle) -> Result<(), String> {
+    let app_state = app_handle.state::<Arc<AppState>>();
+    let stream_state = &app_state.stream;
+    
+    if stream_state.camera_stream_running.load(Ordering::SeqCst) {
+        stream_state.camera_stream_running.store(false, Ordering::SeqCst);
+        if let Some(handle) = stream_state.camera_stream_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
     }
@@ -62,14 +63,15 @@ pub fn stop_streaming(state: State<Arc<SerialState>>) -> Result<(), String> {
 /// Starts a fake stream with generated image data.
 fn start_fake_stream(
     app_handle: AppHandle,
-    state: State<Arc<SerialState>>,
 ) -> Result<(), String> {
-    state.camera_stream_running.store(true, Ordering::SeqCst);
-    let running = state.camera_stream_running.clone();
-    let app_clone = app_handle.clone();
+    // Get state instance
+    let app_state = app_handle.state::<Arc<AppState>>();
     
-    // Clone the Arc before moving into the thread to avoid lifetime issues
-    let state_inner = Arc::clone(&state);
+    // Set up stream state
+    app_state.stream.camera_stream_running.store(true, Ordering::SeqCst);
+    let running = app_state.stream.camera_stream_running.clone();
+    let app_clone = app_handle.clone();
+    let state_clone = Arc::clone(&app_state);
     
     let handle = thread::spawn(move || {
         let mut rng = thread_rng();
@@ -101,7 +103,9 @@ fn start_fake_stream(
                 .unwrap();
             let b64 = STANDARD.encode(&buf);
             let _ = app_clone.emit("frame", Arc::new(b64.clone()));
-            if state_inner.video_recording_active.load(Ordering::SeqCst) {
+            
+            // Check recording state
+            if state_clone.recording.video_recording_active.load(Ordering::SeqCst) {
                 match tauri_plugin_record_stream::push_frame(app_clone.clone(), raw.clone(), W, H) {
                     Ok(analysis) => {
                         let _ = app_clone.emit("frame_analysis", Arc::new(!analysis.is_covered));
@@ -113,7 +117,9 @@ fn start_fake_stream(
         }
     });
     
-    *state.camera_stream_handle.lock().unwrap() = Some(handle);
+    // Store the handle in the state - create a new clone for this operation
+    let app_state = app_handle.state::<Arc<AppState>>();
+    *app_state.stream.camera_stream_handle.lock().unwrap() = Some(handle);
     Ok(())
 }
 
@@ -121,14 +127,15 @@ fn start_fake_stream(
 fn start_real_stream(
     app_handle: AppHandle,
     url: String,
-    state: State<Arc<SerialState>>,
 ) -> Result<(), String> {
-    state.camera_stream_running.store(true, Ordering::SeqCst);
-    let running = state.camera_stream_running.clone();
-    let app_clone = app_handle.clone();
+    // Get state instance
+    let app_state = app_handle.state::<Arc<AppState>>();
     
-    // Clone the Arc before moving into the thread to avoid lifetime issues
-    let state_inner = Arc::clone(&state);
+    // Set up stream state
+    app_state.stream.camera_stream_running.store(true, Ordering::SeqCst);
+    let running = app_state.stream.camera_stream_running.clone();
+    let app_clone = app_handle.clone();
+    let state_clone = Arc::clone(&app_state);
     
     let handle = thread::spawn(move || {
         // build HTTP client with timeout
@@ -210,7 +217,7 @@ fn start_real_stream(
                             let _ = app_clone.emit("frame", Arc::new(b64.clone()));
                             
                             // Also push frame to video recorder if recording is active
-                            if state_inner.video_recording_active.load(Ordering::SeqCst) {
+                            if state_clone.recording.video_recording_active.load(Ordering::SeqCst) {
                                 // Convert to raw RGB bytes for recording instead of using base64 PNG
                                 if let Ok(img) = image::load_from_memory(&buffer) {
                                     let rgb = img.to_rgb8();
@@ -234,6 +241,7 @@ fn start_real_stream(
         }
     });
     
-    *state.camera_stream_handle.lock().unwrap() = Some(handle);
+    let app_state = app_handle.state::<Arc<AppState>>();
+    *app_state.stream.camera_stream_handle.lock().unwrap() = Some(handle);
     Ok(())
 }

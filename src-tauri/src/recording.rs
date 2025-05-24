@@ -1,4 +1,4 @@
-use crate::state::SerialState;
+use crate::state::AppState;
 use serde_json::json;
 use std::fs::{OpenOptions, File};
 use std::io::Write;
@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::{atomic::Ordering, Arc};
 use std::thread::{self, JoinHandle};
 use std::time::{SystemTime, Duration};
-use tauri::{State, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Starts recording data to a file in the specified format.
 /// 
@@ -21,8 +21,9 @@ pub fn start_recording(
     directory: String,
     max_duration_minutes: u32,
     _auto_start: bool,
-    state: State<Arc<SerialState>>,
+    app_handle: AppHandle,
 ) -> Result<String, String> {
+    let state = app_handle.state::<Arc<AppState>>();
     let mut path = PathBuf::from(&directory);
     
     // Create a timestamped filename
@@ -50,14 +51,14 @@ pub fn start_recording(
         .map_err(|e| format!("Failed to create recording file: {}", e))?;
     
     // Store the file in state for continued writing
-    *state.recording_file.lock().unwrap() = Some((file, format.clone()));
+    *state.recording.recording_file.lock().unwrap() = Some((file, format.clone()));
     
     // Store the filename for retrieval even when switching views
-    *state.recording_filename.lock().unwrap() = Some(filename.clone());
+    *state.recording.recording_filename.lock().unwrap() = Some(filename.clone());
     
     // Start the recording thread that will poll data and write to file
-    if !state.recording_active.load(Ordering::SeqCst) {
-        state.recording_active.store(true, Ordering::SeqCst);
+    if !state.recording.recording_active.load(Ordering::SeqCst) {
+        state.recording.recording_active.store(true, Ordering::SeqCst);
         let state_clone = state.inner().clone();
         
         // Clone format and directory for the emit event after max duration
@@ -69,7 +70,7 @@ pub fn start_recording(
         
         // Write header for CSV format
         if format == "csv" {
-            if let Some((ref mut file, _)) = *state.recording_file.lock().unwrap() {
+            if let Some((ref mut file, _)) = *state.recording.recording_file.lock().unwrap() {
                 // Write CSV header based on channel count
                 let mut header = String::from("timestamp");
                 for i in 0..8 { // Support up to 8 channels as per memory
@@ -81,7 +82,7 @@ pub fn start_recording(
             }
         } else if format == "json" {
             // Start JSON array
-            if let Some((ref mut file, _)) = *state.recording_file.lock().unwrap() {
+            if let Some((ref mut file, _)) = *state.recording.recording_file.lock().unwrap() {
                 if let Err(e) = file.write_all(b"[") {
                     return Err(format!("Failed to write JSON opening: {}", e));
                 }
@@ -90,7 +91,7 @@ pub fn start_recording(
         
         let handle = spawn_recording_thread(state_clone, format_clone, directory_clone, max_duration, start_time);
         
-        *state.recording_handle.lock().unwrap() = Some(handle);
+        *state.recording.recording_handle.lock().unwrap() = Some(handle);
     }
     
     // Return the actual filename that was created
@@ -98,48 +99,35 @@ pub fn start_recording(
 }
 
 /// Stops an active recording process.
-pub fn stop_recording(state: State<Arc<SerialState>>) -> Result<(), String> {
-    if state.recording_active.load(Ordering::SeqCst) {
-        state.recording_active.store(false, Ordering::SeqCst);
-        
-        // Wait for the recording thread to finish
-        if let Some(handle) = state.recording_handle.lock().unwrap().take() {
-            let _ = handle.join();
+pub fn stop_recording(app_handle: AppHandle) -> Result<(), String> {
+    let state = app_handle.state::<Arc<AppState>>();
+    
+    // Only do something if recording is active
+    if state.recording.recording_active.load(Ordering::SeqCst) {
+        // Close the JSON array for JSON format recordings
+        if let Some((ref mut file, ref format)) = *state.recording.recording_file.lock().unwrap() {
+            if format == "json" {
+                if let Err(e) = file.write_all(b"]") {
+                    eprintln!("Error closing JSON file: {}", e);
+                }
+            }
         }
         
-        // Clear the recording filename
-        *state.recording_filename.lock().unwrap() = None;
+        // Set the flag to false before cleaning up
+        state.recording.recording_active.store(false, Ordering::SeqCst);
+        
+        // Clean up the file handles and threads
+        let _ = state.recording.recording_handle.lock().unwrap().take();
+        *state.recording.recording_file.lock().unwrap() = None;
+        *state.recording.recording_filename.lock().unwrap() = None;
     }
     
     Ok(())
 }
 
-/// Returns the current recording status (active or not).
-// #[allow(dead_code)]
-// pub fn get_recording_status(state: State<Arc<SerialState>>) -> Result<bool, String> {
-//     Ok(state.recording_active.load(Ordering::SeqCst))
-// }
-
-// /// Returns the current recording filename if there's an active recording.
-// #[allow(dead_code)]
-// pub fn get_recording_filename(state: State<Arc<SerialState>>) -> Result<String, String> {
-//     // Get the current recording filename if there's an active recording
-//     if !state.recording_active.load(Ordering::SeqCst) {
-//         return Ok(String::new()); // Return empty string if not recording
-//     }
-    
-//     // Get the current recording information from state
-//     if let Some(current_filename) = &*state.recording_filename.lock().unwrap() {
-//         return Ok(current_filename.clone());
-//     }
-    
-//     // Fallback - we're recording but can't get filename
-//     Ok(String::new())
-// }
-
 /// Spawns a thread to handle recording data to files.
 fn spawn_recording_thread(
-    state_clone: Arc<SerialState>,
+    state_clone: Arc<AppState>,
     format_clone: String,
     directory_clone: String,
     max_duration: Duration,
@@ -149,7 +137,7 @@ fn spawn_recording_thread(
         let mut first_json_entry = true;
         let mut segment_start_time = start_time;
         
-        while state_clone.recording_active.load(Ordering::SeqCst) {
+        while state_clone.recording.recording_active.load(Ordering::SeqCst) {
             // Check if the current segment exceeded the configured duration
             if let Ok(elapsed) = SystemTime::now().duration_since(segment_start_time) {
                 if elapsed > max_duration {
@@ -164,26 +152,26 @@ fn spawn_recording_thread(
                 }
             }
 
-            // Get data from the recording buffer with timestamps
-            let timestamped_data = state_clone.get_recording_data();
-            if timestamped_data.is_empty() {
+            // Get batch of recording data
+            let data_batch = state_clone.recording.get_recording_data();
+            if data_batch.is_empty() {
                 // If no new data, sleep a bit and try again
                 thread::sleep(Duration::from_millis(10));
                 continue;
             }
             
             // Record the data based on format
-            let mut recording_file = state_clone.recording_file.lock().unwrap();
+            let mut recording_file = state_clone.recording.recording_file.lock().unwrap();
             if let Some((ref mut file, ref format)) = *recording_file {
                 match format.as_str() {
                     "csv" => {
-                        write_csv_data(file, &timestamped_data);
+                        write_csv_data(file, &data_batch);
                     },
                     "json" => {
-                        write_json_data(file, &timestamped_data, &mut first_json_entry);
+                        write_json_data(file, &data_batch, &mut first_json_entry);
                     },
                     "binary" => {
-                        write_binary_data(file, &timestamped_data);
+                        write_binary_data(file, &data_batch);
                     },
                     _ => {}
                 }
@@ -194,7 +182,7 @@ fn spawn_recording_thread(
         }
         
         // Finalize the recording
-        let mut recording_file = state_clone.recording_file.lock().unwrap();
+        let mut recording_file = state_clone.recording.recording_file.lock().unwrap();
         if let Some((ref mut file, ref format)) = *recording_file {
             if format == "json" {
                 // Close the JSON array
@@ -212,7 +200,7 @@ fn spawn_recording_thread(
 
 /// Rotates to a new recording segment when the max duration is reached.
 fn handle_segment_rotation(
-    state_clone: &Arc<SerialState>,
+    state_clone: &Arc<AppState>,
     format_clone: &str,
     directory_clone: &str,
     first_json_entry: &mut bool,
@@ -220,7 +208,7 @@ fn handle_segment_rotation(
 ) {
     // Finalize the current segment file (flush + close JSON array if needed)
     {
-        let mut recording_file = state_clone.recording_file.lock().unwrap();
+        let mut recording_file = state_clone.recording.recording_file.lock().unwrap();
         if let Some((ref mut file, ref fmt)) = *recording_file {
             if fmt == "json" {
                 let _ = file.write_all(b"]");
@@ -261,16 +249,16 @@ fn handle_segment_rotation(
         }
 
         // Swap file handle and update filename in shared state
-        *state_clone.recording_file.lock().unwrap() =
+        *state_clone.recording.recording_file.lock().unwrap() =
             Some((new_file, format_clone.to_string()));
-        *state_clone.recording_filename.lock().unwrap() = Some(new_filename.clone());
+        *state_clone.recording.recording_filename.lock().unwrap() = Some(new_filename.clone());
         
         // Log the segment change
         println!("Recording segment changed to: {}", new_filename);
     }
 
     // Emit event to frontend to notify filename change
-    if let Some(app_handle) = state_clone.app_handle.lock().unwrap().as_ref() {
+    if let Some(app_handle) = state_clone.communication.app_handle.lock().unwrap().as_ref() {
         // Emit the existing event with full payload
         let _ = app_handle.emit("recording-file-changed", {
             json!({

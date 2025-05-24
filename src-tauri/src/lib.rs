@@ -16,13 +16,11 @@ use commands::{
     stop_stream_recording, stop_streaming, stop_video_recording, toggle_fake_data,
 };
 use file_utils::get_file_stats;
-use state::SerialState;
-use mdns::MdnsState;
+use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let serial_state = Arc::new(SerialState::new());
-    let mdns_state = Arc::new(MdnsState::new());
+    let serial_state = Arc::new(AppState::new());
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
@@ -31,12 +29,11 @@ pub fn run() {
         .plugin(tauri_plugin_android_forward_service::init())
         .plugin(tauri_plugin_record_stream::init())
         .manage(serial_state.clone())
-        .manage(mdns_state.clone())
         .setup(move | app| {
             // Store the app handle in the serial state for event emission
             let app_handle = app.handle();
-            // tauri_plugin_record_stream::
-            *serial_state.app_handle.lock().unwrap() = Some(app_handle.clone());
+            // Store in communication state for event emission
+            *serial_state.communication.app_handle.lock().unwrap() = Some(app_handle.clone());
             Ok(())
         })
         // Removed automatic frame stream on startup; streaming controlled via commands

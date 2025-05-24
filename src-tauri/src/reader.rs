@@ -1,4 +1,4 @@
-use crate::state::SerialState;
+use crate::state::AppState;
 use crate::types::FakeDataConfig;
 use encoding_rs::GBK;
 use rand::Rng;
@@ -332,7 +332,7 @@ fn compute_checksum(data: &[u8]) -> (u8, u8) {
 }
 
 // Parse buffer and emit data
-fn process_buffer(buffer: &mut Vec<u8>, state: &SerialState, app: &AppHandle) {
+fn process_buffer(buffer: &mut Vec<u8>, state: &AppState, app: &AppHandle) {
     let mut info_bytes = Vec::new();
     let header_len = DATA_HEADER.len();
     let mut i = 0;
@@ -351,7 +351,10 @@ fn process_buffer(buffer: &mut Vec<u8>, state: &SerialState, app: &AppHandle) {
                     // Convert raw value to real voltage using the formula: raw_value * 0.5364 / 12
                     data[j] = (v as f32) * 0.5364 / 12.0; // hard code for real unit calculation
                 }
-                state.add_data(data);
+                // Update both buffer and signal quality with the new data
+                state.buffer.add_data(data);
+                state.signal_quality.add_data(data);
+                state.recording.add_data(data);
                 let _ = app.emit("serial_data", data);
             }
             i += DATA_PACKET_LENGTH;
@@ -373,7 +376,7 @@ fn process_buffer(buffer: &mut Vec<u8>, state: &SerialState, app: &AppHandle) {
 pub fn reader_loop<R: DataReader + Send + 'static>(
     mut rd: R,
     running: Arc<AtomicBool>,
-    state: Arc<SerialState>,
+    state: Arc<AppState>,
     app: AppHandle,
 ) {
     let app_clone = app.clone();

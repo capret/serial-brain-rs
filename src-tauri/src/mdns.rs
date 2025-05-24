@@ -7,13 +7,16 @@
 
 use std::{
     net::{IpAddr, Ipv4Addr, UdpSocket},
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread,
     time::Duration,
 };
 
 use tauri::{AppHandle, Manager};
 use libmdns::Responder;
+
+use crate::state::AppState;
+
 
 /// Convenience wrapper that tries to pick the first non-loopback IPv4
 /// address of this host. Falls back to 127.0.0.1.
@@ -33,26 +36,7 @@ fn pick_ipv4() -> Ipv4Addr {
     Ipv4Addr::LOCALHOST
 }
 
-/// Struct to hold the mDNS service state
-pub struct MdnsState {
-    responder: Mutex<Option<Responder>>,
-    service: Mutex<Option<libmdns::Service>>,
-    active: Mutex<bool>,
-    host: Mutex<String>,
-    port: Mutex<u16>,
-}
-
-impl MdnsState {
-    pub fn new() -> Self {
-        Self {
-            responder: Mutex::new(None),
-            service: Mutex::new(None),
-            active: Mutex::new(false),
-            host: Mutex::new(String::new()),
-            port: Mutex::new(0),
-        }
-    }
-}
+// MdnsState has been moved to state.rs
 
 /// Start the mDNS service for the given port.
 /// This makes the application discoverable on the local network.
@@ -60,11 +44,11 @@ impl MdnsState {
 /// Returns an error if the service cannot be started.
 pub fn start_mdns_service(app: AppHandle, port: u16) -> anyhow::Result<()> {
     // Get the state from the app
-    let state = app.state::<Arc<MdnsState>>();
+    let state = app.state::<Arc<AppState>>();
     
     // Check if already running
     {
-        let active = state.active.lock().unwrap();
+        let active = state.mdns.active.lock().unwrap();
         if *active {
             println!("[mDNS] Service already active, skipping");
             return Ok(());
@@ -73,8 +57,8 @@ pub fn start_mdns_service(app: AppHandle, port: u16) -> anyhow::Result<()> {
     
     // Get the host information
     let host_ip = pick_ipv4();
-    let hostname = hostname::get()?;
-    let host_name = hostname.to_string_lossy().to_string();
+    // let hostname = hostname::get()?;
+    // let host_name = hostname.to_string_lossy().to_string();
     
     // Create TXT records as string slices
     // libmdns expects &[&str] for TXT records in the format "key=value"
@@ -93,19 +77,19 @@ pub fn start_mdns_service(app: AppHandle, port: u16) -> anyhow::Result<()> {
     
     // Update state
     {
-        let mut responder_guard = state.responder.lock().unwrap();
+        let mut responder_guard = state.mdns.responder.lock().unwrap();
         *responder_guard = Some(responder);
         
-        let mut service_guard = state.service.lock().unwrap();
+        let mut service_guard = state.mdns.service.lock().unwrap();
         *service_guard = Some(service);
         
-        let mut host_guard = state.host.lock().unwrap();
+        let mut host_guard = state.mdns.host.lock().unwrap();
         *host_guard = host_ip.to_string();
         
-        let mut port_guard = state.port.lock().unwrap();
+        let mut port_guard = state.mdns.port.lock().unwrap();
         *port_guard = port;
         
-        let mut active_guard = state.active.lock().unwrap();
+        let mut active_guard = state.mdns.active.lock().unwrap();
         *active_guard = true;
     }
     
@@ -126,7 +110,7 @@ pub fn start_mdns_service(app: AppHandle, port: u16) -> anyhow::Result<()> {
             // Check if we should exit
             let should_exit;
             {
-                let active_guard = state_for_thread.active.lock().unwrap();
+                let active_guard = state_for_thread.mdns.active.lock().unwrap();
                 should_exit = !*active_guard;
             }
             
@@ -146,11 +130,11 @@ pub fn start_mdns_service(app: AppHandle, port: u16) -> anyhow::Result<()> {
 /// Stop the mDNS service.
 /// This is safe to call even if the service is not running.
 pub fn stop_mdns_service(app: &AppHandle) -> anyhow::Result<()> {
-    let state = app.state::<Arc<MdnsState>>();
+    let state = app.state::<Arc<AppState>>();
     
     // Check if service is active
     {
-        let active_guard = state.active.lock().unwrap();
+        let active_guard = state.mdns.active.lock().unwrap();
         if !*active_guard {
             println!("[mDNS] No active service to stop");
             return Ok(());
@@ -159,8 +143,8 @@ pub fn stop_mdns_service(app: &AppHandle) -> anyhow::Result<()> {
     
     // Unregister the service
     {
-        let mut responder_guard = state.responder.lock().unwrap();
-        let mut service_guard = state.service.lock().unwrap();
+        let mut responder_guard = state.mdns.responder.lock().unwrap();
+        let mut service_guard = state.mdns.service.lock().unwrap();
         
         // Just drop the service and responder
         // The service is automatically unregistered when dropped
@@ -175,7 +159,7 @@ pub fn stop_mdns_service(app: &AppHandle) -> anyhow::Result<()> {
     
     // Mark as inactive
     {
-        let mut active_guard = state.active.lock().unwrap();
+        let mut active_guard = state.mdns.active.lock().unwrap();
         *active_guard = false;
     }
     
