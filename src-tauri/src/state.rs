@@ -152,7 +152,8 @@ pub struct StreamState {
     pub signal_stream_handle: Mutex<Option<JoinHandle<()>>>,
     pub camera_stream_running: Arc<AtomicBool>,
     pub camera_stream_handle: Mutex<Option<JoinHandle<()>>>,
-    pub fake_data_enabled: Arc<AtomicBool>, // Flag to track if fake data is enabled
+    pub fake_signal_enabled: Arc<AtomicBool>, // Flag for fake signal data (used in SignalConfigView)
+    pub fake_camera_enabled: Arc<AtomicBool>, // Flag for fake camera stream (used in StreamingView)
 }
 
 impl StreamState {
@@ -162,7 +163,8 @@ impl StreamState {
             signal_stream_handle: Mutex::new(None),
             camera_stream_running: Arc::new(AtomicBool::new(false)),
             camera_stream_handle: Mutex::new(None),
-            fake_data_enabled: Arc::new(AtomicBool::new(false)), // Initialize fake data as disabled
+            fake_signal_enabled: Arc::new(AtomicBool::new(false)), // Initialize fake signal data as disabled
+            fake_camera_enabled: Arc::new(AtomicBool::new(false)), // Initialize fake camera as disabled
         }
     }
 }

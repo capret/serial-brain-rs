@@ -214,7 +214,7 @@ onUnmounted(() => {
 });
 
 // Toggle connection/disconnection
-function handleConnectionToggle() {
+async function handleConnectionToggle() {
   if (connectionStatus.value === 'connected') {
     invoke('stop_data_acquisition')
       .then(() => { 
@@ -239,6 +239,9 @@ function handleConnectionToggle() {
         dataBits: serialSettings.dataBits
       });
     } else if (props.selectedDataSource === 'fake') {
+      // First enable fake signal mode
+      await invoke('toggle_fake_signal', {});
+      
       cmd = invoke('start_fake_data', {
         config: {
           min_value: fakeDataSettings.minValue,

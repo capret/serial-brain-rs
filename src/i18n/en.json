@@ -103,7 +103,7 @@
 
   "streaming": {
     "title": "Camera Streaming",
-    "status": "Streaming RGB @ 30 fps from Rust",
+    "status": "Streaming RGB {'@'} 30 fps from Rust",
     "path": "Stream Path",
     "placeholder": "MJPEG URL",
     "pause": "Pause",

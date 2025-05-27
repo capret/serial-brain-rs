@@ -115,8 +115,8 @@ pub fn start_fake_data(
         }
     }
 
-    // Set the fake data enabled flag to true
-    state.stream.fake_data_enabled.store(true, Ordering::SeqCst);
+    // Set the fake signal data enabled flag to true
+    state.stream.fake_signal_enabled.store(true, Ordering::SeqCst);
     
     let reader = FakeBinaryReader::new(config);
     state.stream.signal_stream_running.store(true, Ordering::SeqCst);
@@ -318,15 +318,27 @@ pub fn is_video_recording_active(
 }
 
 #[tauri::command]
-pub fn toggle_fake_data(
-    state: State<Arc<AppState>>,
-) -> Result<bool, String> {
-    // Toggle the fake data enabled flag
-    let current = state.stream.fake_data_enabled.load(Ordering::SeqCst);
-    let new_value = !current;
-    state.stream.fake_data_enabled.store(new_value, Ordering::SeqCst);
+pub fn toggle_fake_data(state: State<Arc<AppState>>) -> Result<bool, String> {
+    // Get current state and toggle
+    let fake_camera_state = state.stream.fake_camera_enabled.load(Ordering::SeqCst);
+    let new_state = !fake_camera_state;
     
-    println!("[Main App] Fake data enabled: {}", new_value);
+    // Update the state with the new value
+    state.stream.fake_camera_enabled.store(new_state, Ordering::SeqCst);
+    
+    println!("[Backend] Toggled fake camera to: {}", new_state);
+    
+    Ok(new_state)
+}
+
+#[tauri::command]
+pub fn toggle_fake_signal(state: State<Arc<AppState>>) -> Result<bool, String> {
+    // Toggle the fake signal data flag (used for signal visualization)
+    let current = state.stream.fake_signal_enabled.load(Ordering::SeqCst);
+    let new_value = !current;
+    state.stream.fake_signal_enabled.store(new_value, Ordering::SeqCst);
+    
+    println!("[Main App] Fake signal data enabled: {}", new_value);
     
     Ok(new_value)
 }
@@ -365,10 +377,13 @@ pub fn get_signal_config_state(
     let has_serial = state.communication.outbound_tx.lock().unwrap().is_some();
     let signal_streaming = state.stream.signal_stream_running.load(Ordering::SeqCst);
     
+    // Get fake signal data status (used for signal visualization, not camera)
+    let fake_signal_enabled = state.stream.fake_signal_enabled.load(Ordering::SeqCst);
+    
     // Determine data source based on state
     let status = if has_serial {
         "serial"
-    } else if signal_streaming {
+    } else if signal_streaming && fake_signal_enabled {
         "fake"
     } else {
         "disconnected"
@@ -376,9 +391,6 @@ pub fn get_signal_config_state(
     
     // Check if signal data is being received
     let is_running = signal_streaming || has_serial;
-    
-    // Get fake data status directly from the state
-    let is_fake_enabled = state.stream.fake_data_enabled.load(Ordering::SeqCst);
     
     // Determine connection status string for the frontend
     let connection_status = if is_running {
@@ -390,7 +402,7 @@ pub fn get_signal_config_state(
     // Combine all state information into a single JSON response
     let json = serde_json::json!({
         "isRunning": is_running,
-        "isFakeEnabled": is_fake_enabled,
+        "isFakeSignalEnabled": fake_signal_enabled,
         "connectionStatus": connection_status,
         "dataSource": status
     });
@@ -405,8 +417,8 @@ pub fn get_streaming_view_state(
     // Get camera streaming status specifically
     let camera_streaming = state.stream.camera_stream_running.load(Ordering::SeqCst);
     
-    // Get fake data status directly from the state
-    let is_fake_enabled = state.stream.fake_data_enabled.load(Ordering::SeqCst);
+    // Get fake camera status directly from the state (for streaming view)
+    let is_fake_enabled = state.stream.fake_camera_enabled.load(Ordering::SeqCst);
     
     // Get recording status information
     let recording_active = state.recording.recording_active.load(Ordering::SeqCst);

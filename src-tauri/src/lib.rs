@@ -13,7 +13,7 @@ use commands::{
     get_recent_data, get_recording_status, get_signal_config_state, get_signal_quality, get_streaming_view_state, 
     is_video_recording_active, push_video_frame, record_video_stream, send_serial, start_fake_data, 
     start_recording, start_stream_recording, start_streaming, stop_data_acquisition, stop_recording, 
-    stop_stream_recording, stop_streaming, stop_video_recording, toggle_fake_data,
+    stop_stream_recording, stop_streaming, stop_video_recording, toggle_fake_data, toggle_fake_signal,
 };
 use file_utils::get_file_stats;
 use state::AppState;
@@ -62,6 +62,7 @@ pub fn run() {
             is_video_recording_active,
             get_streaming_view_state,
             toggle_fake_data,
+            toggle_fake_signal,
             get_signal_config_state
         ])
         .run(tauri::generate_context!())

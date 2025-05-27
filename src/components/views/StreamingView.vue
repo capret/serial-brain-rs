@@ -280,7 +280,7 @@ async function toggleStreaming() {
 
 async function toggleFake() {
   try {
-    // Toggle fake data state in the backend
+    // Toggle fake camera state in the backend (this is for the camera streaming)
     const newFakeState = await invoke<boolean>('toggle_fake_data');
     
     // Update local state to match backend state
@@ -292,9 +292,9 @@ async function toggleFake() {
       await invoke('start_streaming', { path: streamUrl.value, fake: fakeEnabled.value });
     }
     
-    console.log(`Fake data ${fakeEnabled.value ? 'enabled' : 'disabled'}`);
+    console.log(`Fake camera ${fakeEnabled.value ? 'enabled' : 'disabled'}`);
   } catch (error) {
-    console.error('Error toggling fake data:', error);
+    console.error('Error toggling fake camera:', error);
   }
 }
 
