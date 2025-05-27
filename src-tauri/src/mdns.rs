@@ -1,8 +1,8 @@
 // src/mdns.rs
 //
-// Minimal but complete mDNS publisher for "petbrain._iot._tcp.local."
-// Uses libmdns 0.7.5 and Tauri 2.
-//
+// mDNS service publisher and discovery for the application
+// Uses libmdns 0.7.5 for publishing and mdns-sd for discovery
+// 
 // Works on Windows, macOS and Linux.
 
 use std::{
@@ -14,9 +14,10 @@ use std::{
 
 use tauri::{AppHandle, Manager, Emitter};
 use libmdns::Responder;
+use mdns_sd::{ServiceDaemon, ServiceEvent};
+use serde::{Serialize, Deserialize};
 
 use crate::state::AppState;
-
 
 /// Convenience wrapper that tries to pick the first non-loopback IPv4
 /// address of this host. Falls back to 127.0.0.1.
@@ -127,6 +128,173 @@ pub fn start_mdns_service(app: AppHandle, port: u16) -> anyhow::Result<()> {
     });
     
     Ok(())
+}
+
+// Structure to represent a discovered mDNS device
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MdnsDevice {
+    pub name: String,     // Device name
+    pub ip: String,       // IP address
+    pub port: u16,        // Port number
+    pub service_type: String,  // Service type
+    pub txt_records: Vec<String>,  // TXT records
+}
+
+/// Discover devices on the local network using mDNS
+/// Uses mdns-sd for discovery
+pub fn discover_mdns_devices(app: AppHandle, service_type: String) -> anyhow::Result<()> {
+    // Get the state from the app
+    let state = app.state::<Arc<AppState>>();
+    
+    // Log that we're starting discovery
+    println!("[mDNS] Starting discovery for {}", service_type);
+    
+    // Clear previous discoveries
+    {
+        let mut devices = state.mdns.discovered_devices.lock().unwrap();
+        devices.clear();
+        
+        // Add some test devices for development purposes
+        // #[cfg(debug_assertions)]
+        // {
+        //     println!("[mDNS] Debug mode: Adding test camera devices");
+        //     // Add a few test devices to ensure we always see something in the UI
+        //     devices.push(MdnsDevice {
+        //         name: "Test Camera 1".to_string(),
+        //         ip: "192.168.1.100".to_string(),
+        //         port: 8080,
+        //         service_type: "_rtsp._tcp.local.".to_string(),
+        //         txt_records: vec!["camera=true".to_string()],
+        //     });
+            
+        //     devices.push(MdnsDevice {
+        //         name: "IP Webcam".to_string(),
+        //         ip: "192.168.1.101".to_string(),
+        //         port: 8081,
+        //         service_type: "_rtsp._tcp.local.".to_string(),
+        //         txt_records: vec!["camera=true".to_string()],
+        //     });
+        // }
+    }
+    
+    let app_clone = app.clone();
+    
+    // Spawn a thread for discovery to avoid blocking the main thread
+    thread::spawn(move || {
+        // Try to create the daemon
+        match ServiceDaemon::new() {
+            Ok(mdns) => {
+                // Log that we're starting discovery
+                let msg = format!("[mDNS] Starting discovery for {}", service_type);
+                app_clone.emit("socket_status", msg.clone()).unwrap_or_default();
+                println!("{}", msg);
+                
+                // Browse for services
+                match mdns.browse(&service_type) {
+                    Ok(receiver) => {
+                        // Set a timeout for discovery
+                        let discovery_timeout = Duration::from_secs(3);
+                        let start_time = std::time::Instant::now();
+                        
+                        // Collect devices as they're discovered
+                        while start_time.elapsed() < discovery_timeout {
+                            match receiver.recv_timeout(Duration::from_millis(100)) {
+                                Ok(event) => {
+                                    match event {
+                                        ServiceEvent::ServiceResolved(info) => {
+                                            // Get device details
+                                            let name = info.get_hostname().to_string();
+                                            
+                                            // Get the first IPv4 address
+                                            if let Some(addr) = info.get_addresses().iter().find(|a| a.is_ipv4()) {
+                                                let ip = addr.to_string();
+                                                let port = info.get_port();
+                                                let service_type = info.get_type().to_string();
+                                                
+                                                // Get TXT records
+                                                let txt_records: Vec<String> = info.get_properties()
+                                                    .iter()
+                                                    .map(|prop| {
+                                                        let key = prop.key();
+                                                        // Handle Option<&[u8]> by using unwrap_or_default
+                                                        let value = match prop.val() {
+                                                            Some(bytes) => String::from_utf8_lossy(bytes),
+                                                            None => std::borrow::Cow::Borrowed("")
+                                                        };
+                                                        format!("{key}={value}")
+                                                    })
+                                                    .collect();
+                                                
+                                                // Create device info
+                                                let device = MdnsDevice {
+                                                    name: name.clone(),
+                                                    ip,
+                                                    port,
+                                                    service_type,
+                                                    txt_records,
+                                                };
+                                                
+                                                // Add to state
+                                                {
+                                                    let state = app_clone.state::<Arc<AppState>>();
+                                                    let mut devices = state.mdns.discovered_devices.lock().unwrap();
+                                                    devices.push(device.clone());
+                                                }
+                                                
+                                                // Emit event with device info
+                                                let msg = format!("[mDNS] Discovered: {} at {}:{}", name, device.ip, device.port);
+                                                app_clone.emit("mdns_device_discovered", device).unwrap_or_default();
+                                                app_clone.emit("socket_status", msg.clone()).unwrap_or_default();
+                                                println!("{}", msg);
+                                            }
+                                        },
+                                        _ => {}
+                                    }
+                                },
+                                Err(_) => {}
+                                // Just continue if timeout, this is expected
+                            }
+                        }
+                        
+                        // Final emit of all discovered devices
+                        let state = app_clone.state::<Arc<AppState>>();
+                        let devices = state.mdns.discovered_devices.lock().unwrap().clone();
+                        app_clone.emit("mdns_devices_list", devices).unwrap_or_default();
+                        
+                        // Log completion
+                        let msg = format!("[mDNS] Discovery completed for {}", service_type);
+                        app_clone.emit("socket_status", msg.clone()).unwrap_or_default();
+                        println!("{}", msg);
+                        
+                        // Shutdown the daemon
+                        if let Err(e) = mdns.shutdown() {
+                            println!("[mDNS] Error shutting down daemon: {}", e);
+                        }
+                    },
+                    Err(e) => {
+                        let msg = format!("[mDNS] Error browsing for services: {}", e);
+                        app_clone.emit("socket_status", msg.clone()).unwrap_or_default();
+                        println!("{}", msg);
+                    }
+                }
+            },
+            Err(e) => {
+                let msg = format!("[mDNS] Error creating mDNS daemon: {}", e);
+                app_clone.emit("socket_status", msg.clone()).unwrap_or_default();
+                println!("{}", msg);
+            }
+        }
+    });
+    
+    Ok(())
+}
+
+/// Get the list of discovered mDNS devices
+#[allow(dead_code)]
+pub fn get_discovered_devices(app: &AppHandle) -> Vec<MdnsDevice> {
+    let state = app.state::<Arc<AppState>>();
+    let devices = state.mdns.discovered_devices.lock().unwrap();
+    devices.clone()
 }
 
 /// Stop the mDNS service.

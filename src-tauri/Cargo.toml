@@ -39,4 +39,5 @@ tauri-plugin-dialog = "2"
 tauri-plugin-android-forward-service = { path = "../tauri-plugin-android-forward-service" }
 tauri-plugin-record-stream = {path="../tauri-plugin-record-stream"}
 tauri-plugin-blec = "0.4"
+mdns-sd = "0.13.9"
 # opencv = { version = "0.94" }

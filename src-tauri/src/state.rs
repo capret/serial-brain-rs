@@ -221,6 +221,7 @@ pub struct MdnsState {
     pub active: Mutex<bool>,
     pub host: Mutex<String>,
     pub port: Mutex<u16>,
+    pub discovered_devices: Mutex<Vec<crate::mdns::MdnsDevice>>,
 }
 
 impl MdnsState {
@@ -231,6 +232,7 @@ impl MdnsState {
             active: Mutex::new(false),
             host: Mutex::new(String::new()),
             port: Mutex::new(0),
+            discovered_devices: Mutex::new(Vec::new()),
         }
     }
 

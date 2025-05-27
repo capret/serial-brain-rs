@@ -332,6 +332,32 @@ pub fn toggle_fake_data(
 }
 
 #[tauri::command]
+pub fn discover_streaming_devices(app_handle: AppHandle) -> Result<(), String> {
+    let result = crate::mdns::discover_mdns_devices(app_handle, "_iot._tcp.local.".into());
+    if result.is_err() {
+        eprintln!("IoT discovery error: {}", result.as_ref().err().unwrap());
+        // Return the first error if both failed
+        if result.is_err() {
+            return result.map_err(|e| e.to_string());
+        }
+    }
+    
+    // If either succeeded, return Ok
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_discovered_devices(state: State<Arc<AppState>>) -> Result<Vec<crate::mdns::MdnsDevice>, String> {
+    // Get the devices directly from state
+    let devices = state.mdns.discovered_devices.lock().unwrap().clone();
+    println!("[Backend] Returning {} discovered devices", devices.len());
+    for (i, device) in devices.iter().enumerate() {
+        println!("[Backend] Device {}: {} at {}:{}", i+1, device.name, device.ip, device.port);
+    }
+    Ok(devices)
+}
+
+#[tauri::command]
 pub fn get_signal_config_state(
     state: State<Arc<AppState>>,
 ) -> Result<serde_json::Value, String> {
