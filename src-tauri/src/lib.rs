@@ -21,7 +21,7 @@ use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let serial_state = Arc::new(AppState::new());
+    let app_state = Arc::new(AppState::new());
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
@@ -29,12 +29,12 @@ pub fn run() {
         .plugin(tauri_plugin_blec::init())
         .plugin(tauri_plugin_android_forward_service::init())
         .plugin(tauri_plugin_record_stream::init())
-        .manage(serial_state.clone())
+        .manage(app_state.clone())
         .setup(move | app| {
             // Store the app handle in the serial state for event emission
             let app_handle = app.handle();
             // Store in communication state for event emission
-            *serial_state.communication.app_handle.lock().unwrap() = Some(app_handle.clone());
+            *app_state.communication.app_handle.lock().unwrap() = Some(app_handle.clone());
             Ok(())
         })
         // Removed automatic frame stream on startup; streaming controlled via commands
