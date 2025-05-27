@@ -56,6 +56,16 @@
       </div>
     </div>
     
+    <!-- Video badge (only shown if we've checked) -->  
+    <div v-if="hasVideo !== null" class="mb-2 flex justify-start">
+      <span v-if="hasVideo" class="px-2 py-1 text-xs rounded-full bg-blue-600 text-white font-medium mr-2">
+        {{ $t('recording.video') }}
+      </span>
+      <span v-else class="px-2 py-1 text-xs rounded-full bg-gray-600 text-white font-medium mr-2">
+        {{ $t('recording.noVideo') }}
+      </span>
+    </div>
+    
     <!-- File metadata -->
     <div class="flex justify-between text-xs text-gray-400 mb-2">
       <div>{{ $t('recording.size') }}: <span class="text-gray-300" :class="{'text-green-300': isActiveRecording}">{{ file.size }}</span></div>
@@ -86,6 +96,7 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
+import { exists } from '@tauri-apps/plugin-fs';
 import { formatDate, formatTime, formatDuration, formatFileSize } from '../../utils/records/formatters';
 import type { RecordingFile } from '../../utils/records/types';
 
@@ -116,6 +127,9 @@ const startTime = ref<number | null>(null);
 const currentDuration = ref<string | null>(null);
 let updateInterval: number | undefined = undefined;
 
+// Video badge state
+const hasVideo = ref<boolean | null>(null); // null = not checked yet, true/false = has/doesn't have video
+
 // Computed property that shows either the static duration or the live updated one
 const liveDuration = computed(() => {
   // For active recordings, use our live-updating duration
@@ -131,10 +145,11 @@ const liveDuration = computed(() => {
 });
 
 // Set up the live duration updating for active recordings
-onMounted(() => {
-  if (props.isActiveRecording) {
-    setupLiveDurationUpdates();
-  }
+onMounted(async () => {
+  setupLiveDurationUpdates();
+  
+  // Check if a corresponding video file exists
+  await checkVideoExists();
 });
 
 // Clean up on unmount
@@ -251,6 +266,25 @@ function confirmDelete() {
   // We need to add the confirm delete translation to our language files
   if (confirm(`${t('recording.confirmDeletePrefix')} ${props.file.name}?`)) {
     emit('action', { action: 'delete', file: props.file });
+  }
+}
+
+// Check if a corresponding video file exists
+async function checkVideoExists() {
+  try {
+    // Get base file path without extension
+    const filePath = props.file.path;
+    const basePath = filePath.replace(/\.[^/.]+$/, '');
+    
+    // Check if MP4 file exists
+    const videoPath = `${basePath}.mp4`;
+    const videoExists = await exists(videoPath);
+    
+    hasVideo.value = videoExists;
+    console.log(`Video check for ${props.file.name}: ${hasVideo.value ? 'has video' : 'no video'}`);
+  } catch (error) {
+    console.error('Error checking for video file:', error);
+    hasVideo.value = false;
   }
 }
 </script>

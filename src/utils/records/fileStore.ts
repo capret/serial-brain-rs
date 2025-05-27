@@ -76,13 +76,37 @@ export async function loadFiles() {
     // Step 1: Quickly load basic file info without detailed stats
     const basicFiles = await loadBasicFileInfo(currentDirectory);
     
-    // Update the reactive state with basic file info
-    files.value = basicFiles;
+    // Check if we're just refreshing the same directory
+    if (files.value.length > 0) {
+      console.log('[FileStore] Files already loaded, performing smart update...');
+      
+      // Create a map of existing files by path for quick lookup
+      const existingFilesMap = new Map(files.value.map(file => [file.path, file]));
+      
+      // Add only new files that don't exist in the current list
+      const newFiles = basicFiles.filter(newFile => !existingFilesMap.has(newFile.path));
+      if (newFiles.length > 0) {
+        console.log(`[FileStore] Adding ${newFiles.length} new files to the list`);
+        files.value = [...newFiles, ...files.value];
+      }
+      
+      // Remove files that no longer exist in the directory
+      const basicFilePaths = new Set(basicFiles.map(file => file.path));
+      const filesToRemove = files.value.filter(file => !basicFilePaths.has(file.path));
+      if (filesToRemove.length > 0) {
+        console.log(`[FileStore] Removing ${filesToRemove.length} files that no longer exist`);
+        files.value = files.value.filter(file => basicFilePaths.has(file.path));
+      }
+    } else {
+      // First load - simply set all files
+      console.log(`[FileStore] First load - setting ${basicFiles.length} files`);
+      files.value = basicFiles;
+    }
     
-    if (basicFiles.length === 0) {
+    if (files.value.length === 0) {
       console.log('[FileStore] No recording files found');
     } else {
-      console.log(`[FileStore] Loaded ${basicFiles.length} recording files with basic info`);
+      console.log(`[FileStore] File list now contains ${files.value.length} files`);
     }
   } catch (error) {
     console.error('[FileStore] Error loading files:', error);
@@ -131,6 +155,13 @@ export async function addNewRecordingFile(filename: string) {
   console.log(`[FileStore] Adding new recording file: ${filename}`);
   const filePath = `${currentDirectory}/${filename}`;
   
+  // Check if file already exists in our list to prevent duplicates
+  const existingFileIndex = files.value.findIndex(file => file.path === filePath);
+  if (existingFileIndex !== -1) {
+    console.log(`[FileStore] File already exists in list, skipping: ${filename}`);
+    return;
+  }
+  
   try {
     // Create a minimal file object for the new recording
     const now = new Date();
@@ -154,9 +185,9 @@ export async function addNewRecordingFile(filename: string) {
 }
 
 // Update recording state with optimized file handling
-export function updateRecordingState(recording: boolean, filename: string) {
-  // Skip if nothing has changed
-  if (recording === lastRecordingState && filename === lastFilename) {
+export async function updateRecordingState(recording: boolean, filename: string) {
+  // Skip if nothing has changed and we're not forcing an update
+  if (recording === lastRecordingState && filename === lastFilename && isRecording === recording) {
     console.log('[FileStore] Recording state unchanged, skipping update');
     return;
   }
@@ -169,30 +200,53 @@ export function updateRecordingState(recording: boolean, filename: string) {
   // Update state
   isRecording = recording;
   
-  // Set current filename only if provided
-  if (filename) {
+  // Store new filename if provided, or keep the previous one if stopping a recording
+  if (filename && filename.trim() !== '') {
     currentRecordingFilename = filename;
+    console.log(`[FileStore] Setting current recording filename to: ${filename}`);
+  } else if (!recording && previousFilename) {
+    // When stopping a recording but no filename provided, keep the previous one for proper cleanup
+    console.log(`[FileStore] Keeping previous filename for stopping: ${previousFilename}`);
   }
   
-  // Track previous state for next comparison
+  // Update tracking variables
   const wasRecording = lastRecordingState;
   lastRecordingState = recording;
-  lastFilename = filename || previousFilename;
+  lastFilename = filename || currentRecordingFilename; // Ensure we track the actual filename
   
-  // Only proceed if we have a directory set
   if (!currentDirectory) return;
   
   // Optimized handling of recording state changes
   if (recording && !wasRecording && filename) {
     // Starting a new recording - add the new file
-    addNewRecordingFile(filename);
+    await addNewRecordingFile(filename);
   } else if (!recording && wasRecording) {
     // Stopping a recording - update the file's metadata
     const filenameToUpdate = filename || previousFilename;
     if (filenameToUpdate) {
       const filePath = `${currentDirectory}/${filenameToUpdate}`;
-      updateSingleFileMetadata(filePath);
+      await updateSingleFileMetadata(filePath);
       console.log(`[FileStore] Updated file metadata after stopping recording: ${filePath}`);
+    }
+  } else if (recording && filename) {
+    // If already recording but navigated back to page, ensure file exists
+    console.log(`[FileStore] Ensuring recording file exists in list: ${filename}`);
+    const filePath = `${currentDirectory}/${filename}`;
+    const fileExists = files.value.some(file => file.path === filePath);
+    
+    if (!fileExists) {
+      console.log(`[FileStore] Active recording file not found in list, adding: ${filename}`);
+      await addNewRecordingFile(filename);
+      
+      // If still not found in the list after adding (could happen if file doesn't exist yet),
+      // force reload files from directory to ensure we have the latest state
+      const stillNotExists = !files.value.some(file => file.path === filePath);
+      if (stillNotExists) {
+        console.log(`[FileStore] Active recording file still not found, reloading directory: ${currentDirectory}`);
+        await loadFiles();
+      }
+    } else {
+      console.log(`[FileStore] Active recording file found in list: ${filename}`);
     }
   }
 }
@@ -220,7 +274,10 @@ export function isActiveRecording(filePath: string): boolean {
   const pathParts = filePath.split('/');
   const filename = pathParts[pathParts.length - 1];
   
-  return filename === currentRecordingFilename;
+  // Double check against the current recording filename
+  const isActive = filename === currentRecordingFilename;
+  console.log(`[FileStore] Checking if ${filename} is active recording: ${isActive} (current: ${currentRecordingFilename})`);
+  return isActive;
 }
 
 // Update just the file size (for active recordings)
@@ -285,19 +342,39 @@ async function updateSingleFileMetadata(filePath: string) {
       if (filename.endsWith('.csv') || filename.endsWith('.json') || filename.endsWith('.bin')) {
         try {
           // Try to extract the timestamp from the filename (e.g., serial_recording_1746593732545.csv)
-          const match = filename.match(/serial_recording_(\\d+)/);
+          const match = filename.match(/serial_recording_(\d+)/);
           if (match && match[1]) {
             const startTimestamp = parseInt(match[1]);
             const endTimestamp = modifiedDate.getTime();
             
             // Calculate duration in milliseconds and validate
-            const durationMs = endTimestamp - startTimestamp;
+            let durationMs = endTimestamp - startTimestamp;
             
-            if (durationMs > 0 && durationMs < 3600000) { // Cap at 1 hour to prevent unreasonable values
+            // Ensure we have a reasonable duration (at least 1 second, max 12 hours)
+            if (durationMs < 1000) {
+              console.warn(`[FileStore] Duration too short (${durationMs}ms), using modified time difference`);
+              // As fallback, try to use birthtime if available, or modified time as an estimate
+              if (fileStats.birthtime) {
+                const createdDate = new Date(fileStats.birthtime);
+                durationMs = modifiedDate.getTime() - createdDate.getTime();
+              } else {
+                // Just ensure a minimum duration as a fallback
+                durationMs = Math.max(1000, durationMs);
+              }
+            }
+            
+            if (durationMs >= 1000 && durationMs < 43200000) { // Between 1 sec and 12 hours
               updatedFile.duration = formatDuration(durationMs);
               console.log(`[FileStore] Calculated duration for ${filename}: ${updatedFile.duration} (${durationMs}ms)`);
             } else {
-              console.warn(`[FileStore] Invalid duration for ${filename}: ${durationMs}ms`);
+              console.warn(`[FileStore] Invalid duration for ${filename}: ${durationMs}ms, falling back to estimation`);
+              // If duration still looks wrong, use file size to roughly estimate duration
+              // Assuming ~20KB per second for CSV files as a rough estimate
+              if (rawSize > 0) {
+                const estimatedDuration = Math.max(1000, Math.min(rawSize * 50, 3600000)); // 1 sec to 1 hour
+                updatedFile.duration = formatDuration(estimatedDuration);
+                console.log(`[FileStore] Estimated duration from file size: ${updatedFile.duration}`);
+              }
             }
           }
         } catch (error) {

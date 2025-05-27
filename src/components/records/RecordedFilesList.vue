@@ -209,13 +209,27 @@ async function initializeComponent(directoryPath: string) {
   // Set recording state first
   fileStore.updateRecordingState(props.isRecording, props.recordingFilename);
   
-  // Only load files if this is a new directory or first load
-  if (!isInitialized.value || directoryPath !== fileStore.currentDirectory) {
+  // First initialization or directory change
+  if (!isInitialized.value) {
+    console.log('First initialization of component');
     await fileStore.setDirectory(directoryPath);
     isInitialized.value = true;
+    currentPage.value = 1; // Start at first page
+    currentPageMetadataLoaded.value = false; // Reset metadata loaded state
+    console.log('Component first initialization complete');
+  } 
+  // Directory has changed
+  else if (directoryPath !== fileStore.currentDirectory) {
+    console.log('Directory changed, reloading files');
+    await fileStore.setDirectory(directoryPath);
     currentPage.value = 1; // Reset to first page on new directory
     currentPageMetadataLoaded.value = false; // Reset metadata loaded state
-    console.log('Component initialization complete');
+    console.log('Component re-initialization complete with new directory');
+  }
+  // Same directory, returning to the page - don't reload everything
+  else {
+    console.log('Returning to recording page with same directory, using existing file list');
+    // No need to call setDirectory or loadFiles, just use the existing state
   }
 }
 onMounted(async () => {
@@ -297,10 +311,10 @@ watch([() => props.isRecording, () => props.recordingFilename], async ([isRecord
   // When recording stops but filename is empty, use the last known filename
   if (!isRecording && (!filename || filename.trim() === '') && lastRecordingFilename.value) {
     console.log('Recording stopped with empty filename, using last known filename:', lastRecordingFilename.value);
-    fileStore.updateRecordingState(isRecording, lastRecordingFilename.value);
+    await fileStore.updateRecordingState(isRecording, lastRecordingFilename.value);
   } else {
     console.log('Recording state changed:', isRecording, filename);
-    fileStore.updateRecordingState(isRecording, filename);
+    await fileStore.updateRecordingState(isRecording, filename);
   }
 });
 

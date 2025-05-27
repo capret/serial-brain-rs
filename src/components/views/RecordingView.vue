@@ -45,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -58,8 +58,12 @@ import {
   recordingFormat,
   autoStartRecording,
   isConnected,
-  fetchConnectionState
+  fetchConnectionState,
+  streamingActive,
+  toggleStreamingState
 } from '../../store/appState';
+import fileStore from '../../utils/records/fileStore';
+import { formatFileSize } from '../../utils/records/formatters';
 import {
   setupRecordingFileWatcher,
   findAndUpdateActiveRecordingFile,
@@ -74,6 +78,11 @@ import {
   RecordingStatus,
   RecordedFilesList
 } from '../records';
+
+// For changing sidebar view
+const setActiveView = inject<(view: string) => void>('setActiveView');
+const setAdditionalViews = inject<(view: string) => void>('setAdditionalViews');
+
 
 // Define interfaces for backend response types
 interface RecordingStatusResponse {
@@ -112,6 +121,7 @@ async function setupEventListeners() {
       directory: string;
       maxDurationMinutes: number;
       shouldRestartRecording: boolean;
+      baseFilename?: string; // New parameter for video recording segments
     };
     
     // Only restart if shouldRestartRecording is true
@@ -121,6 +131,16 @@ async function setupEventListeners() {
       // Temporarily set recording state to false
       // but we'll keep the Android service running
       isRecording.value = false;
+      
+      // First explicitly stop the video recording to ensure it's properly finalized
+      try {
+        console.log('Stopping video recording for segment change...');
+        await invoke('stop_video_recording');
+        console.log('Video recording stopped for segment change');
+      } catch (error) {
+        console.warn('Error stopping video recording for segment change:', error);
+        // Continue with new segment even if stopping video fails
+      }
       
       // Start a new recording segment with the same parameters
       // but don't restart the Android service
@@ -182,13 +202,21 @@ function setupActiveRecordingUpdates() {
               const fileStat = await invoke<FileStats>('get_file_stats', { path: fullPath });
               if (fileStat && fileStat.size) {
                 console.log(`Current recording file size: ${fileStat.size} bytes`);
+                
+                // Update the file store with the latest recording information
+                // This ensures the file exists in the list and has the current state
+                await fileStore.updateRecordingState(true, recordingFilename.value);
+                
+                // Update the file size in the store
+                fileStore.updateFileSize(fullPath, fileStat.size, formatFileSize(fileStat.size));
+                
                 // Trigger a file list refresh to update the size
                 await findAndUpdateActiveRecordingFile(
                   isRecording.value,
                   recordingDirectory.value,
                   recordingFilename.value,
                   recordingFormat.value,
-                  [],
+                  fileStore.files.value, // Pass current files instead of empty array
                   (path) => activeRecordingPath.value = path,
                   (name) => recordingFilename.value = name,
                   () => {} // We'll handle the UI update separately
@@ -336,6 +364,37 @@ async function selectDirectory(): Promise<void> {
 }
 
 async function startRecording(format?: string, directory?: string, duration?: number, isSegmentChange: boolean = false): Promise<void> {
+  // Check if camera is streaming - if not, toggle the streaming page on and start streaming
+  try {
+    // Use the shared streaming state to check if streaming is active
+    if (!streamingActive.value) {
+      console.log('Camera not streaming, activating streaming view and starting camera stream');
+      
+      // Toggle the streaming view on in the sidebar
+      if (setActiveView && setAdditionalViews) {
+        setAdditionalViews('streaming');
+      }
+      
+      // Start streaming using the shared state function
+      const streamUrl = await invoke('get_default_stream_url') as string;
+      if (streamUrl) {
+        const success = await toggleStreamingState(true, streamUrl);
+        if (success) {
+          console.log('Streaming started successfully with URL:', streamUrl);
+        } else {
+          console.warn('Failed to start streaming, proceeding with recording anyway');
+        }
+      } else {
+        console.warn('No default stream URL available, proceeding without camera');
+      }
+    } else {
+      console.log('Camera already streaming, proceeding with recording');
+    }
+  } catch (error) {
+    console.warn('Error checking streaming status:', error);
+    // Continue with recording anyway
+  }
+  
   // Use provided parameters or defaults from UI controls
   const recordFormat = format || recordingFormat.value;
   const recordDir = directory || recordingDirectory.value; // This is now a full path
@@ -351,6 +410,7 @@ async function startRecording(format?: string, directory?: string, duration?: nu
     console.log('Directory:', recordDir);
     console.log('Duration:', recordDuration);
     
+    // Start both signal recording and video recording with the same base filename
     const actualFilename = await invoke('start_recording', {
       format: recordFormat,
       directory: recordDir,
@@ -360,6 +420,27 @@ async function startRecording(format?: string, directory?: string, duration?: nu
     
     console.log('Received filename from backend:', actualFilename);
     recordingFilename.value = actualFilename;
+    
+    // Start video recording with the same base name but mp4 extension
+    try {
+      // Extract base name without extension
+      const baseFilename = actualFilename.replace(/\.[^/.]+$/, '');
+      
+      console.log(`Starting video recording for ${isSegmentChange ? 'segment change' : 'new recording'}`);
+      console.log('Video base filename:', baseFilename);
+      console.log('Video directory:', recordDir);
+      
+      // Start the video recording using the Tauri plugin command
+      await invoke('start_video_recording', {
+        filename: baseFilename,
+        directory: recordDir
+      });
+      
+      console.log('Video recording started successfully with base filename:', baseFilename);
+    } catch (error) {
+      console.warn('Failed to start video recording:', error);
+      // Continue with signal recording even if video recording fails
+    }
     
     // Only start the Android service if it's not already running
     if (!isServiceRunning.value && !isSegmentChange) {
@@ -424,6 +505,20 @@ async function stopRecording(): Promise<void> {
     if (fileWatchUnsubscribe.value) {
       fileWatchUnsubscribe.value();
       fileWatchUnsubscribe.value = null;
+    }
+    
+    // Stop video recording
+    try {
+      await invoke('stop_video_recording');
+      console.log('Video recording stopped');
+      
+      // Also update the shared streaming state to reflect that streaming has stopped
+      if (streamingActive.value) {
+        await toggleStreamingState(false);
+        console.log('Shared streaming state updated to inactive');
+      }
+    } catch (error) {
+      console.warn('Error stopping video recording:', error);
     }
     
     activeRecordingPath.value = '';

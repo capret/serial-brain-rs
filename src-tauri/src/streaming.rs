@@ -1,4 +1,5 @@
 use crate::state::AppState;
+use crate::commands::{start_video_recording as cmd_start_video_recording, stop_video_recording as cmd_stop_video_recording};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use image::{ImageBuffer, Rgb, GenericImageView, ColorType};
 use image::codecs::png::PngEncoder;
@@ -244,4 +245,42 @@ fn start_real_stream(
     let app_state = app_handle.state::<Arc<AppState>>();
     *app_state.stream.camera_stream_handle.lock().unwrap() = Some(handle);
     Ok(())
+}
+
+/// Starts a video recording with the specified filename and directory.
+/// This function is a wrapper around the command-based implementation to allow
+/// direct calls from other modules like recording.rs during segment rotation.
+pub fn start_video_recording(
+    app_handle: AppHandle,
+    filename: String,
+    directory: String,
+) -> Result<bool, String> {
+    // Need to use a runtime for the async function call
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("Failed to create runtime: {}", e))?;
+    
+    // Run the async function to start video recording
+    runtime.block_on(async {
+        cmd_start_video_recording(app_handle, filename, directory).await
+    })
+}
+
+/// Stops an active video recording.
+/// This function is a wrapper around the command-based implementation to allow
+/// direct calls from other modules like recording.rs during segment rotation.
+pub fn stop_video_recording(
+    app_handle: AppHandle,
+) -> Result<bool, String> {
+    // Need to use a runtime for the async function call
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("Failed to create runtime: {}", e))?;
+    
+    // Run the async function to stop video recording
+    runtime.block_on(async {
+        cmd_stop_video_recording(app_handle).await
+    })
 }

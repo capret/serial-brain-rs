@@ -131,3 +131,57 @@ watch(maxRecordingDuration, (newValue: number) => {
 
 export const recordingFormat = ref<string>('csv'); // Default format
 export const autoStartRecording = ref<boolean>(false); // Default auto-start setting
+
+// Streaming state for coordination between views
+export const streamingActive = ref<boolean>(false);
+export const streamUrl = ref<string>('');
+
+// Function to toggle streaming state
+export async function toggleStreamingState(active: boolean, url?: string): Promise<boolean> {
+  try {
+    if (active) {
+      // Important: Only use the provided URL or the existing URL, don't fallback to default unnecessarily
+      // This ensures we don't override a custom URL with a default one
+      let streamingUrl: string;
+      
+      if (url) {
+        // If URL is explicitly provided, use it
+        streamingUrl = url;
+        console.log('Using explicitly provided URL:', streamingUrl);
+      } else if (streamUrl.value) {
+        // If we already have a URL in the state, preserve it
+        streamingUrl = streamUrl.value;
+        console.log('Preserving existing URL:', streamingUrl);
+      } else {
+        // Only as a last resort, get the default URL
+        streamingUrl = await invoke<string>('get_default_stream_url');
+        console.log('Using default URL from backend:', streamingUrl);
+      }
+      
+      if (!streamingUrl) {
+        console.warn('No streaming URL available');
+        return false;
+      }
+      
+      // Start streaming
+      await invoke('start_streaming', { path: streamingUrl, fake: false });
+      console.log('Streaming started with URL:', streamingUrl);
+      
+      // Update state
+      streamingActive.value = true;
+      streamUrl.value = streamingUrl;
+    } else {
+      // Stop streaming
+      await invoke('stop_streaming');
+      console.log('Streaming stopped');
+      
+      // Update state
+      streamingActive.value = false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error toggling streaming state:', error);
+    return false;
+  }
+}

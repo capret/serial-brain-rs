@@ -154,6 +154,7 @@ pub struct StreamState {
     pub camera_stream_handle: Mutex<Option<JoinHandle<()>>>,
     pub fake_signal_enabled: Arc<AtomicBool>, // Flag for fake signal data (used in SignalConfigView)
     pub fake_camera_enabled: Arc<AtomicBool>, // Flag for fake camera stream (used in StreamingView)
+    pub default_stream_url: Mutex<String>, // Store the default stream URL
 }
 
 impl StreamState {
@@ -165,6 +166,7 @@ impl StreamState {
             camera_stream_handle: Mutex::new(None),
             fake_signal_enabled: Arc::new(AtomicBool::new(false)), // Initialize fake signal data as disabled
             fake_camera_enabled: Arc::new(AtomicBool::new(false)), // Initialize fake camera as disabled
+            default_stream_url: Mutex::new(String::new()), // Initialize with empty string
         }
     }
 }

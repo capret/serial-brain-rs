@@ -10,10 +10,11 @@ mod recording;
 mod mdns;
 use commands::{
     connect_serial, connect_socket, discover_streaming_devices, get_available_ports, get_discovered_devices,
-    get_recent_data, get_recording_status, get_signal_config_state, get_signal_quality, get_streaming_view_state, 
-    is_video_recording_active, push_video_frame, record_video_stream, send_serial, start_fake_data, 
-    start_recording, start_stream_recording, start_streaming, stop_data_acquisition, stop_recording, 
-    stop_stream_recording, stop_streaming, stop_video_recording, toggle_fake_data, toggle_fake_signal,
+    get_default_stream_url, set_default_stream_url, get_recent_data, get_recording_filename, get_recording_status, get_signal_config_state, 
+    get_signal_quality, get_streaming_view_state, is_streaming, is_video_recording_active, push_video_frame, 
+    record_video_stream, send_serial, start_fake_data, start_recording, start_stream_recording, start_streaming, 
+    start_video_recording, stop_data_acquisition, stop_recording, stop_stream_recording, stop_streaming, 
+    stop_video_recording, toggle_fake_data, toggle_fake_signal,
 };
 use file_utils::get_file_stats;
 use state::AppState;
@@ -43,16 +44,21 @@ pub fn run() {
             discover_streaming_devices,
             get_available_ports,
             get_discovered_devices,
+            get_default_stream_url,
+            set_default_stream_url,
             get_recent_data,
+            get_recording_filename,
             get_recording_status,
             get_signal_quality,
             get_file_stats,
+            is_streaming,
             record_video_stream,
             stop_video_recording,
             push_video_frame,
             send_serial,
             start_fake_data,
             start_stream_recording,
+            start_video_recording,
             stop_stream_recording,
             stop_data_acquisition,
             start_streaming,

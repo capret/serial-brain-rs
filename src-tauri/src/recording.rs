@@ -147,6 +147,7 @@ fn spawn_recording_thread(
                         &directory_clone,
                         &mut first_json_entry,
                         &mut segment_start_time,
+                        &max_duration,
                     );
                     continue; // Skip to next loop to immediately write to the new segment
                 }
@@ -205,6 +206,7 @@ fn handle_segment_rotation(
     directory_clone: &str,
     first_json_entry: &mut bool,
     segment_start_time: &mut SystemTime,
+    _max_duration: &Duration,
 ) {
     // Finalize the current segment file (flush + close JSON array if needed)
     {
@@ -257,7 +259,7 @@ fn handle_segment_rotation(
         println!("Recording segment changed to: {}", new_filename);
     }
 
-    // Emit event to frontend to notify filename change
+    // Emit events to frontend just to notify filename change
     if let Some(app_handle) = state_clone.communication.app_handle.lock().unwrap().as_ref() {
         // Emit the existing event with full payload
         let _ = app_handle.emit("recording-file-changed", {
@@ -270,6 +272,35 @@ fn handle_segment_rotation(
         
         // Emit a more specific event for updating just the filename
         let _ = app_handle.emit("recording-filename-changed", new_filename.clone());
+        
+        println!("Emitted filename change events for segment rotation");
+    }
+    
+    // Handle video recording segment rotation directly in the backend
+    if let Some(app_handle) = state_clone.communication.app_handle.lock().unwrap().as_ref() {
+        // Extract base filename for video recording (remove extension)
+        let base_filename = new_filename.replace(&format!(".{}", format_clone), "");
+        
+        // First stop the current video recording
+        println!("Stopping video recording for segment rotation");
+        match crate::streaming::stop_video_recording(app_handle.clone()) {
+            Ok(_) => println!("Successfully stopped video recording for segment rotation"),
+            Err(e) => println!("Warning: Failed to stop video recording for segment rotation: {}", e),
+        }
+        
+        // Small delay to ensure the video file is properly finalized
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        
+        // Start a new video recording segment
+        println!("Starting new video recording segment with base filename: {}", base_filename);
+        match crate::streaming::start_video_recording(
+            app_handle.clone(),
+            base_filename,
+            directory_clone.to_string(),
+        ) {
+            Ok(_) => println!("Successfully started new video recording segment"),
+            Err(e) => println!("Warning: Failed to start new video recording segment: {}", e),
+        }
     }
 
     // Reset per-segment flags and timer

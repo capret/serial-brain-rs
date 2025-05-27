@@ -53,6 +53,8 @@
     "size": "Size",
     "duration": "Duration",
     "created": "Created",
+    "video": "Video",
+    "noVideo": "No Video",
     "noFolderSelected": "No folder selected",
     "noFiles": "No recording files found in the selected directory",
     "selectDirectory": "Select a directory to view recorded files",

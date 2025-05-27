@@ -202,10 +202,11 @@
 /* -------------------------------------------------------------------
    imports
 ------------------------------------------------------------------- */
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { streamingActive, streamUrl as sharedStreamUrl, toggleStreamingState } from '../../store/appState';
 import * as path from '@tauri-apps/api/path';
 import { mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
 
@@ -223,11 +224,64 @@ const SRC_H = 240;           // incoming frame height
 /* -------------------------------------------------------------------
    reactive state
 ------------------------------------------------------------------- */
-const streamUrl      = ref('http://192.168.1.123:81/stream');
-const isStreaming    = ref(false);
+// Use a local reference for the UI, but sync with the shared state
+// Initialize with empty string - will be populated from backend default or first discovered device
+const streamUrl      = ref('');
+
+// Function to fetch the default stream URL from backend
+async function fetchDefaultStreamUrl() {
+  try {
+    const url = await invoke<string>('get_default_stream_url');
+    console.log('Fetched default stream URL from backend:', url);
+    
+    if (url) {
+      // If we have a stored default URL, use it
+      streamUrl.value = url;
+      sharedStreamUrl.value = url;
+      console.log('Using stored default stream URL:', url);
+    }
+    
+    return url;
+  } catch (error) {
+    console.error('Error fetching default stream URL:', error);
+    return '';
+  }
+}
+
+// Function to set the default stream URL in the backend
+async function setDefaultStreamUrl(url: string) {
+  if (!url) return;
+  
+  try {
+    await invoke('set_default_stream_url', { url });
+    console.log('Default stream URL set in backend:', url);
+    
+    // Also update shared state
+    sharedStreamUrl.value = url;
+  } catch (error) {
+    console.error('Error setting default stream URL:', error);
+  }
+}
+const isStreaming    = ref(streamingActive.value);
 const fakeEnabled    = ref(false);
 const isBrightEnough = ref(true);
 const isRecording    = ref(false);
+
+// Sync local streaming state with shared state
+watch(streamingActive, (newValue) => {
+  if (newValue !== isStreaming.value) {
+    console.log(`Streaming state changed externally to: ${newValue}`);
+    isStreaming.value = newValue;
+  }
+});
+
+// Sync local stream URL with shared URL
+watch(sharedStreamUrl, (newValue) => {
+  if (newValue && newValue !== streamUrl.value) {
+    console.log(`Stream URL changed externally to: ${newValue}`);
+    streamUrl.value = newValue;
+  }
+});
 
 // mDNS discovery state
 const isDiscovering = ref(false);
@@ -261,15 +315,19 @@ async function toggleStreaming() {
   try {
     // The checkbox already updated isStreaming.value through v-model
     // So we need to act according to the new value
-    if (isStreaming.value) {
-      // User turned streaming ON
-      await invoke('start_streaming', { path: streamUrl.value, fake: fakeEnabled.value });
-      console.log('Streaming started');
+    const success = await toggleStreamingState(isStreaming.value, streamUrl.value);
+    
+    if (success) {
+      console.log(`Streaming ${isStreaming.value ? 'started' : 'stopped'} successfully`);
+      
+      // If stopping streaming and recording is active, stop recording as well
+      if (!isStreaming.value && isRecording.value) {
+        await stopRecording();   // safety
+      }
     } else {
-      // User turned streaming OFF
-      await invoke('stop_streaming');
-      if (isRecording.value) stopRecording();   // safety
-      console.log('Streaming stopped');
+      console.error('Failed to toggle streaming state');
+      // Revert the checkbox state if there was an error
+      isStreaming.value = !isStreaming.value;
     }
   } catch (error) {
     console.error('Error toggling streaming:', error);
@@ -371,6 +429,9 @@ onMounted(async () => {
     isRecording.value = viewState.isRecording;
     
     console.log('Initial states from backend:', viewState);
+    
+    // Fetch the default stream URL from the backend
+    await fetchDefaultStreamUrl();
   } catch (error) {
     console.error('Error fetching initial states:', error);
   }
@@ -414,7 +475,7 @@ onMounted(async () => {
   }
 });
 
-onBeforeUnmount(() => {
+onUnmounted(() => {
   frameUnlisten?.();
   analysisUnlisten?.();
   errorUnlisten?.();
@@ -534,24 +595,44 @@ async function setupDeviceListeners() {
   });
   
   // Listen for the complete list of devices
-  await listen<any[]>('mdns_devices_list', ({ payload }) => {
+  await listen<any[]>('mdns_devices_list', async ({ payload }) => {
     discoveredDevices.value = payload || [];
     isDiscovering.value = false;
     
-    // Automatically select the first device if available
+    // Only auto-select a device if we don't have a URL yet or if selected device is not in the list
     if (filteredDevices.value.length > 0) {
-      selectDevice(filteredDevices.value[0]);
+      if (!streamUrl.value) {
+        // No URL yet, select the first device
+        console.log('No stream URL set yet, selecting first discovered device');
+        await selectDevice(filteredDevices.value[0]);
+      } else {
+        // We have a URL, but check if it's still valid in the device list
+        const currentDevice = filteredDevices.value.find(
+          d => streamUrl.value.includes(`${d.ip}:${d.port}`)
+        );
+        
+        if (!currentDevice) {
+          console.log('Current stream URL device no longer available, selecting first discovered device');
+          await selectDevice(filteredDevices.value[0]);
+        } else {
+          console.log('Current stream URL device still available, keeping the current selection');
+        }
+      }
     }
   });
 }
 
 // Select a device from the discovered list
-function selectDevice(device: any) {
+async function selectDevice(device: any) {
   selectedDeviceId.value = `${device.ip}:${device.port}`;
   
   // Set the stream URL based on the device
-  streamUrl.value = `http://${device.ip}:${device.port}/stream`;
+  const newUrl = `http://${device.ip}:${device.port}/stream`;
+  streamUrl.value = newUrl;
   console.log(`Selected device: ${device.name} at ${streamUrl.value}`);
+  
+  // Save this URL as the default in backend state
+  await setDefaultStreamUrl(newUrl);
 }
 
 // Check if a device is currently selected
@@ -619,9 +700,17 @@ function constructDeviceUrl(device: any) {
 }
 
 // Select the manually entered URL
-function selectManualUrl() {
+async function selectManualUrl() {
+  if (!streamUrl.value) {
+    console.warn('No URL entered manually, cannot select');
+    return;
+  }
+  
   selectedDeviceId.value = 'manual';
   console.log(`Using manual URL: ${streamUrl.value}`);
+  
+  // Save this URL as the default in backend state
+  await setDefaultStreamUrl(streamUrl.value);
 }
 </script>
 

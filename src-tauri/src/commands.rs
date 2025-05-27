@@ -6,6 +6,7 @@ use crate::state::AppState;
 use crate::types::{ChannelData, FakeDataConfig};
 use serialport;
 use std::{
+    path::Path,
     sync::{atomic::Ordering, mpsc, Arc},
     thread,
 };
@@ -244,10 +245,28 @@ pub async fn record_video_stream(
 pub async fn stop_video_recording(
     app_handle: tauri::AppHandle,
 ) -> Result<bool, String> {
-    println!("[Main App] Stopping video recording");
+    let state = app_handle.state::<Arc<AppState>>();
     
-    tauri_plugin_record_stream::stop_record(app_handle)
-        .map_err(|e| format!("Failed to stop video recording: {}", e))
+    if state.recording.video_recording_active.load(Ordering::SeqCst) {
+        // stop_record is not an async function, so don't use await
+        // Clone app_handle to avoid move issues with borrow
+        let _ = tauri_plugin_record_stream::stop_record(app_handle.clone());
+        state.recording.video_recording_active.store(false, Ordering::SeqCst);
+    }
+    
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn get_recording_filename(app_handle: tauri::AppHandle) -> String {
+    // Get the current recording filename from application state
+    let state = app_handle.state::<Arc<AppState>>();
+    let filename = state.recording.recording_filename.lock().unwrap();
+    
+    match *filename {
+        Some(ref name) => name.clone(),
+        None => String::new()
+    }
 }
 
 #[tauri::command]
@@ -408,6 +427,73 @@ pub fn get_signal_config_state(
     });
 
     Ok(json)
+}
+
+#[tauri::command]
+pub fn is_streaming(
+    state: State<Arc<AppState>>,
+) -> Result<serde_json::Value, String> {
+    // Check if camera is streaming
+    let is_active = state.stream.camera_stream_running.load(Ordering::SeqCst);
+    
+    Ok(serde_json::json!({
+        "active": is_active
+    }))
+}
+
+#[tauri::command]
+pub fn get_default_stream_url(app_handle: AppHandle) -> Result<String, String> {
+    // Get the default stream URL from the app state
+    let state = app_handle.state::<Arc<AppState>>();
+    let url = state.stream.default_stream_url.lock().unwrap().clone();
+    
+    // Return the stored URL (may be empty if not set yet)
+    Ok(url)
+}
+
+#[tauri::command]
+pub fn set_default_stream_url(app_handle: AppHandle, url: String) -> Result<(), String> {
+    // Set the default stream URL in the app state
+    let state = app_handle.state::<Arc<AppState>>();
+    *state.stream.default_stream_url.lock().unwrap() = url.clone();
+    
+    println!("Default stream URL set to: {}", url);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn start_video_recording(
+    app_handle: AppHandle,
+    filename: String,
+    directory: String,
+) -> Result<bool, String> {
+    let state = app_handle.state::<Arc<AppState>>();
+    
+    // Don't start if already recording
+    if state.recording.video_recording_active.load(Ordering::SeqCst) {
+        return Err("Video recording already active".to_string());
+    }
+    
+    // Make sure camera is streaming
+    if !state.stream.camera_stream_running.load(Ordering::SeqCst) {
+        return Err("Camera not streaming, start streaming first".to_string());
+    }
+    
+    // Create the full path with mp4 extension
+    let full_path = Path::new(&directory).join(format!("{}.mp4", filename));
+    let path_str = full_path.to_string_lossy().to_string();
+    
+    println!("Starting video recording at {}", path_str);
+    
+    // Start the video recording using await since it's an async function
+    match record_video_stream(app_handle.clone(), path_str).await {
+        Ok(_) => {
+            // Set the recording active flag
+            state.recording.video_recording_active.store(true, Ordering::SeqCst);
+            Ok(true)
+        },
+        Err(e) => Err(format!("Failed to start video recording: {}", e)),
+    }
 }
 
 #[tauri::command]
