@@ -155,7 +155,7 @@ impl VideoRecorder {
         let is_covered = edge_count < 500; // Threshold for considering camera covered
         
         // Log the edge detection results
-        println!("[record_plugin] Edge detection: {} edges found, covered: {}", edge_count, is_covered);
+        // println!("[record_plugin] Edge detection: {} edges found, covered: {}", edge_count, is_covered);
 
         // src_mat is no longer needed
         std::mem::drop(src_mat);

@@ -128,6 +128,9 @@ async function setupEventListeners() {
     if (payload.shouldRestartRecording) {
       console.log('Auto-starting new recording segment...');
       
+      // Store the current recording filename before changing it
+      const previousFilename = recordingFilename.value;
+      
       // Temporarily set recording state to false
       // but we'll keep the Android service running
       isRecording.value = false;
@@ -142,13 +145,60 @@ async function setupEventListeners() {
         // Continue with new segment even if stopping video fails
       }
       
+      // Explicitly update the metadata for the previous segment file
+      if (previousFilename) {
+        try {
+          console.log(`Updating metadata for previous segment: ${previousFilename}`);
+          // Import fileStore dynamically to avoid circular dependencies
+          const fileStore = (await import('../../utils/records/fileStore')).default;
+          
+          // Explicitly update the metadata of the previous segment file
+          if (recordingDirectory.value) {
+            const previousFilePath = `${recordingDirectory.value}/${previousFilename}`;
+            
+            // Wait a moment to ensure the file is fully written to disk
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Get the file stats manually to calculate duration
+            try {
+              const fs = await import('@tauri-apps/plugin-fs');
+              const stats = await fs.stat(previousFilePath);
+              
+              if (stats) {
+                console.log(`Previous segment file stats: created=${new Date(stats.birthtime || 0).toISOString()}, modified=${new Date(stats.mtime || 0).toISOString()}`);
+                
+                // Calculate duration directly using file timestamps
+                if (stats.birthtime && stats.mtime) {
+                  const createdTime = new Date(stats.birthtime).getTime();
+                  const modifiedTime = new Date(stats.mtime).getTime();
+                  const durationSec = Math.max(Math.floor((modifiedTime - createdTime) / 1000), 2); // At least 2 seconds
+                  
+                  console.log(`Calculated duration for previous segment: ${durationSec} seconds`);
+                }
+              }
+            } catch (statsError) {
+              console.warn(`Error getting file stats: ${statsError}`);
+            }
+            
+            // Now update metadata through fileStore
+            await fileStore.updateSingleFileMetadata(previousFilePath);
+            console.log(`Metadata updated for previous segment: ${previousFilename}`);
+            
+            // Force a complete refresh of the file list to update UI
+            await fileStore.loadFiles();
+          }
+        } catch (error) {
+          console.warn(`Error updating previous segment metadata: ${error}`);
+        }
+      }
+      
       // Start a new recording segment with the same parameters
       // but don't restart the Android service
       try {
         // Small delay to ensure the previous recording is properly closed
         setTimeout(async () => {
           await startRecording(payload.format, payload.directory, payload.maxDurationMinutes, true);
-        }, 500);
+        }, 800); // Increased delay to give more time for file updates
       } catch (error) {
         console.error('Failed to auto-restart recording:', error);
         alert(`Failed to auto-restart recording: ${error}`);
@@ -157,10 +207,43 @@ async function setupEventListeners() {
   });
   
   // Listen for recording filename changes (especially important for segment changes)
-  await listen('recording-filename-changed', (event) => {
+  await listen('recording-filename-changed', async (event) => {
     const newFilename = event.payload as string;
     console.log('Recording filename changed to:', newFilename);
+    
+    // Store the previous filename before updating it
+    const previousFilename = recordingFilename.value;
+    
+    // Update to the new filename
     recordingFilename.value = newFilename;
+    
+    // If we had a previous filename and we're still recording, this is likely a segment change
+    // We need to update the previous segment's duration
+    if (previousFilename && previousFilename !== newFilename && isRecording.value) {
+      console.log(`Segment change detected: ${previousFilename} -> ${newFilename}`);
+      
+      try {
+        // Import fileStore dynamically to avoid circular dependencies
+        const fileStore = (await import('../../utils/records/fileStore')).default;
+        
+        // Update the previous segment's metadata
+        if (recordingDirectory.value) {
+          const previousFilePath = `${recordingDirectory.value}/${previousFilename}`;
+          
+          // Short delay to ensure file is completely written
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          console.log(`Updating metadata for previous segment: ${previousFilename}`);
+          await fileStore.updateSingleFileMetadata(previousFilePath);
+          console.log(`Metadata updated for previous segment: ${previousFilename}`);
+          
+          // Refresh file list to update UI
+          await fileStore.loadFiles();
+        }
+      } catch (error) {
+        console.warn(`Error updating previous segment metadata: ${error}`);
+      }
+    }
   });
 }
 

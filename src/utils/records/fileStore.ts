@@ -304,7 +304,7 @@ export function updateFileSize(filePath: string, size: number, formattedSize: st
 }
 
 // Update a single file's metadata (e.g., when recording stops)
-async function updateSingleFileMetadata(filePath: string) {
+export async function updateSingleFileMetadata(filePath: string) {
   if (!filePath) return;
   
   console.log(`[FileStore] Updating metadata for single file: ${filePath}`);
@@ -338,47 +338,44 @@ async function updateSingleFileMetadata(filePath: string) {
         hasDetailedMetadata: true
       };
       
-      // Calculate duration based on file timestamps
+      // Calculate duration based on file timestamps or size for all supported formats
       if (filename.endsWith('.csv') || filename.endsWith('.json') || filename.endsWith('.bin')) {
         try {
-          // Try to extract the timestamp from the filename (e.g., serial_recording_1746593732545.csv)
-          const match = filename.match(/serial_recording_(\d+)/);
-          if (match && match[1]) {
-            const startTimestamp = parseInt(match[1]);
-            const endTimestamp = modifiedDate.getTime();
+          let durationSeconds = 0;
+          let durationMethod = 'unknown';
+          
+          if (fileStats.birthtime) {
+            const createdDate = new Date(fileStats.birthtime);
+            const calculatedSeconds = Math.round((modifiedDate.getTime() - createdDate.getTime()) / 1000);
             
-            // Calculate duration in milliseconds and validate
-            let durationMs = endTimestamp - startTimestamp;
-            
-            // Ensure we have a reasonable duration (at least 1 second, max 12 hours)
-            if (durationMs < 1000) {
-              console.warn(`[FileStore] Duration too short (${durationMs}ms), using modified time difference`);
-              // As fallback, try to use birthtime if available, or modified time as an estimate
-              if (fileStats.birthtime) {
-                const createdDate = new Date(fileStats.birthtime);
-                durationMs = modifiedDate.getTime() - createdDate.getTime();
-              } else {
-                // Just ensure a minimum duration as a fallback
-                durationMs = Math.max(1000, durationMs);
-              }
-            }
-            
-            if (durationMs >= 1000 && durationMs < 43200000) { // Between 1 sec and 12 hours
-              updatedFile.duration = formatDuration(durationMs);
-              console.log(`[FileStore] Calculated duration for ${filename}: ${updatedFile.duration} (${durationMs}ms)`);
-            } else {
-              console.warn(`[FileStore] Invalid duration for ${filename}: ${durationMs}ms, falling back to estimation`);
-              // If duration still looks wrong, use file size to roughly estimate duration
-              // Assuming ~20KB per second for CSV files as a rough estimate
-              if (rawSize > 0) {
-                const estimatedDuration = Math.max(1000, Math.min(rawSize * 50, 3600000)); // 1 sec to 1 hour
-                updatedFile.duration = formatDuration(estimatedDuration);
-                console.log(`[FileStore] Estimated duration from file size: ${updatedFile.duration}`);
-              }
-            }
+            durationSeconds = calculatedSeconds;
+            durationMethod = 'file timestamps';
+            console.log(`[FileStore] Calculated duration using file timestamps: ${durationSeconds}s (created: ${createdDate.toISOString()}, modified: ${modifiedDate.toISOString()})`);
           }
+          
+          // Fallback: If creation time isn't available, estimate from file size
+          else if (rawSize > 0) {
+            // Conservative estimate based on file size (~20KB/sec for signal data)
+            // Limit between 2 seconds and 1 hour for safety
+            durationSeconds = Math.min(Math.max(Math.round(rawSize / 20000), 2), 3600);
+            durationMethod = 'file size estimation';
+            console.log(`[FileStore] Estimated duration from file size: ${durationSeconds}s (size: ${rawSize} bytes)`);
+          }
+          
+          // Last resort - use 2 seconds as minimum duration
+          else {
+            durationSeconds = 2;
+            durationMethod = 'minimum fallback';
+            console.log(`[FileStore] Using fallback minimum duration: ${durationSeconds}s`);
+          }
+          
+          // Convert seconds to our HH:MM:SS format and store
+          updatedFile.duration = formatDuration(durationSeconds * 1000); // formatDuration expects ms
+          console.log(`[FileStore] Set duration for ${filename}: ${updatedFile.duration} (${durationSeconds}s) using ${durationMethod}`);
         } catch (error) {
           console.error(`[FileStore] Error calculating duration: ${error}`);
+          // Provide a fallback duration even if calculation fails
+          updatedFile.duration = '00:00:02';
         }
       }
       
@@ -412,6 +409,7 @@ export default {
   cleanup,
   loadMetadataForPage,
   updateFileSize,
+  updateSingleFileMetadata,
   
   // Computed
   get currentDirectory() {

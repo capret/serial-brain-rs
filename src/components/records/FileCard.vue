@@ -127,6 +127,9 @@ const startTime = ref<number | null>(null);
 const currentDuration = ref<string | null>(null);
 let updateInterval: number | undefined = undefined;
 
+// For video check interval
+let videoCheckInterval: number | undefined = undefined;
+
 // Video badge state
 const hasVideo = ref<boolean | null>(null); // null = not checked yet, true/false = has/doesn't have video
 
@@ -144,9 +147,12 @@ const liveDuration = computed(() => {
   return extractDurationFromFilename(props.file) || '—';
 });
 
-// Set up the live duration updating for active recordings
+// Set up the live duration updating only for active recordings
 onMounted(async () => {
-  setupLiveDurationUpdates();
+  // Only set up live updates if this is an active recording
+  if (props.isActiveRecording) {
+    setupLiveDurationUpdates();
+  }
   
   // Check if a corresponding video file exists
   await checkVideoExists();
@@ -154,19 +160,44 @@ onMounted(async () => {
 
 // Clean up on unmount
 onUnmounted(() => {
+  // Clean up duration update interval
   if (updateInterval) {
     clearInterval(updateInterval);
     updateInterval = undefined;
+  }
+  
+  // Clean up video check interval
+  if (videoCheckInterval) {
+    clearInterval(videoCheckInterval);
+    videoCheckInterval = undefined;
   }
 });
 
 // Watch for changes in the active recording status
 watch(() => props.isActiveRecording, (isActive: boolean) => {
+  // Clear any existing intervals first
+  if (videoCheckInterval) {
+    clearInterval(videoCheckInterval);
+    videoCheckInterval = undefined;
+  }
+  
   if (isActive) {
+    // Start the duration updates
     setupLiveDurationUpdates();
-  } else if (updateInterval) {
-    clearInterval(updateInterval);
-    updateInterval = undefined;
+    
+    // For active recordings, check for video immediately and then periodically
+    checkVideoExists();
+    
+    // Set up interval to check for video every 3 seconds for active recordings
+    videoCheckInterval = setInterval(async () => {
+      await checkVideoExists();
+    }, 3000) as unknown as number;
+  } else {
+    // Clean up duration update interval
+    if (updateInterval) {
+      clearInterval(updateInterval);
+      updateInterval = undefined;
+    }
   }
 });
 
@@ -278,10 +309,31 @@ async function checkVideoExists() {
     
     // Check if MP4 file exists
     const videoPath = `${basePath}.mp4`;
-    const videoExists = await exists(videoPath);
     
-    hasVideo.value = videoExists;
-    console.log(`Video check for ${props.file.name}: ${hasVideo.value ? 'has video' : 'no video'}`);
+    // For active recordings, try multiple times with short delays
+    // Sometimes the video file is created after the CSV file
+    if (props.isActiveRecording && !hasVideo.value) {
+      // Try up to 3 times with increasing delays for active recordings
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const videoExists = await exists(videoPath);
+        
+        if (videoExists) {
+          hasVideo.value = true;
+          console.log(`Video found for active recording ${props.file.name} on attempt ${attempt + 1}`);
+          break;
+        } else if (attempt < 2) { // Don't wait after the last attempt
+          // Increase delay with each attempt (200ms, 400ms, 600ms)
+          await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
+        }
+      }
+    } else {
+      // Standard check for non-active recordings
+      const videoExists = await exists(videoPath);
+      if (hasVideo.value !== videoExists) {
+        hasVideo.value = videoExists;
+        console.log(`Video check for ${props.file.name}: ${hasVideo.value ? 'has video' : 'no video'}`);
+      }
+    }
   } catch (error) {
     console.error('Error checking for video file:', error);
     hasVideo.value = false;
