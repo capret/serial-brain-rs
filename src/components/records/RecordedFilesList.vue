@@ -33,18 +33,24 @@
     <!-- File grid with transition animations -->
     <div v-else :key="componentKey">
       <div class="file-grid-container">
-        <transition name="page" mode="out-in">
-          <div :key="currentPage" class="file-grid grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            <FileCard 
-              v-for="file in paginatedFiles" 
-              :key="file.path" 
-              :file="file"
-              :is-active-recording="fileStore.isActiveRecording(file.path)"
-              @action="handleFileAction"
-              @update-file-size="handleFileSizeUpdate"
-            />
+        <div class="pages-slider" :style="`transform: translateX(-${(currentPage-1) * 100}%)`">
+          <!-- Generate all pages in a horizontal slider -->
+          <div v-for="page in totalPages" :key="page" class="page-slide">
+            <transition-group 
+              name="file-card" 
+              tag="div" 
+              class="file-grid grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              <FileCard 
+                v-for="file in getFilesForPage(page)" 
+                :key="file.path" 
+                :file="file"
+                :is-active-recording="fileStore.isActiveRecording(file.path)"
+                @action="handleFileAction"
+                @update-file-size="handleFileSizeUpdate"
+              />
+            </transition-group>
           </div>
-        </transition>
+        </div>
       </div>
       <!-- Pagination Controls with ellipsis for many pages -->
       <div v-if="totalPages > 1" class="flex justify-center items-center mt-6 space-x-2">
@@ -179,15 +185,30 @@ const showRightEllipsis = computed(() =>
   middlePages.value[middlePages.value.length - 1] < totalPages.value - 1
 );
 
-function goToPage(page: number) {
-  if (page >= 1 && page <= totalPages.value) {
-    // Scroll back to top when changing pages
-    window.scrollTo(0, 0);
-    currentPage.value = page;
-    
-    // Reset metadata loading state for the new page
-    currentPageMetadataLoaded.value = false;
+function getFilesForPage(page: number) {
+  const start = (page - 1) * pageSize.value;
+  const pageFiles = files.value.slice(start, start + pageSize.value);
+  
+  // If this is the current page or adjacent pages, preload metadata
+  if (Math.abs(page - currentPage.value) <= 1 && pageFiles.length > 0) {
+    fileStore.loadMetadataForPage(pageFiles);
   }
+  
+  return pageFiles;
+}
+
+function goToPage(page: number) {
+  if (page === currentPage.value || page < 1 || page > totalPages.value) {
+    return;
+  }
+  
+  // Preload data for the next page to avoid data fetching delays
+  getFilesForPage(page); // Just call the function to trigger preloading
+  
+  // Apply page change with smooth animation
+  requestAnimationFrame(() => {
+    currentPage.value = page;
+  });
 }
 
 // Initialize on mount
@@ -376,29 +397,64 @@ function handleFileSizeUpdate({ path, size, formattedSize }: { path: string, siz
   transform: scale(1);
 }
 
-/* Page change animation - clean fade between pages */
-.page-enter-active,
-.page-leave-active {
-  transition: opacity 150ms ease;
-}
-
-.page-enter-from,
-.page-leave-to {
-  opacity: 0;
-}
-
 /* Fixed height container to prevent layout shifts */
 .file-grid-container {
   position: relative;
   min-height: 232px; /* Accommodates 2 rows of cards */
+  overflow: hidden; /* Prevents content from causing layout shifts */
+  perspective: 1000px; /* Adds depth to transitions */
+  transform-style: preserve-3d; /* Better 3D positioning */
+  isolation: isolate; /* Creates a new stacking context */
+  background: inherit; /* Match parent background */
 }
 
+/* Horizontal slider that contains all pages */
+.pages-slider {
+  display: flex;
+  width: 100%;
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+  will-change: transform;
+  position: relative;
+}
+
+/* Individual page slide */
+.page-slide {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 100%;
+}
+
+/* File grid inside each page */
 .file-grid {
   position: relative;
   width: 100%;
 }
 
+/* File card animations */
+.file-card-move {
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.file-card-enter-active {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition-delay: 0.05s; /* Slight delay to avoid visual glitches */
+}
+
+.file-card-leave-active {
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.file-card-enter-from {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.file-card-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
 .contents > * {
-  will-change: opacity;
+  will-change: opacity, transform;
 }
 </style>
