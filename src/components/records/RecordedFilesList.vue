@@ -422,12 +422,14 @@ function handleFileSizeUpdate({ path, size, formattedSize }: { path: string, siz
   flex: 0 0 100%;
   width: 100%;
   min-width: 100%;
+  padding: 8px; /* Add padding for card scaling space */
 }
 
 /* File grid inside each page */
 .file-grid {
   position: relative;
   width: 100%;
+  padding: 4px; /* Add padding to prevent hover effects from being clipped */
 }
 
 /* File card animations */
