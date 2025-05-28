@@ -234,18 +234,18 @@ pub fn discover_mdns_devices(app: AppHandle, service_type: String) -> anyhow::Re
                                                     txt_records,
                                                 };
                                                 
-                                                // Add to state
-                                                {
+
+                                                if name.to_lowercase().contains("cam") {
                                                     let state = app_clone.state::<Arc<AppState>>();
                                                     let mut devices = state.mdns.discovered_devices.lock().unwrap();
                                                     devices.push(device.clone());
-                                                }
                                                 
-                                                // Emit event with device info
-                                                let msg = format!("[mDNS] Discovered: {} at {}:{}", name, device.ip, device.port);
-                                                app_clone.emit("mdns_device_discovered", device).unwrap_or_default();
-                                                app_clone.emit("socket_status", msg.clone()).unwrap_or_default();
-                                                println!("{}", msg);
+                                                    // Emit event with device info
+                                                    let msg = format!("[mDNS] Discovered: {} at {}:{}", name, device.ip, device.port);
+                                                    app_clone.emit("mdns_device_discovered", device).unwrap_or_default();
+                                                    app_clone.emit("socket_status", msg.clone()).unwrap_or_default();
+                                                    println!("{}", msg);
+                                                }
                                             }
                                         },
                                         _ => {}
