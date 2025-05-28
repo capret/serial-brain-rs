@@ -18,30 +18,27 @@ export function formatFileSize(bytes: number): string {
  * Format duration in milliseconds to a human-readable string
  */
 export function formatDuration(milliseconds: number): string {
-  if (!milliseconds || milliseconds <= 0) return '0s';
+  // Handle undefined/null case explicitly
+  if (milliseconds === undefined || milliseconds === null) return '--';
   
-  // Convert to seconds
-  const seconds = Math.floor(milliseconds / 1000);
+  // For zero or negative values, return 00:00:00
+  if (milliseconds <= 0) return '00:00:00';
   
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
+  // Convert to seconds, ensuring it's at least 1 for very small durations
+  const totalSeconds = Math.max(1, Math.floor(milliseconds / 1000));
   
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
+  // Calculate hours, minutes, and seconds
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
   
-  if (minutes < 60) {
-    return remainingSeconds > 0 ? 
-      `${minutes}m ${remainingSeconds}s` : 
-      `${minutes}m`;
-  }
+  // Format with leading zeros
+  const formattedHours = hours.toString().padStart(2, '0');
+  const formattedMinutes = minutes.toString().padStart(2, '0');
+  const formattedSeconds = seconds.toString().padStart(2, '0');
   
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  
-  return remainingMinutes > 0 ?
-    `${hours}h ${remainingMinutes}m` :
-    `${hours}h`;
+  // Return in format HH:MM:SS
+  return `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
 }
 
 /**
