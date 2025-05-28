@@ -86,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, inject } from 'vue';
 
 const props = defineProps({
   activeView: {
@@ -102,15 +102,30 @@ const props = defineProps({
 const emit = defineEmits(['update:activeView', 'update:additionalViews']);
 const collapsed = ref(false);
 
+// Use the injected function, but also emit for v-model binding
+const injectedSetActiveView = inject<(view: string) => void>('setActiveView');
 function setActiveView(view: string) {
+  // Call the injected function first
+  if (injectedSetActiveView) {
+    injectedSetActiveView(view);
+  }
+  // Also emit for v-model binding
   emit('update:activeView', view);
 }
 
+// Use the injected function, but also emit for v-model binding
+const injectedSetAdditionalViews = inject<(view: string) => void>('setAdditionalViews');
 function setAdditionalViews(view: string) {
+  // Call the injected function first
+  if (injectedSetAdditionalViews) {
+    injectedSetAdditionalViews(view);
+  }
+  // Calculate the new list for emitting
   const list = props.additionalViews;
   const next = list.includes(view)
     ? list.filter(v => v !== view)
     : [...list, view];
+  // Also emit for v-model binding
   emit('update:additionalViews', next);
 }
 

@@ -167,7 +167,7 @@
     "send": "发送",
     "host": "主机",
     "hostPlaceholder": "0.0.0.0",
-    "portPlaceholder": "8234",
+    "portPlaceholder": "8083",
     "minValue": "最小值",
     "maxValue": "最大值",
     "frequency": "频率 (Hz)",

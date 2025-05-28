@@ -231,7 +231,8 @@ const streamUrl      = ref('');
 // Function to fetch the default stream URL from backend
 async function fetchDefaultStreamUrl() {
   try {
-    const url = await invoke<string>('get_default_stream_url');
+    const url = await invoke<string>('get_app_state', 
+      { category: 'stream', key: 'default_stream_url' });
     console.log('Fetched default stream URL from backend:', url);
     
     if (url) {
@@ -420,8 +421,11 @@ onMounted(async () => {
 
   // Get all streaming view state from backend in a single call
   try {
-    // Get all state information in a single call
-    const viewState = await invoke<any>('get_streaming_view_state');
+    // Get all state information in a single call using the centralized state management function
+    const viewState = await invoke<any>('get_app_state', {
+      category: 'streaming_view',
+      key: 'state'
+    });
     
     // Update component state with values from backend
     isStreaming.value = viewState.isStreaming;
@@ -503,7 +507,8 @@ const filteredDevices = computed(() => {
 async function loadCachedDevices() {
   try {
     console.log('Loading cached devices from backend');
-    const devices = await invoke<any[]>('get_discovered_devices');
+    const devices = await invoke<any[]>('get_app_state', 
+      { category: 'mdns', key: 'discovered_devices' });
     
     console.log('Raw device data received:', devices);
     
@@ -561,7 +566,8 @@ async function discoverDevices() {
     setTimeout(async () => {
       try {
         // Get the discovered devices from the backend
-        const devices = await invoke<any[]>('get_discovered_devices');
+        const devices = await invoke<any[]>('get_app_state', 
+          { category: 'mdns', key: 'discovered_devices' });
         discoveredDevices.value = devices || [];
         console.log('Discovered devices:', discoveredDevices.value);
       } catch (error) {

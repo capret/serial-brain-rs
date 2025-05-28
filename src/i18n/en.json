@@ -170,7 +170,7 @@
     "send": "Send",
     "host": "Host",
     "hostPlaceholder": "0.0.0.0",
-    "portPlaceholder": "8234",
+    "portPlaceholder": "8083",
     "minValue": "Min Value",
     "maxValue": "Max Value",
     "frequency": "Frequency (Hz)",

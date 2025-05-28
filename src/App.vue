@@ -56,7 +56,7 @@ document.addEventListener('touchmove', function(event) {
   }
 }, { passive: false });
 // Import the Window API from Tauri
-import { onMounted, ref } from 'vue';
+import { ref, onMounted, provide } from 'vue';
 import { serialSettings, tcpSettings, fakeDataSettings } from './store/appState';
 import { isAuthenticated, currentUser, login, logout, initAuthState } from './store/authState';
 import LoginPage from './components/auth/LoginPage.vue';
@@ -72,6 +72,23 @@ import AppHeader from './components/AppHeader.vue';
 const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder', 'streaming', 'videorecord'
 const additionalViews = ref<string[]>([]);
 const collapsed = ref(false);
+
+// Define functions to update views and provide them for injection
+function setActiveView(view: string) {
+  primaryView.value = view;
+}
+
+function setAdditionalViews(view: string) {
+  const list = additionalViews.value;
+  const next = list.includes(view)
+    ? list.filter(v => v !== view)
+    : [...list, view];
+  additionalViews.value = next;
+}
+
+// Provide these functions for child components to inject
+provide('setActiveView', setActiveView);
+provide('setAdditionalViews', setAdditionalViews);
 
 // Signal source state
 const selectedDataSource = ref('fake'); // Options: 'serial', 'tcp', 'fake'

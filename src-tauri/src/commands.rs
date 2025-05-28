@@ -3,7 +3,7 @@ use crate::reader::{
     reader_loop, FakeBinaryReader, SerialBinaryReader, SocketBinaryReader,
 };
 use crate::state::AppState;
-use crate::types::{ChannelData, FakeDataConfig};
+use crate::types::{FakeDataConfig};
 use serialport;
 use std::{
     path::Path,
@@ -99,11 +99,6 @@ pub fn send_serial(message: String, state: State<Arc<AppState>>) -> Result<(), S
 }
 
 #[tauri::command]
-pub fn get_recent_data(state: State<Arc<AppState>>) -> Result<Vec<ChannelData>, String> {
-    Ok(state.get_data())
-}
-
-#[tauri::command]
 pub fn start_fake_data(
     app_handle: AppHandle,
     config: FakeDataConfig,
@@ -194,35 +189,6 @@ pub fn stop_recording(app_handle: AppHandle) -> Result<(), String> {
     crate::recording::stop_recording(app_handle)
 }
 
-#[tauri::command]
-pub fn get_recording_status(
-    state: State<Arc<AppState>>,
-) -> Result<serde_json::Value, String> {
-    // Return the current recording status including filename and recording state
-    let recording_active = state.recording.recording_active.load(Ordering::SeqCst);
-    let video_recording_active = state.recording.video_recording_active.load(Ordering::SeqCst);
-    
-    // Get recording filename if available
-    let filename = if recording_active {
-        state.recording.recording_filename.lock().unwrap().clone().unwrap_or_default()
-    } else {
-        String::new()
-    };
-    
-    let json = serde_json::json!({
-        "isRecording": recording_active,
-        "videoRecordingActive": video_recording_active,
-        "filename": filename
-    });
-
-    Ok(json)
-}
-
-#[tauri::command]
-pub fn get_signal_quality(state: State<Arc<AppState>>) -> Result<Vec<bool>, String> {
-    // Use the on-demand check_signal_quality method instead of just getting current values
-    Ok(state.check_signal_quality())
-}
 
 #[tauri::command]
 pub async fn record_video_stream(
@@ -328,19 +294,15 @@ pub async fn stop_stream_recording(
 }
 
 #[tauri::command]
-pub fn is_video_recording_active(
-    state: State<Arc<AppState>>,
-) -> Result<bool, String> {
-    // Return the current video recording active state
-    let video_recording_active = state.recording.video_recording_active.load(std::sync::atomic::Ordering::SeqCst);
-    Ok(video_recording_active)
-}
-
-#[tauri::command]
 pub fn toggle_fake_data(state: State<Arc<AppState>>) -> Result<bool, String> {
-    // Get current state and toggle
-    let fake_camera_state = state.stream.fake_camera_enabled.load(Ordering::SeqCst);
-    let new_state = !fake_camera_state;
+    // Get current state using centralized function
+    let current_state = match get_app_state(state.clone(), "stream".to_string(), "fake_camera_enabled".to_string()) {
+        Ok(value) => value.as_bool().unwrap_or(false),
+        Err(_) => false,
+    };
+    
+    // Toggle the state
+    let new_state = !current_state;
     
     // Update the state with the new value
     state.stream.fake_camera_enabled.store(new_state, Ordering::SeqCst);
@@ -352,8 +314,13 @@ pub fn toggle_fake_data(state: State<Arc<AppState>>) -> Result<bool, String> {
 
 #[tauri::command]
 pub fn toggle_fake_signal(state: State<Arc<AppState>>) -> Result<bool, String> {
-    // Toggle the fake signal data flag (used for signal visualization)
-    let current = state.stream.fake_signal_enabled.load(Ordering::SeqCst);
+    // Get current state using centralized function
+    let current = match get_app_state(state.clone(), "stream".to_string(), "fake_signal_enabled".to_string()) {
+        Ok(value) => value.as_bool().unwrap_or(false),
+        Err(_) => false,
+    };
+    
+    // Toggle the state
     let new_value = !current;
     state.stream.fake_signal_enabled.store(new_value, Ordering::SeqCst);
     
@@ -375,80 +342,6 @@ pub fn discover_streaming_devices(app_handle: AppHandle) -> Result<(), String> {
     
     // If either succeeded, return Ok
     Ok(())
-}
-
-#[tauri::command]
-pub fn get_discovered_devices(state: State<Arc<AppState>>) -> Result<Vec<crate::mdns::MdnsDevice>, String> {
-    // Get the devices directly from state
-    let devices = state.mdns.discovered_devices.lock().unwrap().clone();
-    println!("[Backend] Returning {} discovered devices", devices.len());
-    for (i, device) in devices.iter().enumerate() {
-        println!("[Backend] Device {}: {} at {}:{}", i+1, device.name, device.ip, device.port);
-    }
-    Ok(devices)
-}
-
-#[tauri::command]
-pub fn get_signal_config_state(
-    state: State<Arc<AppState>>,
-) -> Result<serde_json::Value, String> {
-    // Get signal connection status information
-    let has_serial = state.communication.outbound_tx.lock().unwrap().is_some();
-    let signal_streaming = state.stream.signal_stream_running.load(Ordering::SeqCst);
-    
-    // Get fake signal data status (used for signal visualization, not camera)
-    let fake_signal_enabled = state.stream.fake_signal_enabled.load(Ordering::SeqCst);
-    
-    // Determine data source based on state
-    let status = if has_serial {
-        "serial"
-    } else if signal_streaming && fake_signal_enabled {
-        "fake"
-    } else {
-        "disconnected"
-    };
-    
-    // Check if signal data is being received
-    let is_running = signal_streaming || has_serial;
-    
-    // Determine connection status string for the frontend
-    let connection_status = if is_running {
-        "connected"
-    } else {
-        "disconnected"
-    };
-    
-    // Combine all state information into a single JSON response
-    let json = serde_json::json!({
-        "isRunning": is_running,
-        "isFakeSignalEnabled": fake_signal_enabled,
-        "connectionStatus": connection_status,
-        "dataSource": status
-    });
-
-    Ok(json)
-}
-
-#[tauri::command]
-pub fn is_streaming(
-    state: State<Arc<AppState>>,
-) -> Result<serde_json::Value, String> {
-    // Check if camera is streaming
-    let is_active = state.stream.camera_stream_running.load(Ordering::SeqCst);
-    
-    Ok(serde_json::json!({
-        "active": is_active
-    }))
-}
-
-#[tauri::command]
-pub fn get_default_stream_url(app_handle: AppHandle) -> Result<String, String> {
-    // Get the default stream URL from the app state
-    let state = app_handle.state::<Arc<AppState>>();
-    let url = state.stream.default_stream_url.lock().unwrap().clone();
-    
-    // Return the stored URL (may be empty if not set yet)
-    Ok(url)
 }
 
 #[tauri::command]
@@ -496,37 +389,129 @@ pub async fn start_video_recording(
     }
 }
 
-#[tauri::command]
-pub fn get_streaming_view_state(
-    state: State<Arc<AppState>>,
-) -> Result<serde_json::Value, String> {
-    // Get camera streaming status specifically
-    let camera_streaming = state.stream.camera_stream_running.load(Ordering::SeqCst);
-    
-    // Get fake camera status directly from the state (for streaming view)
-    let is_fake_enabled = state.stream.fake_camera_enabled.load(Ordering::SeqCst);
-    
-    // Get recording status information
-    let recording_active = state.recording.recording_active.load(Ordering::SeqCst);
-    let video_recording_active = state.recording.video_recording_active.load(Ordering::SeqCst);
-    let is_recording = recording_active || video_recording_active;
-    
-    // Get recording filename if available
-    let filename = if recording_active {
-        state.recording.recording_filename.lock().unwrap().clone().unwrap_or_default()
-    } else {
-        String::new()
-    };
-    
-    // Combine all state information into a single JSON response
-    let json = serde_json::json!({
-        "isStreaming": camera_streaming,
-        "isFakeEnabled": is_fake_enabled,
-        "isRecording": is_recording,
-        "videoRecordingActive": video_recording_active,
-        "regularRecordingActive": recording_active,
-        "recordingFilename": filename
-    });
 
-    Ok(json)
+#[tauri::command]
+pub fn get_app_state(
+    state: State<Arc<AppState>>,
+    category: String,
+    key: String,
+) -> Result<serde_json::Value, String> {
+    match category.as_str() {
+        "communication" => match key.as_str() {
+            // Communication state doesn't have many directly accessible values
+            _ => Err(format!("Invalid key '{}' for communication category", key)),
+        },
+        "buffer" => match key.as_str() {
+            "data" => Ok(serde_json::to_value(&state.get_data()).unwrap_or(serde_json::Value::Null)),
+            _ => Err(format!("Invalid key '{}' for buffer category", key)),
+        },
+        "signal_quality" => match key.as_str() {
+            "quality" => {
+                let quality = state.signal_quality.check_signal_quality();
+                Ok(serde_json::to_value(quality).unwrap_or(serde_json::Value::Null))
+            },
+            _ => Err(format!("Invalid key '{}' for signal_quality category", key)),
+        },
+        "stream" => match key.as_str() {
+            "signal_running" => Ok(serde_json::json!(state.stream.signal_stream_running.load(Ordering::SeqCst))),
+            "camera_running" => Ok(serde_json::json!(state.stream.camera_stream_running.load(Ordering::SeqCst))),
+            "fake_signal_enabled" => Ok(serde_json::json!(state.stream.fake_signal_enabled.load(Ordering::SeqCst))),
+            "fake_camera_enabled" => Ok(serde_json::json!(state.stream.fake_camera_enabled.load(Ordering::SeqCst))),
+            "default_stream_url" => Ok(serde_json::json!(state.stream.default_stream_url.lock().unwrap().clone())),
+            "all" => {
+                let signal_running = state.stream.signal_stream_running.load(Ordering::SeqCst);
+                let camera_running = state.stream.camera_stream_running.load(Ordering::SeqCst);
+                let fake_signal = state.stream.fake_signal_enabled.load(Ordering::SeqCst);
+                let fake_camera = state.stream.fake_camera_enabled.load(Ordering::SeqCst);
+                let url = state.stream.default_stream_url.lock().unwrap().clone();
+                
+                Ok(serde_json::json!({
+                    "signalRunning": signal_running,
+                    "cameraRunning": camera_running,
+                    "fakeSignalEnabled": fake_signal,
+                    "fakeCameraEnabled": fake_camera,
+                    "defaultStreamUrl": url,
+                }))
+            },
+            _ => Err(format!("Invalid key '{}' for stream category", key)),
+        },
+        "recording" => match key.as_str() {
+            "active" => Ok(serde_json::json!(state.recording.recording_active.load(Ordering::SeqCst))),
+            "video_active" => Ok(serde_json::json!(state.recording.video_recording_active.load(Ordering::SeqCst))),
+            "filename" => {
+                let filename = state.recording.recording_filename.lock().unwrap().clone().unwrap_or_default();
+                Ok(serde_json::json!(filename))
+            },
+            "status" => {
+                let recording_active = state.recording.recording_active.load(Ordering::SeqCst);
+                let video_active = state.recording.video_recording_active.load(Ordering::SeqCst);
+                let filename = state.recording.recording_filename.lock().unwrap().clone().unwrap_or_default();
+                
+                Ok(serde_json::json!({
+                    "active": recording_active,
+                    "videoActive": video_active,
+                    "filename": filename,
+                    "isRecording": recording_active || video_active,
+                }))
+            },
+            _ => Err(format!("Invalid key '{}' for recording category", key)),
+        },
+        "mdns" => match key.as_str() {
+            "active" => Ok(serde_json::json!(*state.mdns.active.lock().unwrap())),
+            "host" => Ok(serde_json::json!(state.mdns.host.lock().unwrap().clone())),
+            "port" => Ok(serde_json::json!(*state.mdns.port.lock().unwrap())),
+            "discovered_devices" => {
+                let devices = state.mdns.discovered_devices.lock().unwrap().clone();
+                Ok(serde_json::to_value(devices).unwrap_or(serde_json::Value::Null))
+            },
+            _ => Err(format!("Invalid key '{}' for mdns category", key)),
+        },
+        // Handle combined views for frontend convenience
+        "streaming_view" => match key.as_str() {
+            "state" => {
+                let camera_streaming = state.stream.camera_stream_running.load(Ordering::SeqCst);
+                let is_fake_enabled = state.stream.fake_camera_enabled.load(Ordering::SeqCst);
+                let recording_active = state.recording.recording_active.load(Ordering::SeqCst);
+                let video_recording_active = state.recording.video_recording_active.load(Ordering::SeqCst);
+                let is_recording = recording_active || video_recording_active;
+                let filename = if recording_active {
+                    state.recording.recording_filename.lock().unwrap().clone().unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                
+                Ok(serde_json::json!({
+                    "isStreaming": camera_streaming,
+                    "isFakeEnabled": is_fake_enabled,
+                    "isRecording": is_recording,
+                    "videoRecordingActive": video_recording_active,
+                    "regularRecordingActive": recording_active,
+                    "recordingFilename": filename
+                }))
+            },
+            _ => Err(format!("Invalid key '{}' for streaming_view category", key)),
+        },
+        "signal_config" => match key.as_str() {
+            "state" => {
+                let is_running = state.stream.signal_stream_running.load(Ordering::SeqCst);
+                let fake_signal_enabled = state.stream.fake_signal_enabled.load(Ordering::SeqCst);
+                
+                // Determine connection status
+                let status = if state.communication.outbound_tx.lock().unwrap().is_some() {
+                    "connected"
+                } else {
+                    "disconnected"
+                };
+                
+                Ok(serde_json::json!({
+                    "isRunning": is_running,
+                    "isFakeSignalEnabled": fake_signal_enabled,
+                    "connectionStatus": if is_running { "connected" } else { "disconnected" },
+                    "dataSource": status
+                }))
+            },
+            _ => Err(format!("Invalid key '{}' for signal_config category", key)),
+        },
+        _ => Err(format!("Invalid category: {}", category)),
+    }
 }

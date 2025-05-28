@@ -240,6 +240,7 @@ async function handleConnectionToggle() {
       });
     } else if (props.selectedDataSource === 'fake') {
       // First enable fake signal mode
+      // Toggle fake signal using the centralized app state
       await invoke('toggle_fake_signal', {});
       
       cmd = invoke('start_fake_data', {

@@ -273,8 +273,5 @@ impl AppState {
     pub fn get_data(&self) -> Vec<ChannelData> {
         self.buffer.get_data()
     }
-    pub fn check_signal_quality(&self) -> Vec<bool> {
-        self.signal_quality.check_signal_quality()
-    }
 }
 

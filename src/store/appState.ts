@@ -12,7 +12,11 @@ export const chartDataBuffer = reactive<number[][]>([]);
 // Function to fetch the connection state from the backend
 export async function fetchConnectionState(): Promise<void> {
   try {
-    const state = await invoke<any>('get_signal_config_state');
+    // Use the centralized get_app_state function
+    const state = await invoke<any>('get_app_state', {
+      category: 'signal_config',
+      key: 'state'
+    });
     
     // Update the connection status
     connectionStatus.value = state.connectionStatus;
@@ -63,7 +67,7 @@ export function clearSocketMessages() {
 export const tcpSettings = reactive({
   // Connection settings
   host: '0.0.0.0',
-  port: 8234,
+  port: 8083,
   protocol: 'tcp',
   
   // Auto-reconnect settings
@@ -153,8 +157,12 @@ export async function toggleStreamingState(active: boolean, url?: string): Promi
         streamingUrl = streamUrl.value;
         console.log('Preserving existing URL:', streamingUrl);
       } else {
-        // Only as a last resort, get the default URL
-        streamingUrl = await invoke<string>('get_default_stream_url');
+        // Only as a last resort, get the default URL using the centralized state function
+        const result = await invoke<any>('get_app_state', {
+          category: 'stream',
+          key: 'default_stream_url'
+        });
+        streamingUrl = result ? result.toString() : '';
         console.log('Using default URL from backend:', streamingUrl);
       }
       

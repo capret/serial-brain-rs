@@ -453,7 +453,8 @@ function animate() {
 function refreshData() {
   if (!isActive || !wglp || !props.running || dataUpdatePending) return;
   dataUpdatePending = true;
-  invoke<number[][]>('get_recent_data')
+  invoke<number[][]>('get_app_state', 
+    { category: 'buffer', key: 'data' })
     .then(newData => {
       if (newData?.length) {
         addToDataBuffer(newData);
@@ -474,7 +475,8 @@ function refreshData() {
 function checkSignalQuality() {
   if (qualityCheckPending) return;
   qualityCheckPending = true;
-  invoke<boolean[]>('get_signal_quality')
+  invoke<boolean[]>('get_app_state', 
+    { category: 'signal_quality', key: 'quality' })
     .then(quality => {
       if (quality && quality.length) {
         signalQuality.value = quality;

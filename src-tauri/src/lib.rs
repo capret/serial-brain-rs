@@ -9,9 +9,8 @@ mod streaming;
 mod recording;
 mod mdns;
 use commands::{
-    connect_serial, connect_socket, discover_streaming_devices, get_available_ports, get_discovered_devices,
-    get_default_stream_url, set_default_stream_url, get_recent_data, get_recording_filename, get_recording_status, get_signal_config_state, 
-    get_signal_quality, get_streaming_view_state, is_streaming, is_video_recording_active, push_video_frame, 
+    connect_serial, connect_socket, discover_streaming_devices, get_available_ports, get_app_state,
+    set_default_stream_url, get_recording_filename, push_video_frame, 
     record_video_stream, send_serial, start_fake_data, start_recording, start_stream_recording, start_streaming, 
     start_video_recording, stop_data_acquisition, stop_recording, stop_stream_recording, stop_streaming, 
     stop_video_recording, toggle_fake_data, toggle_fake_signal,
@@ -43,15 +42,10 @@ pub fn run() {
             connect_socket,
             discover_streaming_devices,
             get_available_ports,
-            get_discovered_devices,
-            get_default_stream_url,
+            get_app_state,
             set_default_stream_url,
-            get_recent_data,
             get_recording_filename,
-            get_recording_status,
-            get_signal_quality,
             get_file_stats,
-            is_streaming,
             record_video_stream,
             stop_video_recording,
             push_video_frame,
@@ -65,11 +59,8 @@ pub fn run() {
             stop_streaming,
             start_recording,
             stop_recording,
-            is_video_recording_active,
-            get_streaming_view_state,
             toggle_fake_data,
-            toggle_fake_signal,
-            get_signal_config_state
+            toggle_fake_signal
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

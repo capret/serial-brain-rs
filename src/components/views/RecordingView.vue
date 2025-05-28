@@ -260,7 +260,10 @@ onMounted(async () => {
     
     // Check if we're already recording when navigating to this page
     try {
-      const recordingStatus = await invoke('get_recording_status') as RecordingStatusResponse;
+      const recordingStatus = await invoke('get_app_state', {
+        category: 'recording',
+        key: 'status'
+      }) as RecordingStatusResponse;
       
       if (recordingStatus) {
         isRecording.value = recordingStatus.isRecording;
@@ -376,7 +379,11 @@ async function startRecording(format?: string, directory?: string, duration?: nu
       }
       
       // Start streaming using the shared state function
-      const streamUrl = await invoke('get_default_stream_url') as string;
+      const streamUrlResponse = await invoke('get_app_state', {
+        category: 'stream',
+        key: 'default_stream_url'
+      });
+      const streamUrl = streamUrlResponse as string;
       if (streamUrl) {
         const success = await toggleStreamingState(true, streamUrl);
         if (success) {
