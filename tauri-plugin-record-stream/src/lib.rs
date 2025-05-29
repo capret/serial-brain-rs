@@ -21,8 +21,7 @@ use desktop::RecordStream;
 #[cfg(mobile)]
 use mobile::RecordStream;
 
-/// Start recording from the stream
-pub async fn start_record<R: Runtime>(app: tauri::AppHandle<R>, payload: StartRecordRequest) -> Result<StartRecordResponse> {
+pub fn start_record<R: Runtime>(app: tauri::AppHandle<R>, payload: StartRecordRequest) -> Result<StartRecordResponse> {
   app.record_stream().start_record(payload)
 }
 

@@ -247,8 +247,8 @@ mod video {
 
     pub(super) fn start_video_recording(app_handle: AppHandle, base: &str, dir: &str) -> Result<bool,String>{
         let full=Path::new(dir).join(format!("{base}.mp4")).to_string_lossy().into_owned();
-        let rt=tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e|e.to_string())?;
-        let res=rt.block_on(async{ rstream::start_record(app_handle.clone(), rstream::StartRecordRequest{file_path:full}).await }).map_err(|e|e.to_string())?;
+        // Directly call the plugin function without creating a new runtime
+        let res = rstream::start_record(app_handle.clone(), rstream::StartRecordRequest{file_path:full}).map_err(|e|e.to_string())?;
         if res.success { app_handle.state::<Arc<AppState>>().recording.video_recording_active.store(true,Ordering::SeqCst);} 
         Ok(res.success)
     }
