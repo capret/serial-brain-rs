@@ -134,7 +134,8 @@
     "enabled": "已启用",
     "disabled": "已禁用",
     "recordTest": "录制测试",
-    "recording": "正在录制"
+    "recording": "正在录制",
+    "video"
   },
   "auth": {
     "email": "邮箱",
