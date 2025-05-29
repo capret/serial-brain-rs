@@ -3,6 +3,7 @@ use opencv::{core, prelude::*, videoio};
 // use opencv::imgproc;
 use serde::de::DeserializeOwned;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use tauri::{plugin::PluginApi, AppHandle, Runtime};
 
 use crate::models::*;
@@ -24,6 +25,7 @@ pub struct VideoRecorder {
     frame_queue: VecDeque<(Instant, core::Mat)>, // Queue of timestamped frames
     next_frame_time: Option<Instant>,  // When the next frame should be written
     frame_interval: Duration,          // Time between frames at target FPS
+    cleanup_thread: Option<thread::JoinHandle<()>>, // Thread for cleanup operations
 }
 
 impl VideoRecorder {
@@ -42,10 +44,23 @@ impl VideoRecorder {
             frame_queue: VecDeque::new(),
             next_frame_time: None,
             frame_interval: Duration::from_millis(100), // Default 10fps
+            cleanup_thread: None,
         }
     }
 
     pub fn start(&mut self, path: String, width: i32, height: i32, fps: f64) -> crate::Result<bool> {
+        // If there's a cleanup thread from a previous recording, check if it's finished
+        // but don't block waiting for it
+        if let Some(thread) = self.cleanup_thread.take() {
+            if thread.is_finished() {
+                // Thread is done, join it to clean up resources
+                let _ = thread.join();
+            } else {
+                // Thread still running, don't block, just keep the reference
+                self.cleanup_thread = Some(thread);
+            }
+        }
+        
         if self.is_recording {
             return Ok(false); // Already recording
         }
@@ -263,20 +278,36 @@ impl VideoRecorder {
 
         self.is_recording = false;
         
-        // Calculate actual recorded FPS based on frame count and elapsed time
-        if let Some(start_time) = self.start_time {
-            let elapsed_secs = start_time.elapsed().as_secs_f64();
-            let _actual_fps = if elapsed_secs > 0.0 {
-                self.frame_count as f64 / elapsed_secs
-            } else {
-                0.0
-            };
-            
-            // println!("[record_plugin] Recording stopped. Frames: {}, Duration: {:.2}s, Actual FPS: {:.2}", 
-            //          self.frame_count, elapsed_secs, actual_fps);
-        }
+        // Get data needed for cleanup thread
+        let frame_count = self.frame_count;
+        let writer = self.writer.take();
+        let path = self.path.clone();
+        let start_time_elapsed = self.start_time.map(|start| start.elapsed().as_secs_f64());
         
-        self.writer = None;
+        // Spawn a thread to handle cleanup operations without blocking
+        let cleanup_handle = thread::spawn(move || {
+            // Calculate actual recorded FPS based on frame count and elapsed time
+            if let Some(elapsed_secs) = start_time_elapsed {
+                let actual_fps = if elapsed_secs > 0.0 {
+                    frame_count as f64 / elapsed_secs
+                } else {
+                    0.0
+                };
+                
+                println!("[record_plugin] Recording stopped. Frames: {}, Duration: {:.2}s, Actual FPS: {:.2}", 
+                         frame_count, elapsed_secs, actual_fps);
+            }
+            
+            // Explicitly drop the writer to ensure file is properly closed
+            // This can be slow for large files, which is why we do it in a separate thread
+            drop(writer);
+            println!("[record_plugin] Finalized recording file: {}", path);
+        });
+        
+        // Store the thread handle so we can join it later if needed
+        self.cleanup_thread = Some(cleanup_handle);
+        
+        // Reset other state
         self.start_time = None;
         self.last_frame_time = None;
 

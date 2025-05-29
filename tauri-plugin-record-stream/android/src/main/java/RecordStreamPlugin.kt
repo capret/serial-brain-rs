@@ -1,20 +1,16 @@
 package com.plugin.record_stream
 
 import android.app.Activity
-import android.util.Log
-import android.graphics.BitmapFactory
-import android.graphics.Bitmap
-import android.util.Base64
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
+import android.util.Log
 import app.tauri.annotation.Command
 import app.tauri.annotation.TauriPlugin
-import app.tauri.annotation.InvokeArg
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.Plugin
 import org.opencv.android.OpenCVLoader
-import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
@@ -22,634 +18,410 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import org.opencv.videoio.VideoWriter
 import org.opencv.videoio.VideoWriter.fourcc
-import org.opencv.videoio.Videoio
-import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.LinkedList
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import kotlin.Exception
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.max
 
-// Plugin definition for record stream functionality
-
+/**
+ * RecordStreamPlugin – Tauri Android plugin that receives raw RGB frames
+ * (base-64 encoded) from the JS side and writes rotating H.264 MP4 segments.
+ *
+ * Encoder lifecycle is strictly sequential: we never try to open a new
+ * VideoWriter while a previous one is still shutting down, eliminating the
+ * MediaCodec/Images-backend race that caused OpenCV assertions.
+ */
 @TauriPlugin
-class RecordStreamPlugin(private val activity: Activity) : Plugin(activity) {
-    // Constants for effect types
+class RecordStreamPlugin(activity: Activity) : Plugin(activity) {
+
+    /* ------------------------------------------------------------------
+     *  Constants / configuration
+     * ------------------------------------------------------------------ */
     companion object {
-        const val EFFECT_NONE = 0
-        const val EFFECT_GRAYSCALE = 1
+        const val TAG               = "RecordStream"
+        const val EFFECT_NONE       = 0
+        const val EFFECT_GRAYSCALE  = 1
         const val EFFECT_CANNY_EDGE = 2
-        const val EFFECT_BLUR = 3
-        const val EFFECT_SEPIA = 4
+        const val EFFECT_BLUR       = 3
+        const val EFFECT_SEPIA      = 4
     }
+
+    /* Desired output size / fps – can be changed via configureRecord() */
+    private var width  = 320
+    private var height = 240
+    private var fps    = 30.0
+
+    /* Encoder state */
     private var videoWriter: VideoWriter? = null
     private var isRecording = false
-    private var recordingThread: ExecutorService? = null
-    private var mainHandler: Handler = Handler(Looper.getMainLooper())
-    
-    // Frame buffering system
-    private var lastFrame: Mat? = null
+
+    /* Live frame executor – one per active segment */
+    private var recordingExec: ExecutorService? = null
+
+    /* Outstanding cleanup executors from previous segments */
+    private val cleanupExecs = ConcurrentHashMap<Int, ExecutorService>()
+    private val cleanupIdGen = AtomicInteger(0)
+
+    private val ui = Handler(Looper.getMainLooper())
+
+    /* Frame-rate smoothing */
     private val frameQueue = LinkedList<Pair<Long, Mat>>()
-    private var startTime: Long = 0
-    private var frameCount: Int = 0
-    private var nextFrameTime: Long = 0
-    private var frameIntervalMs: Long = 0
-    
-    private var width: Int = 320
-    private var height: Int = 240
-    private var fps: Double = 30.0
-    
-    // Effect type to apply to video frames
-    private var effectType: Int = EFFECT_NONE
-    
+    private var lastFrame: Mat? = null
+
+    private var frameInterval = 0L
+    private var nextFrameTime = 0L
+    private var startTime     = 0L
+    private var frameCount    = 0
+
+    /* Selected effect */
+    private var effectType = EFFECT_NONE
+
+    /* ------------------------------------------------------------------ */
     init {
-        // Initialize OpenCV
         if (!OpenCVLoader.initDebug()) {
-            Log.e("RecordStreamPlugin", "OpenCV initialization failed")
+            Log.e(TAG, "OpenCV init failed")
         } else {
-            Log.i("RecordStreamPlugin", "OpenCV initialized successfully")
+            Log.i(TAG, "OpenCV ${Core.VERSION} initialised")
         }
     }
-    
+
+    /* ------------------------------------------------------------------
+     *  Public Tauri commands
+     * ------------------------------------------------------------------ */
+
     @Command
     fun ping(invoke: Invoke): JSObject {
-        // Get the arguments from the invoke object
-        val args = invoke.getArgs()
-        val value = args.optString("value", "")
-        Log.i("RecordStreamPlugin", "ping: $value")
-        val result = JSObject()
-        result.put("value", value)
-        return result
+        val echo = invoke.getArgs().optString("value", "")
+        Log.i(TAG, "ping → $echo")
+        return JSObject().apply { put("value", echo) }
     }
-    
-    @Command
-    fun startRecord(invoke: Invoke): JSObject {
-        // Extract the file_path parameter from the invoke object
-        val args = invoke.getArgs()
-        val filePath = args.optString("file_path", "")
-        Log.i("RecordStreamPlugin", "Starting recording to $filePath")
-        
-        val result = JSObject()
-        
-        if (isRecording) {
-            Log.w("RecordStreamPlugin", "Already recording")
-            result.put("success", false)
-            return result
-        }
-        
-        try {
-            // Ensure parent directory exists
-            val file = File(filePath)
-            file.parentFile?.mkdirs()
-            
-            // Create recording thread to avoid blocking UI
-            recordingThread = Executors.newSingleThreadExecutor()
-            
-            // Initialize video writer on a background thread to avoid blocking UI
-            recordingThread?.execute {
-                try {
-                    // Try H264 for MP4 first
-                    val extension = filePath.substringAfterLast('.', "").lowercase()
-                    var useH264 = extension == "mp4"
-                    var useMJPG = extension == "avi"
-                    
-                    if (useH264) {
-                    // Use Android-specific H264 encoder for MP4
-                    try {
-                        Log.i("RecordStreamPlugin", "Attempting to create H264 VideoWriter: ${width}x${height} @ ${fps}fps")
-                        videoWriter = VideoWriter()
-                        val fourccCode = fourcc('H', '2', '6', '4')
-                        Log.d("RecordStreamPlugin", "H264 fourcc: $fourccCode")
-                        
-                        videoWriter?.open(
-                            filePath,
-                            fourccCode,
-                            fps,
-                            Size(width.toDouble(), height.toDouble()),
-                            true  // isColor=true
-                        )
-                        
-                        Log.d("RecordStreamPlugin", "H264 VideoWriter opened: ${videoWriter?.isOpened}")
-                    } catch (e: Exception) {
-                        Log.e("RecordStreamPlugin", "Failed to initialize H264 encoder", e)
-                        useH264 = false
-                        useMJPG = true
-                    }
-                        
-                    // If H264 fails, fall back to MJPG in AVI container
-                    if (videoWriter?.isOpened == false) {
-                        Log.w("RecordStreamPlugin", "Failed to open H264 writer, trying MJPG")
-                        useH264 = false
-                        useMJPG = true
-                        // Create new filename with .avi extension
-                        val aviFilePath = filePath.replace(".mp4", ".avi")
-                        Log.i("RecordStreamPlugin", "Switching to AVI format at: $aviFilePath")
-                        videoWriter?.release()
-                        videoWriter = null
-                    }
-                }
-                    
-                // Use MJPG if specified or if H264 failed
-                if (useMJPG && (videoWriter?.isOpened == false || videoWriter == null)) {
-                    try {
-                        val aviFilePath = if (extension == "mp4") {
-                            filePath.replace(".mp4", ".avi")
-                        } else {
-                            filePath
-                        }
-                        
-                        Log.i("RecordStreamPlugin", "Attempting to create MJPG VideoWriter: ${width}x${height} @ ${fps}fps")
-                        videoWriter = VideoWriter()
-                        val fourccCode = fourcc('M', 'J', 'P', 'G')
-                        Log.d("RecordStreamPlugin", "MJPG fourcc: $fourccCode")
-                        
-                        videoWriter?.open(
-                            aviFilePath,
-                            fourccCode,
-                            fps,
-                            Size(width.toDouble(), height.toDouble()),
-                            true  // isColor=true
-                        )
-                        
-                        Log.d("RecordStreamPlugin", "MJPG VideoWriter opened: ${videoWriter?.isOpened}")
-                    } catch (e: Exception) {
-                        Log.e("RecordStreamPlugin", "Failed to initialize MJPG encoder", e)
-                    }
-                }
-                
-                if (videoWriter?.isOpened == true) {
-                        isRecording = true
-                        
-                        // Initialize frame buffering system
-                        frameQueue.clear()
-                        lastFrame = null
-                        frameCount = 0
-                        startTime = System.currentTimeMillis()
-                        frameIntervalMs = (1000.0 / fps).toLong() // milliseconds between frames
-                        nextFrameTime = startTime + frameIntervalMs
-                        
-                        Log.i("RecordStreamPlugin", "Recording started successfully with frame buffering at ${fps}fps, interval: ${frameIntervalMs}ms")
-                        
-                        // Resolve the invoke with success response
-                        val response = JSObject()
-                        response.put("success", true)
-                        mainHandler.post {
-                            invoke.resolve(response)
-                        }
-                    } else {
-                        Log.e("RecordStreamPlugin", "Failed to open video writer")
-                        videoWriter?.release()
-                        videoWriter = null
-                        
-                        // Resolve the invoke with failure response
-                        val response = JSObject()
-                        response.put("success", false)
-                        mainHandler.post {
-                            invoke.resolve(response)
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("RecordStreamPlugin", "Error initializing video writer", e)
-                    videoWriter?.release()
-                    videoWriter = null
-                    
-                    // Resolve the invoke with error response
-                    mainHandler.post {
-                        invoke.reject("Failed to initialize video writer: ${e.message}")
-                    }
-                }
-            }
-            
-            // Don't return anything since we're using invoke.resolve() asynchronously
-            return JSObject()
-            
-        } catch (e: Exception) {
-            Log.e("RecordStreamPlugin", "Error starting recording", e)
-            invoke.reject("Error starting recording: ${e.message}")
-            return JSObject()
-        }
-    }
-    
+
+    /** Configure resolution/FPS before starting. */
     @Command
     fun configureRecord(invoke: Invoke): JSObject {
-        // Extract parameters from the invoke object
-        val args = invoke.getArgs()
-        val w = args.optInt("width", 320)
-        val h = args.optInt("height", 240)
-        val frameRate = args.optDouble("fps", 30.0)
-        
-        width = w
-        height = h
-        fps = frameRate
-        
-        Log.i("RecordStreamPlugin", "Configured recording: ${width}x${height} @ ${fps}fps")
-        
-        val result = JSObject()
-        result.put("success", true)
-        return result
+        invoke.getArgs().let { a ->
+            width  = a.optInt("width",  320)
+            height = a.optInt("height", 240)
+            fps    = a.optDouble("fps",  30.0)
+        }
+        Log.i(TAG, "Configured $width x $height @ $fps fps")
+        return JSObject().apply { put("success", true) }
     }
-    
+
+    /** Start a new segment – waits until previous clean-ups finish. */
+    @Command
+    fun startRecord(invoke: Invoke): JSObject {
+        val filePath = invoke.getArgs().optString("file_path", "")
+        val empty    = JSObject()
+
+        if (filePath.isEmpty()) {
+            invoke.reject("file_path missing")
+            return empty
+        }
+
+        if (isRecording) {
+            invoke.reject("Already recording")
+            return empty
+        }
+
+        // Wait for prior cleanups (not on UI thread!)
+        while (cleanupExecs.isNotEmpty()) {
+            Log.i(TAG, "Waiting for ${cleanupExecs.size} cleanup thread(s)…")
+            Thread.sleep(100)
+        }
+
+        recordingExec = Executors.newSingleThreadExecutor()
+        recordingExec!!.execute {
+            val result = try {
+                openWriterAndInit(filePath)
+                JSObject().apply { put("success", true) }
+            } catch (e: Exception) {
+                Log.e(TAG, "startRecord error", e)
+                JSObject().apply {
+                    put("success", false)
+                    put("error", e.message ?: "open failed")
+                }
+            }
+            ui.post { invoke.resolve(result) }
+        }
+        return empty
+    }
+
+    /** Push a base-64 RGB frame from JS. */
     @Command
     fun pushFrame(invoke: Invoke): JSObject {
-        val result = JSObject()
-        
-        if (!isRecording || videoWriter == null) {
-            result.put("success", false)
-            return result
+        val empty = JSObject()
+
+        if (!isRecording || videoWriter?.isOpened != true) {
+            invoke.reject("Not recording")
+            return empty
         }
-        
-        // Extract the RGB data and dimensions from the invoke object
-        val args = invoke.getArgs()
-        val b64Rgb = args.optString("rgb", "")
-        val frameWidth = args.optInt("width", width)
-        val frameHeight = args.optInt("height", height)
-        
-        if (b64Rgb.isEmpty()) {
-            result.put("success", false)
-            return result
-        }
-        
-        // Process frame in a separate thread to avoid blocking UI
-        recordingThread?.execute {
+
+        val args    = invoke.getArgs()
+        val b64     = args.optString("rgb", "")
+        val frameW  = args.optInt("width",  width)
+        val frameH  = args.optInt("height", height)
+
+        if (b64.isEmpty()) { invoke.reject("Empty frame"); return empty }
+
+        recordingExec?.execute {
             try {
-                // Decode base64 string to RGB byte array
-                Log.d("RecordStreamPlugin", "Decoding RGB data of length: ${b64Rgb.length}, size: ${frameWidth}x${frameHeight}")
-                val rgbBytes = Base64.decode(b64Rgb, Base64.DEFAULT)
-                
-                // Convert RGB bytes directly to OpenCV Mat
-                val rgbMat = Mat(frameHeight, frameWidth, CvType.CV_8UC3)
+                /* ---------- decode ---------- */
+                val rgbBytes: ByteArray = Base64.decode(b64, Base64.DEFAULT)
+                val rgbMat   = Mat(frameH, frameW, CvType.CV_8UC3)
                 rgbMat.put(0, 0, rgbBytes)
-                
-                Log.d("RecordStreamPlugin", "Created Mat: ${rgbMat.width()}x${rgbMat.height()}, channels: ${rgbMat.channels()}")
-                
-                // Resize if needed
-                val resizedMat = if (frameWidth != width || frameHeight != height) {
-                    Log.d("RecordStreamPlugin", "Resizing frame from ${frameWidth}x${frameHeight} to ${width}x${height}")
-                    val resized = Mat()
-                    Imgproc.resize(rgbMat, resized, Size(width.toDouble(), height.toDouble()), 0.0, 0.0, Imgproc.INTER_LINEAR)
-                    rgbMat.release() // Free the original mat
-                    resized
-                } else {
-                    rgbMat // Use as-is
-                }
-                
-                // Convert RGB to BGR for OpenCV
-                val bgrMat = Mat()
-                Imgproc.cvtColor(resizedMat, bgrMat, Imgproc.COLOR_RGB2BGR)
-                
-                // Free the resized mat if it's not the same as rgbMat (we already free rgbMat in the resize block)
-                if (resizedMat != rgbMat) {
-                    resizedMat.release()
-                }
-                
-                Log.d("RecordStreamPlugin", "Converted mat: ${bgrMat.width()}x${bgrMat.height()}, channels: ${bgrMat.channels()}")
-                
-                // Apply effect if needed
-                val processedMat = if (effectType != EFFECT_NONE) {
-                    applyEffect(bgrMat, effectType)
-                } else {
-                    bgrMat
-                }
-                
-                // Add frame to queue with timestamp
-                val now = System.currentTimeMillis()
-                synchronized(this) {
-                    if (videoWriter?.isOpened == true) {
-                        // Store the processed frame in our queue with current timestamp
-                        frameQueue.add(Pair(now, processedMat.clone()))
-                        
-                        // Keep a copy of the last frame for frame duplication if needed
-                        if (lastFrame != null) {
-                            lastFrame?.release()
-                        }
-                        lastFrame = processedMat.clone()
-                        
-                        // Process frame queue to maintain consistent FPS
-                        processFrameQueue()
-                    } else {
-                        Log.e("RecordStreamPlugin", "VideoWriter is not opened")
-                        // Clean up the mat since we're not using it
-                        processedMat.release()
-                    }
-                }
-                
-                // Create a grayscale version of the frame for edge detection
-                val grayMat = Mat()
-                Imgproc.cvtColor(processedMat, grayMat, Imgproc.COLOR_BGR2GRAY)
-                
-                // Apply Canny edge detection to find edges in the image
-                val edgesMat = Mat()
-                Imgproc.Canny(grayMat, edgesMat, 50.0, 150.0, 3, false)
-                
-                // Count edge pixels - if very few edges, camera might be covered
-                val edgeCount = Core.countNonZero(edgesMat)
-                val isCovered = edgeCount < 500 // Threshold for considering camera covered
-                
-                // Log the edge detection results
-                // Log.d("RecordStreamPlugin", "Edge detection: $edgeCount edges found, covered: $isCovered")
-                
-                // Clean up edge detection resources
-                grayMat.release()
-                edgesMat.release()
-                
-                // Clean up temporary resources
-                // Note: We don't release processedMat here since it's now in our queue
-                // We'll release frames when they're removed from the queue
-                bgrMat.release() // bgrMat is explicitly cloned or released above
-                
-                // Return success response with edge detection analysis
-                val response = JSObject()
-                response.put("success", true)
-                response.put("is_covered", isCovered)
-                response.put("edge_count", edgeCount)
-                mainHandler.post {
-                    invoke.resolve(response)
-                }
+
+                /* ---------- resize if needed ---------- */
+                val sized = if (frameW != width || frameH != height) {
+                    val dst = Mat()
+                    Imgproc.resize(
+                        rgbMat, dst, Size(width.toDouble(), height.toDouble()),
+                        0.0, 0.0, Imgproc.INTER_LINEAR
+                    )
+                    rgbMat.release(); dst
+                } else rgbMat
+
+                /* ---------- RGB → BGR ---------- */
+                val bgr = Mat()
+                Imgproc.cvtColor(sized, bgr, Imgproc.COLOR_RGB2BGR)
+                if (sized !== rgbMat) sized.release()
+
+                /* ---------- effect & enqueue ---------- */
+                val finalMat = applyEffectIfNeeded(bgr)
+                enqueueFrame(finalMat)
+
+                ui.post { invoke.resolve(JSObject().apply { put("success", true) }) }
             } catch (e: Exception) {
-                Log.e("RecordStreamPlugin", "Error writing video frame", e)
-                
-                // Return error response
-                mainHandler.post {
-                    invoke.reject("Error writing video frame: ${e.message}")
-                }
+                Log.e(TAG, "pushFrame failed", e)
+                ui.post { invoke.reject(e.message ?: "pushFrame failed") }
             }
         }
-        
-        // Return an empty response since we're using async resolution
-        return JSObject()
+        return empty
     }
-    
-    /**
-     * Apply an effect to a frame using OpenCV
-     * 
-     * @param inputMat The input Mat in BGR format
-     * @param effect The effect to apply
-     * @return A new Mat with the effect applied, or the input Mat if no effect
-     */
-    private fun applyEffect(inputMat: Mat, effect: Int): Mat {
-        // Create output mat
-        val outputMat = Mat()
-        
-        when (effect) {
-            EFFECT_GRAYSCALE -> {
-                // Convert to grayscale
-                Imgproc.cvtColor(inputMat, outputMat, Imgproc.COLOR_BGR2GRAY)
-                // Convert back to BGR for video writer
-                Imgproc.cvtColor(outputMat, outputMat, Imgproc.COLOR_GRAY2BGR)
-            }
-            EFFECT_CANNY_EDGE -> {
-                // Apply Canny edge detection
-                val grayMat = Mat()
-                Imgproc.cvtColor(inputMat, grayMat, Imgproc.COLOR_BGR2GRAY)
-                Imgproc.Canny(grayMat, grayMat, 50.0, 150.0)
-                Imgproc.cvtColor(grayMat, outputMat, Imgproc.COLOR_GRAY2BGR)
-                grayMat.release()
-            }
-            EFFECT_BLUR -> {
-                // Apply Gaussian blur
-                Imgproc.GaussianBlur(inputMat, outputMat, Size(15.0, 15.0), 0.0)
-            }
-            EFFECT_SEPIA -> {
-                // Apply sepia filter using a transformation matrix
-                val sepiaMat = Mat(3, 3, org.opencv.core.CvType.CV_32F)
-                sepiaMat.put(0, 0, 
-                    0.272, 0.534, 0.131,
-                    0.349, 0.686, 0.168,
-                    0.393, 0.769, 0.189
-                )
-                
-                // First convert BGR to RGB
-                val rgbMat = Mat()
-                Imgproc.cvtColor(inputMat, rgbMat, Imgproc.COLOR_BGR2RGB)
-                
-                // Apply transformation
-                org.opencv.core.Core.transform(rgbMat, outputMat, sepiaMat)
-                
-                // Convert back to BGR
-                Imgproc.cvtColor(outputMat, outputMat, Imgproc.COLOR_RGB2BGR)
-                
-                rgbMat.release()
-                sepiaMat.release()
-            }
-            else -> {
-                // No effect, return the input
-                inputMat.copyTo(outputMat)
-            }
-        }
-        
-        return outputMat
-    }
-    
+
+    /** Change visual effect. */
     @Command
     fun setEffect(invoke: Invoke): JSObject {
-        // Extract the effect_id parameter from the invoke object
-        val args = invoke.getArgs()
-        val effectId = args.optInt("effect_id", EFFECT_NONE)
-        
-        // Validate effect ID
-        effectType = when (effectId) {
-            EFFECT_GRAYSCALE, EFFECT_CANNY_EDGE, EFFECT_BLUR, EFFECT_SEPIA -> effectId
+        val id = invoke.getArgs().optInt("effect_id", EFFECT_NONE)
+        effectType = when (id) {
+            EFFECT_GRAYSCALE, EFFECT_CANNY_EDGE, EFFECT_BLUR, EFFECT_SEPIA -> id
             else -> EFFECT_NONE
         }
-        
-        Log.i("RecordStreamPlugin", "Set video effect: $effectType")
-        
-        val result = JSObject()
-        result.put("success", true)
-        result.put("current_effect", effectType)
-        return result
+        Log.i(TAG, "Effect set → $effectType")
+        return JSObject().apply {
+            put("success", true); put("current_effect", effectType)
+        }
     }
-    
+
+    /** Stop current recording; cleanup runs in background. */
     @Command
     fun stopRecord(invoke: Invoke): JSObject {
-        Log.i("RecordStreamPlugin", "Stopping recording")
-        
-        if (!isRecording) {
-            Log.w("RecordStreamPlugin", "Not recording, nothing to stop")
-            val response = JSObject()
-            response.put("success", false)
-            invoke.resolve(response)
-            return JSObject()
-        }
-        
-        // Make sure any pending frame is written
-        try {
-            synchronized(this) {
-                if (videoWriter?.isOpened == true) {
-                    Log.d("RecordStreamPlugin", "Preparing to finalize video file")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("RecordStreamPlugin", "Error checking video writer state", e)
-        }
-        
-        recordingThread?.execute {
+        val empty = JSObject()
+        if (!isRecording) { invoke.reject("Not recording"); return empty }
+
+        // Snapshot state
+        val writer = videoWriter
+        val exec   = recordingExec
+        val qCopy  = LinkedList(frameQueue)
+        val last   = lastFrame?.clone()
+        val id     = cleanupIdGen.incrementAndGet()
+
+        // Stats
+        val elapsed = max(1, (System.currentTimeMillis() - startTime))
+        Log.i(TAG, "stopRecord → frames=$frameCount, avgFPS=${frameCount*1000.0/elapsed}")
+
+        // Reset for next segment
+        isRecording = false
+        videoWriter = null
+        recordingExec = null
+        frameQueue.clear(); lastFrame?.release(); lastFrame = null
+        nextFrameTime = 0L; frameCount = 0
+
+        // Kick background cleanup
+        val ce = Executors.newSingleThreadExecutor()
+        cleanupExecs[id] = ce
+
+        ui.post { invoke.resolve(JSObject().apply { put("success", true) }) }
+
+        ce.execute {
             try {
-                synchronized(this) {
-                    // Ensure all buffered frames are written
-                    if (videoWriter?.isOpened == true) {
-                        Log.d("RecordStreamPlugin", "Processing remaining frames in queue before stopping")
-                        
-                        // Process any remaining frames in the queue
-                        while (frameQueue.isNotEmpty()) {
-                            try {
-                                val (_, frame) = frameQueue.removeFirst()
-                                videoWriter?.write(frame)
-                                frame.release()
-                            } catch (e: Exception) {
-                                Log.e("RecordStreamPlugin", "Error processing remaining frame", e)
-                            }
-                        }
-                        
-                        // Calculate actual recorded FPS
-                        val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-                        val actualFps = if (elapsed > 0) frameCount / elapsed else 0.0
-                        Log.i("RecordStreamPlugin", "Recording stopped. Frames: ${frameCount}, Duration: ${elapsed}s, Actual FPS: ${actualFps}")
-                        
-                        Log.d("RecordStreamPlugin", "Releasing video writer")
-                        videoWriter?.release()
-                        Log.d("RecordStreamPlugin", "Video writer released")
-                    } else {
-                        Log.w("RecordStreamPlugin", "VideoWriter was already closed")
-                    }
-                    
-                    // Clean up resources
-                    if (lastFrame != null) {
-                        lastFrame?.release()
-                        lastFrame = null
-                    }
-                    
-                    // Clear frame queue and release all mats
-                    while (frameQueue.isNotEmpty()) {
-                        val (_, frame) = frameQueue.removeFirst()
-                        frame.release()
-                    }
-                    
-                    videoWriter = null
-                    isRecording = false
+                Log.i(TAG, "cleanup #$id start")
+
+                while (qCopy.isNotEmpty()) {
+                    val (_, m) = qCopy.removeFirst()
+                    writer?.write(m)
+                    m.release()
                 }
-                
-                Log.i("RecordStreamPlugin", "Recording stopped successfully")
-                
-                // Return success response
-                val response = JSObject()
-                response.put("success", true)
-                mainHandler.post {
-                    invoke.resolve(response)
-                }
+                last?.let { writer?.write(it); it.release() }
+
+                exec?.shutdown()
+                exec?.awaitTermination(5, TimeUnit.SECONDS)
+                writer?.release()
+
+                Log.i(TAG, "cleanup #$id done")
             } catch (e: Exception) {
-                Log.e("RecordStreamPlugin", "Error stopping recording", e)
-                
-                // Return error response
-                mainHandler.post {
-                    invoke.reject("Error stopping recording: ${e.message}")
-                }
+                Log.e(TAG, "cleanup #$id error", e)
             } finally {
-                try {
-                    Log.d("RecordStreamPlugin", "Shutting down recording thread")
-                    recordingThread?.shutdown()
-                    recordingThread = null
-                } catch (e: Exception) {
-                    Log.e("RecordStreamPlugin", "Error shutting down recording thread", e)
-                }
+                cleanupExecs.remove(id)
+                ce.shutdown()
             }
         }
-        
-        // Return an empty response since we're using async resolution
-        return JSObject()
+        return empty
     }
-    
-    /**
-     * Helper function to create a fourcc code for video codec
-     */
-    private fun fourcc(c1: Char, c2: Char, c3: Char, c4: Char): Int {
-        return VideoWriter.fourcc(c1, c2, c3, c4)
+
+    /* ------------------------------------------------------------------
+     *  Internal helpers
+     * ------------------------------------------------------------------ */
+
+    /** Opens an MP4/AVI writer and primes all timing state. */
+    @Throws(Exception::class)
+    private fun openWriterAndInit(originalPath: String) {
+        val outFile = File(sanitizeFilename(originalPath))
+        outFile.parentFile?.mkdirs()
+
+        var writer = VideoWriter()
+        var opened = false
+        var usedMJPG = false
+
+        /* -------- try H.264 (MP4) -------- */
+        if (outFile.extension.equals("mp4", true)) {
+            val h264Fourcc = fourcc('H','2','6','4')
+            Log.i(TAG, "Trying H.264 encoder → $outFile")
+            writer.open(
+                outFile.absolutePath,
+                h264Fourcc,
+                fps,
+                Size(width.toDouble(), height.toDouble()),
+                /*isColor=*/true
+            )
+            opened = writer.isOpened
+        }
+
+        /* -------- fallback MJPG (AVI) -------- */
+        if (!opened) {
+            usedMJPG = true
+            val aviFile = if (outFile.extension.equals("mp4", true))
+                File(outFile.parent, outFile.nameWithoutExtension + "_a.avi")
+            else outFile
+
+            val mjpgFourcc = fourcc('M','J','P','G')
+            writer.release()
+            writer = VideoWriter()
+            Log.i(TAG, "Trying MJPG encoder → $aviFile")
+            writer.open(
+                aviFile.absolutePath,
+                mjpgFourcc,
+                fps,
+                Size(width.toDouble(), height.toDouble()),
+                true
+            )
+            opened = writer.isOpened
+        }
+
+        if (!opened) throw RuntimeException("OpenCV unable to open VideoWriter")
+
+        videoWriter = writer
+        isRecording = true
+
+        /* timing state */
+        frameInterval = (1000.0 / fps).toLong()
+        nextFrameTime = 0L
+        startTime     = System.currentTimeMillis()
+        frameCount    = 0
+
+        Log.i(
+            TAG,
+            "Recording started (${if (usedMJPG) "MJPG/AVI" else "H.264/MP4"}) – " +
+                    "$width x $height @ $fps"
+        )
     }
-    
-    /**
-     * Process the frame queue to maintain consistent frame rate
-     * Modeled after the desktop Rust implementation
-     */
+
+    /** Appends a processed frame to the queue and runs the scheduler. */
+    private fun enqueueFrame(mat: Mat) {
+        synchronized(this) {
+            frameQueue.add(Pair(System.currentTimeMillis(), mat))
+            lastFrame?.release()
+            lastFrame = mat.clone()
+            processFrameQueue()
+        }
+    }
+
+    /** Keep output FPS stable by duplicating/ dropping frames as needed. */
     private fun processFrameQueue() {
-        if (videoWriter?.isOpened != true) {
-            return
-        }
-        
+        val writer = videoWriter ?: return
+        if (!writer.isOpened) return
+
         val now = System.currentTimeMillis()
-        
-        // Only process if we have a reference time
-        if (nextFrameTime > 0) {
-            // Use a mutable copy of the next frame time
-            var currentFrameTime = nextFrameTime
-            
-            // If it's time to write a frame (or past time)
-            while (currentFrameTime <= now) {
-                // Get a frame to write - either from queue or repeat last frame
-                var frameToWrite: Mat? = null
-                
-                if (frameQueue.isNotEmpty()) {
-                    // Take the oldest frame from the queue
-                    val (frameTime, frame) = frameQueue.removeFirst()
-                    
-                    // Calculate how far behind schedule we are
-                    if (frameTime > nextFrameTime) {
-                        val delay = frameTime - nextFrameTime
-                        if (delay > 100) { // Only log significant delays
-                            Log.d("RecordStreamPlugin", "Frame arrived ${delay}ms late")
-                        }
-                    }
-                    
-                    frameToWrite = frame
-                    
-                } else if (lastFrame != null) {
-                    // No new frames available, duplicate the last one
-                    Log.d("RecordStreamPlugin", "No new frame available, duplicating previous frame")
-                    frameToWrite = lastFrame?.clone()
-                }
-                
-                // Write the frame if we have one
-                if (frameToWrite != null) {
-                    try {
-                        val success = videoWriter?.write(frameToWrite) ?: false
-                        if (success == true) {
-                            frameCount++
-                            if (frameCount % 30 == 0) {
-                                // Print overall stats periodically
-                                val elapsed = (now - startTime) / 1000.0
-                                val targetFps = 1000.0 / frameIntervalMs
-                                val actualFps = if (elapsed > 0) frameCount / elapsed else 0.0
-                                Log.d("RecordStreamPlugin", "Frame ${frameCount}: Target FPS: ${targetFps}, Actual average FPS: ${actualFps}")
-                            }
-                        } else {
-                            Log.e("RecordStreamPlugin", "Failed to write frame")
-                        }
-                    } catch (e: Exception) {
-                        Log.e("RecordStreamPlugin", "Error writing frame", e)
-                    } finally {
-                        // Make sure to release the frame after writing
-                        if (frameToWrite != lastFrame) {
-                            frameToWrite.release()
-                        }
-                    }
-                }
-                
-                // Calculate the next frame time based on the current one
-                currentFrameTime += frameIntervalMs
-                
-                // Update next frame time
-                nextFrameTime = currentFrameTime
-                
-                // Safety check: don't get stuck in the loop if we're very far behind
-                // Only write up to 10 frames at once to catch up
-                if (now - currentFrameTime > 1000) {
-                    Log.w("RecordStreamPlugin", "Over 1 second behind in frame processing. Skipping ahead.")
-                    nextFrameTime = now + frameIntervalMs
-                    break
-                }
+        if (nextFrameTime == 0L) nextFrameTime = now
+
+        while (nextFrameTime <= now) {
+            val frame = if (frameQueue.isNotEmpty())
+                frameQueue.removeFirst().second
+            else
+                lastFrame?.clone()
+
+            frame?.let {
+                writer.write(it)
+                frameCount++
+                if (it !== lastFrame) it.release()
             }
+            nextFrameTime += frameInterval
+
+            /* safety cap – don’t try to catch up for >1 s of backlog */
+            if (now - nextFrameTime > 1000) {
+                nextFrameTime = now + frameInterval
+                break
+            }
+        }
+    }
+
+    /** Apply current effect or pass through. */
+    private fun applyEffectIfNeeded(src: Mat): Mat {
+        if (effectType == EFFECT_NONE) return src
+
+        val dst = Mat()
+        when (effectType) {
+            EFFECT_GRAYSCALE -> {
+                Imgproc.cvtColor(src, dst, Imgproc.COLOR_BGR2GRAY)
+                Imgproc.cvtColor(dst, dst, Imgproc.COLOR_GRAY2BGR)
+            }
+            EFFECT_CANNY_EDGE -> {
+                val gray = Mat()
+                Imgproc.cvtColor(src, gray, Imgproc.COLOR_BGR2GRAY)
+                Imgproc.Canny(gray, gray, 50.0, 150.0)
+                Imgproc.cvtColor(gray, dst, Imgproc.COLOR_GRAY2BGR)
+                gray.release()
+            }
+            EFFECT_BLUR -> {
+                Imgproc.GaussianBlur(src, dst, Size(15.0, 15.0), 0.0)
+            }
+            EFFECT_SEPIA -> {
+                val kernel = Mat(3, 3, CvType.CV_32F).apply {
+                    put(0, 0,
+                        0.272, 0.534, 0.131,
+                        0.349, 0.686, 0.168,
+                        0.393, 0.769, 0.189
+                    )
+                }
+                Core.transform(src, dst, kernel)
+                kernel.release()
+            }
+        }
+        src.release()
+        return dst
+    }
+
+    /** Add “_a” if filename (sans extension) ends with digits. */
+    private fun sanitizeFilename(path: String): String {
+        val f = File(path)
+        return if (f.nameWithoutExtension.matches(Regex("\\d+"))) {
+            File(f.parent, f.nameWithoutExtension + "_a.${f.extension}").absolutePath
         } else {
-            // Initialize next frame time if not set
-            nextFrameTime = now + frameIntervalMs
+            f.absolutePath
         }
     }
 }

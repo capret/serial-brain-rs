@@ -264,8 +264,8 @@ mod video {
             println!("[Recording] Stopping video recording");
             let ret=stop_video_recording(app.clone());
             if ret.is_err(){ eprintln!("[Recording] ⚠️  Failed to stop video recording: {}", ret.unwrap_err()); }
-            println!("[Recording] Waiting 400ms");
-            std::thread::sleep(Duration::from_millis(400));
+            // println!("[Recording] Waiting 400ms");
+            // std::thread::sleep(Duration::from_millis(400));
             println!("[Recording] Starting video recording");
             let ret=start_video_recording(app,new_base,dir);
             if ret.is_err(){ eprintln!("[Recording] ⚠️  Failed to start video recording: {}", ret.unwrap_err()); }
