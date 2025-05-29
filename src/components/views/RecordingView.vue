@@ -1,46 +1,28 @@
 <template>
   <div class="bg-gray-800 bg-opacity-60 rounded-lg p-6">
     <!-- Recording Setup Section -->
-    <RecordingSetup
-      :is-recording="isRecording"
-      :recording-directory="recordingDirectory"
-      :connection-status="connectionStatus"
-      @start-recording="startRecording"
-      @stop-recording="stopRecording"
-    />
+    <RecordingSetup :is-recording="isRecording" :recording-directory="recordingDirectory"
+      :connection-status="connectionStatus" @start-recording="startRecording" @stop-recording="stopRecording" />
 
     <div class="space-y-6">
       <!-- Storage Location is included in RecordingSetup -->
-      
+
       <!-- Recording Format Section -->
-      <RecordingFormatSelector
-        v-model="recordingFormat"
-        :disabled="isRecording"
-      />
-      
+      <RecordingFormatSelector v-model="recordingFormat" :disabled="isRecording" />
+
       <!-- Recording Options Section -->
-      <RecordingOptions
-        v-model:autostart="autoStartRecording"
-        v-model:max-recording-duration="maxRecordingDuration"
-        :disabled="isRecording"
-      />
-      
+      <RecordingOptions v-model:autostart="autoStartRecording" v-model:max-recording-duration="maxRecordingDuration"
+        :disabled="isRecording" />
+
       <!-- Recording Status Section -->
-      <RecordingStatus
-        v-if="isRecording"
-        :is-recording="isRecording"
-        :recording-filename="recordingFilename"
-      />
+      <RecordingStatus v-if="isRecording" :is-recording="isRecording" :recording-filename="recordingFilename" />
     </div>
-    
+
     <div class="border-t border-gray-700 my-8"></div>
-    
+
     <!-- Recorded Files Section -->
-    <RecordedFilesList
-      :recording-directory="recordingDirectory"
-      :is-recording="isRecording"
-      :recording-filename="recordingFilename"
-    />
+    <RecordedFilesList :recording-directory="recordingDirectory" :is-recording="isRecording"
+      :recording-filename="recordingFilename" />
   </div>
 </template>
 
@@ -51,9 +33,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { exists, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
 import * as path from '@tauri-apps/api/path';
-import { 
-  recordingDirectory, 
-  connectionStatus, 
+import {
+  recordingDirectory,
+  connectionStatus,
   maxRecordingDuration,
   recordingFormat,
   autoStartRecording,
@@ -71,7 +53,7 @@ import {
 } from '../../utils/records';
 
 // Import the components
-import { 
+import {
   RecordingSetup,
   RecordingFormatSelector,
   RecordingOptions,
@@ -112,7 +94,7 @@ async function setupEventListeners() {
     recordingCompletedUnsubscribe();
     recordingCompletedUnsubscribe = null;
   }
-  
+
   // Listen for when a recording completes due to reaching max duration
   recordingCompletedUnsubscribe = await listen('recording-completed', async (event) => {
     console.log('Recording completed event received:', event);
@@ -123,15 +105,15 @@ async function setupEventListeners() {
       shouldRestartRecording: boolean;
       baseFilename?: string; // New parameter for video recording segments
     };
-    
+
     // Only restart if shouldRestartRecording is true
     if (payload.shouldRestartRecording) {
       console.log('Auto-starting new recording segment...');
-      
+
       // Temporarily set recording state to false
       // but we'll keep the Android service running
       isRecording.value = false;
-      
+
       // First explicitly stop the video recording to ensure it's properly finalized
       try {
         console.log('Stopping video recording for segment change...');
@@ -141,7 +123,7 @@ async function setupEventListeners() {
         console.warn('Error stopping video recording for segment change:', error);
         // Continue with new segment even if stopping video fails
       }
-      
+
       // Start a new recording segment with the same parameters
       // but don't restart the Android service
       try {
@@ -155,7 +137,7 @@ async function setupEventListeners() {
       }
     }
   });
-  
+
   // Listen for recording filename changes (especially important for segment changes)
   await listen('recording-filename-changed', (event) => {
     const newFilename = event.payload as string;
@@ -174,7 +156,7 @@ function setupActiveRecordingUpdates() {
     clearInterval(activeUpdateInterval);
     activeUpdateInterval = undefined;
   }
-  
+
   // Only set up if recording is active
   if (isRecording.value) {
     console.log('Setting up periodic updates for active recording');
@@ -188,28 +170,28 @@ function setupActiveRecordingUpdates() {
             console.log('Updating recording filename from backend:', currentFilename);
             recordingFilename.value = currentFilename;
           }
-          
+
           // Check the file size of the current recording
           if (recordingFilename.value && recordingDirectory.value) {
             const fullPath = `${recordingDirectory.value}/${recordingFilename.value}`;
             try {
               // Get the actual file stats to update size
               interface FileStats {
-                size: number; 
+                size: number;
                 modified: number;
                 created: number;
               }
               const fileStat = await invoke<FileStats>('get_file_stats', { path: fullPath });
               if (fileStat && fileStat.size) {
                 console.log(`Current recording file size: ${fileStat.size} bytes`);
-                
+
                 // Update the file store with the latest recording information
                 // This ensures the file exists in the list and has the current state
                 await fileStore.updateRecordingState(true, recordingFilename.value);
-                
+
                 // Update the file size in the store
                 fileStore.updateFileSize(fullPath, fileStat.size, formatFileSize(fileStat.size));
-                
+
                 // Trigger a file list refresh to update the size
                 await findAndUpdateActiveRecordingFile(
                   isRecording.value,
@@ -219,7 +201,7 @@ function setupActiveRecordingUpdates() {
                   fileStore.files.value, // Pass current files instead of empty array
                   (path) => activeRecordingPath.value = path,
                   (name) => recordingFilename.value = name,
-                  () => {} // We'll handle the UI update separately
+                  () => { } // We'll handle the UI update separately
                 );
               }
             } catch (error) {
@@ -244,12 +226,12 @@ onMounted(async () => {
   try {
     // First, set up the recordings directory in AppData
     await selectDirectory();
-    
+
     // Fetch the connection state from the backend using our shared function
     try {
       console.log('Fetching connection status from backend...');
       await fetchConnectionState();
-      
+
       // Update the connection status based on isConnected
       // This ensures consistency with the other views
       connectionStatus.value = isConnected.value ? 'connected' : 'disconnected';
@@ -257,18 +239,18 @@ onMounted(async () => {
     } catch (error) {
       console.warn('Failed to get connection status from backend:', error);
     }
-    
+
     // Check if we're already recording when navigating to this page
     try {
       const recordingStatus = await invoke('get_app_state', {
         category: 'recording',
         key: 'status'
       }) as RecordingStatusResponse;
-      
+
       if (recordingStatus) {
         isRecording.value = recordingStatus.isRecording;
         recordingFilename.value = recordingStatus.filename;
-        
+
         console.log('Recording status from backend:', isRecording.value ? 'Active' : 'Inactive');
         if (recordingFilename.value) {
           console.log('Current recording filename:', recordingFilename.value);
@@ -277,10 +259,10 @@ onMounted(async () => {
     } catch (error) {
       console.error('Failed to get recording status:', error);
     }
-    
+
     // Set up event listeners
     await setupEventListeners();
-    
+
     // If recording is active, set up file watcher and periodic updates
     if (isRecording.value && recordingFilename.value) {
       // Set up a watcher for the recording file
@@ -297,12 +279,12 @@ onMounted(async () => {
             [],
             (path) => activeRecordingPath.value = path,
             (name) => recordingFilename.value = name,
-            () => {} // No need to update files here
+            () => { } // No need to update files here
           );
         },
         null
       );
-      
+
       // Set up periodic updates for the active recording
       setupActiveRecordingUpdates();
     }
@@ -321,13 +303,13 @@ onUnmounted(() => {
     fileWatchUnsubscribe.value();
     fileWatchUnsubscribe.value = null;
   }
-  
+
   // Remove event listeners
   if (recordingCompletedUnsubscribe) {
     recordingCompletedUnsubscribe();
     recordingCompletedUnsubscribe = null;
   }
-  
+
   // Clean up the update interval for active recordings
   if (activeUpdateInterval) {
     clearInterval(activeUpdateInterval);
@@ -340,12 +322,12 @@ async function selectDirectory(): Promise<void> {
   try {
     // Get the document directory full path
     const documentDir = await path.documentDir();
-    
+
     // Check if signal_data directory exists
     const folderExists = await exists('signal_data', {
       baseDir: BaseDirectory.Document,
     });
-    
+
     // Create the directory if it doesn't exist
     if (!folderExists) {
       console.log('Creating signal_data directory in Documents');
@@ -353,10 +335,10 @@ async function selectDirectory(): Promise<void> {
         baseDir: BaseDirectory.Document,
       });
     }
-    
+
     // Join the document dir with signal_data folder to get the full path
     const fullPath = await path.join(documentDir, 'signal_data');
-    
+
     // Set the recording directory path to the full absolute path
     recordingDirectory.value = fullPath;
     console.log('Using full path for recordings:', fullPath);
@@ -372,12 +354,12 @@ async function startRecording(format?: string, directory?: string, duration?: nu
     // Use the shared streaming state to check if streaming is active
     if (!streamingActive.value) {
       console.log('Camera not streaming, activating streaming view and starting camera stream');
-      
+
       // Toggle the streaming view on in the sidebar
       if (setActiveView && setAdditionalViews) {
         setAdditionalViews('streaming');
       }
-      
+
       // Start streaming using the shared state function
       const streamUrlResponse = await invoke('get_app_state', {
         category: 'stream',
@@ -401,22 +383,22 @@ async function startRecording(format?: string, directory?: string, duration?: nu
     console.warn('Error checking streaming status:', error);
     // Continue with recording anyway
   }
-  
+
   // Use provided parameters or defaults from UI controls
   const recordFormat = format || recordingFormat.value;
   const recordDir = directory || recordingDirectory.value; // This is now a full path
   const recordDuration = duration || maxRecordingDuration.value;
-  
+
   if (!recordDir) {
     alert('Please select a directory to save recordings');
     return;
   }
-  
+
   try {
     console.log('Starting recording with format:', recordFormat);
     console.log('Directory:', recordDir);
     console.log('Duration:', recordDuration);
-    
+
     // Start both signal recording and video recording with the same base filename
     const actualFilename = await invoke('start_recording', {
       format: recordFormat,
@@ -424,31 +406,11 @@ async function startRecording(format?: string, directory?: string, duration?: nu
       maxDurationMinutes: recordDuration,
       autoStart: autoStartRecording.value
     }) as string;
-    
+
     console.log('Received filename from backend:', actualFilename);
     recordingFilename.value = actualFilename;
-    
-    // Start video recording with the same base name but mp4 extension
-    try {
-      // Extract base name without extension
-      const baseFilename = actualFilename.replace(/\.[^/.]+$/, '');
-      
-      console.log(`Starting video recording for ${isSegmentChange ? 'segment change' : 'new recording'}`);
-      console.log('Video base filename:', baseFilename);
-      console.log('Video directory:', recordDir);
-      
-      // Start the video recording using the Tauri plugin command
-      await invoke('start_video_recording', {
-        filename: baseFilename,
-        directory: recordDir
-      });
-      
-      console.log('Video recording started successfully with base filename:', baseFilename);
-    } catch (error) {
-      console.warn('Failed to start video recording:', error);
-      // Continue with signal recording even if video recording fails
-    }
-    
+
+
     // Only start the Android service if it's not already running
     if (!isServiceRunning.value && !isSegmentChange) {
       try {
@@ -463,10 +425,10 @@ async function startRecording(format?: string, directory?: string, duration?: nu
     } else {
       console.log('Android service already running - not restarting');
     }
-    
+
     isRecording.value = true;
     console.log('Recording started - filename:', recordingFilename.value);
-    
+
     // Set up a watcher for the recording file
     const fullPath = `${recordingDirectory.value}/${recordingFilename.value}`;
     fileWatchUnsubscribe.value = await setupRecordingFileWatcher(
@@ -481,12 +443,12 @@ async function startRecording(format?: string, directory?: string, duration?: nu
           [],
           (path) => activeRecordingPath.value = path,
           (name) => recordingFilename.value = name,
-          () => {} // No need to update files here as that's handled by RecordedFilesList
+          () => { } // No need to update files here as that's handled by RecordedFilesList
         );
       },
       fileWatchUnsubscribe.value
     );
-    
+
   } catch (error) {
     console.error('Error starting recording:', error);
     alert(`Failed to start recording: ${error}`);
@@ -496,7 +458,7 @@ async function startRecording(format?: string, directory?: string, duration?: nu
 async function stopRecording(): Promise<void> {
   try {
     await invoke('stop_recording');
-    
+
     // Stop Android foreground service
     if (isServiceRunning.value) {
       try {
@@ -507,27 +469,13 @@ async function stopRecording(): Promise<void> {
         console.warn('Forward service not available or failed to stop:', e);
       }
     }
-    
+
     // Clean up file watcher if active
     if (fileWatchUnsubscribe.value) {
       fileWatchUnsubscribe.value();
       fileWatchUnsubscribe.value = null;
     }
-    
-    // Stop video recording
-    try {
-      await invoke('stop_video_recording');
-      console.log('Video recording stopped');
-      
-      // Also update the shared streaming state to reflect that streaming has stopped
-      if (streamingActive.value) {
-        await toggleStreamingState(false);
-        console.log('Shared streaming state updated to inactive');
-      }
-    } catch (error) {
-      console.warn('Error stopping video recording:', error);
-    }
-    
+
     activeRecordingPath.value = '';
     isRecording.value = false;
     recordingFilename.value = '';

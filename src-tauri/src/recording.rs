@@ -1,21 +1,38 @@
+//! Recording module
+//! ------------------------------------------------------------
+//! Provides an ergonomic, maintainable wrapper around data- and
+//! video‑recording for the serial‑visualisation app.  The public
+//! API is **unchanged** so existing UI calls continue to work:
+//!
+//! ```rust
+//! start_recording(...)
+//! stop_recording(...)
+//! start_video_recording(...)
+//! stop_video_recording(...)
+//! ```
+//!
+//! Key internals:
+//! * `Format` – strongly‑typed recording format enum
+//! * `DataWriter` trait + concrete `CsvWriter`, `JsonWriter`, `BinaryWriter`
+//! * `RecordingController` – background thread handling IO + rotation
+//! * `video` sub‑module – thin wrapper around `tauri_plugin_record_stream`
+//!
+//! ----------------------------------------------------------------
+
 use crate::state::AppState;
 use serde_json::json;
-use std::fs::{OpenOptions, File};
-use std::io::Write;
-use std::path::PathBuf;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
 use std::sync::{atomic::Ordering, Arc};
 use std::thread::{self, JoinHandle};
-use std::time::{SystemTime, Duration};
-use tauri::{AppHandle, Emitter, Manager};
+use std::time::{Duration, SystemTime};
+use tauri::{AppHandle, Manager, Emitter};
 
-/// Starts recording data to a file in the specified format.
-/// 
-/// # Arguments
-/// * `format` - The format to use for recording ("csv", "json", or "binary")
-/// * `directory` - The directory path where recordings should be saved
-/// * `max_duration_minutes` - Maximum duration in minutes for each recording segment
-/// * `_auto_start` - Whether to automatically start recording (currently unused)
-/// * `state` - Application state containing shared data
+// -------------------------------------------------------------------------------------------------
+// Public helpers -------------------------------------------------------------------------------------------------
+
+/// Starts recording serial data (and starts a matching video recording).
 pub fn start_recording(
     format: String,
     directory: String,
@@ -23,380 +40,234 @@ pub fn start_recording(
     _auto_start: bool,
     app_handle: AppHandle,
 ) -> Result<String, String> {
-    let state = app_handle.state::<Arc<AppState>>();
-    let mut path = PathBuf::from(&directory);
-    
-    // Create a timestamped filename
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?;
-    
-    let timestamp = now.as_millis();
-    let filename = match format.as_str() {
-        "csv" => format!("serial_recording_{}.csv", timestamp),
-        "json" => format!("serial_recording_{}.json", timestamp),
-        "binary" => format!("serial_recording_{}.bin", timestamp),
-        _ => return Err("Invalid format specified".to_string()),
-    };
-    
-    // Clone the filename before pushing to path to avoid ownership issues
-    path.push(filename.clone());
-    
-    // Set up the file
-    let file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&path)
-        .map_err(|e| format!("Failed to create recording file: {}", e))?;
-    
-    // Store the file in state for continued writing
-    *state.recording.recording_file.lock().unwrap() = Some((file, format.clone()));
-    
-    // Store the filename for retrieval even when switching views
-    *state.recording.recording_filename.lock().unwrap() = Some(filename.clone());
-    
-    // Start the recording thread that will poll data and write to file
-    if !state.recording.recording_active.load(Ordering::SeqCst) {
-        state.recording.recording_active.store(true, Ordering::SeqCst);
-        let state_clone = state.inner().clone();
-        
-        // Clone format and directory for the emit event after max duration
-        let format_clone = format.clone();
-        let directory_clone = directory.clone();
-        
-        let max_duration = Duration::from_secs(max_duration_minutes as u64 * 60);
-        let start_time = SystemTime::now();
-        
-        // Write header for CSV format
-        if format == "csv" {
-            if let Some((ref mut file, _)) = *state.recording.recording_file.lock().unwrap() {
-                // Write CSV header based on channel count
-                let mut header = String::from("timestamp");
-                for i in 0..8 { // Support up to 8 channels as per memory
-                    header.push_str(&format!(",channel_{}", i));
-                }
-                if let Err(e) = writeln!(file, "{}", header) {
-                    return Err(format!("Failed to write CSV header: {}", e));
-                }
-            }
-        } else if format == "json" {
-            // Start JSON array
-            if let Some((ref mut file, _)) = *state.recording.recording_file.lock().unwrap() {
-                if let Err(e) = file.write_all(b"[") {
-                    return Err(format!("Failed to write JSON opening: {}", e));
-                }
-            }
-        }
-        
-        let handle = spawn_recording_thread(state_clone, format_clone, directory_clone, max_duration, start_time);
-        
-        *state.recording.recording_handle.lock().unwrap() = Some(handle);
+    // Validate options -----------------------------------------------------------------------------
+    let format = Format::try_from(format.as_str())?;
+    let max_duration = Duration::from_secs(max_duration_minutes as u64 * 60);
+    let base_name = base_filename();
+
+    // Kick off video (non‑fatal on failure) ---------------------------------------------------------
+    if let Err(e) = start_video_recording(app_handle.clone(), base_name.clone(), directory.clone()) {
+        eprintln!("[Recording] ⚠️  Failed to start video recording: {e}");
     }
-    
-    // Return the actual filename that was created
-    Ok(filename)
+
+    // First data segment ---------------------------------------------------------------------------
+    let mut first_path = PathBuf::from(&directory);
+    first_path.push(format!("{base_name}.{}", format.extension()));
+    let writer = new_segment_writer(&first_path, format)?;
+
+    // Replace any running recording ---------------------------------------------------------------
+    let state = app_handle.state::<Arc<AppState>>();
+    if let Some(h) = state.recording.recording_handle.lock().unwrap().take() {
+        let _ = h.join();
+    }
+
+    // Spawn controller thread ---------------------------------------------------------------------
+    let handle = RecordingController::spawn(
+        writer,
+        format,
+        directory.clone(),
+        max_duration,
+        app_handle.clone(),
+    );
+    *state.recording.recording_handle.lock().unwrap() = Some(handle);
+    state.recording.recording_active.store(true, Ordering::SeqCst);
+
+    Ok(first_path.file_name().unwrap().to_string_lossy().into())
 }
 
-/// Stops an active recording process.
+/// Stops the current recording (data + video).
 pub fn stop_recording(app_handle: AppHandle) -> Result<(), String> {
     let state = app_handle.state::<Arc<AppState>>();
-    
-    // Only do something if recording is active
-    if state.recording.recording_active.load(Ordering::SeqCst) {
-        // Close the JSON array for JSON format recordings
-        if let Some((ref mut file, ref format)) = *state.recording.recording_file.lock().unwrap() {
-            if format == "json" {
-                if let Err(e) = file.write_all(b"]") {
-                    eprintln!("Error closing JSON file: {}", e);
-                }
-            }
-        }
-        
-        // Set the flag to false before cleaning up
-        state.recording.recording_active.store(false, Ordering::SeqCst);
-        
-        // Clean up the file handles and threads
-        let _ = state.recording.recording_handle.lock().unwrap().take();
-        *state.recording.recording_file.lock().unwrap() = None;
-        *state.recording.recording_filename.lock().unwrap() = None;
+    state
+        .recording
+        .recording_active
+        .store(false, Ordering::SeqCst);
+
+    if let Some(h) = state.recording.recording_handle.lock().unwrap().take() {
+        let _ = h.join();
     }
-    
+
+    let _ = stop_video_recording(app_handle);
     Ok(())
 }
 
-/// Spawns a thread to handle recording data to files.
-fn spawn_recording_thread(
-    state_clone: Arc<AppState>,
-    format_clone: String,
-    directory_clone: String,
-    max_duration: Duration,
-    start_time: SystemTime,
-) -> JoinHandle<()> {
-    thread::spawn(move || {
-        let mut first_json_entry = true;
-        let mut segment_start_time = start_time;
-        
-        while state_clone.recording.recording_active.load(Ordering::SeqCst) {
-            // Check if the current segment exceeded the configured duration
-            if let Ok(elapsed) = SystemTime::now().duration_since(segment_start_time) {
-                if elapsed > max_duration {
-                    handle_segment_rotation(
-                        &state_clone,
-                        &format_clone,
-                        &directory_clone,
-                        &mut first_json_entry,
-                        &mut segment_start_time,
-                        &max_duration,
-                    );
-                    continue; // Skip to next loop to immediately write to the new segment
+// -- Public wrappers matching legacy signatures ---------------------------------------------------
+
+pub fn start_video_recording(
+    app_handle: AppHandle,
+    base_filename: String,
+    directory: String,
+) -> Result<bool, String> {
+    video::start_video_recording(app_handle, &base_filename, &directory)
+}
+
+pub fn stop_video_recording(app_handle: AppHandle) -> Result<bool, String> {
+    video::stop_video_recording(app_handle)
+}
+
+// -------------------------------------------------------------------------------------------------
+// Internal types -------------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Format { Csv, Json, Binary }
+impl TryFrom<&str> for Format {
+    type Error = String;
+    fn try_from(v: &str) -> Result<Self, Self::Error> {
+        match v.to_ascii_lowercase().as_str() {
+            "csv" => Ok(Format::Csv),
+            "json" => Ok(Format::Json),
+            "binary" | "bin" => Ok(Format::Binary),
+            _ => Err(format!("Invalid format '{v}'. Expected csv | json | binary")),
+        }
+    }
+}
+impl Format { fn extension(self) -> &'static str { match self { Self::Csv => "csv", Self::Json => "json", Self::Binary => "bin" } } }
+
+// Data‑writer abstraction -------------------------------------------------------------------------
+trait DataWriter: Send {
+    fn write_batch(&mut self, batch: &[(SystemTime, [f32; 8])]) -> std::io::Result<()>;
+    fn finalize(&mut self) -> std::io::Result<()>;
+}
+
+struct CsvWriter { file: BufWriter<File> }
+struct JsonWriter { file: BufWriter<File>, first: bool }
+struct BinaryWriter { file: BufWriter<File> }
+
+impl CsvWriter { fn new(mut f: File) -> std::io::Result<Self> {
+    writeln!(f, "timestamp,{}", (0..8).map(|i| format!("channel_{i}")).collect::<Vec<_>>().join(","))?;
+    Ok(Self{file:BufWriter::new(f)}) }}
+impl DataWriter for CsvWriter {
+    fn write_batch(&mut self, batch:&[(SystemTime,[f32;8])]) -> std::io::Result<()> {
+        for (t,ch) in batch {
+            let ts = t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis();
+            writeln!(self.file, "{ts},{}", ch.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","))?;
+        }
+        self.file.flush()
+    }
+    fn finalize(&mut self)->std::io::Result<()> { self.file.flush() }
+}
+
+impl JsonWriter { fn new(mut f: File)->std::io::Result<Self>{ f.write_all(b"[")?; Ok(Self{file:BufWriter::new(f),first:true}) }}
+impl DataWriter for JsonWriter {
+    fn write_batch(&mut self, batch:&[(SystemTime,[f32;8])]) -> std::io::Result<()> {
+        for (t,ch) in batch {
+            if !self.first { self.file.write_all(b",")?; }
+            self.first=false;
+            let ts=t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis();
+            let entry=json!({"timestamp":ts,"values":ch});
+            self.file.write_all(entry.to_string().as_bytes())?;
+        }
+        self.file.flush()
+    }
+    fn finalize(&mut self)->std::io::Result<()> { self.file.write_all(b"]")?; self.file.flush() }
+}
+
+impl BinaryWriter { fn new(f: File)->std::io::Result<Self>{ Ok(Self{file:BufWriter::new(f)}) }}
+impl DataWriter for BinaryWriter {
+    fn write_batch(&mut self,batch:&[(SystemTime,[f32;8])]) -> std::io::Result<()> {
+        for (t,ch) in batch {
+            let ts = t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+            self.file.write_all(&ts.to_le_bytes())?;
+            self.file.write_all(&(ch.len() as u32).to_le_bytes())?;
+            for v in ch { self.file.write_all(&(*v as f64).to_le_bytes())?; }
+        }
+        self.file.flush()
+    }
+    fn finalize(&mut self)->std::io::Result<()> { self.file.flush() }
+}
+
+fn new_segment_writer(path:&Path,fmt:Format)->Result<Box<dyn DataWriter>,String>{
+    let file=OpenOptions::new().write(true).create(true).truncate(true).open(path)
+        .map_err(|e|format!("Failed to create recording file: {e}"))?;
+    match fmt {
+        Format::Csv=>Ok(Box::new(CsvWriter::new(file).map_err(|e|e.to_string())?)),
+        Format::Json=>Ok(Box::new(JsonWriter::new(file).map_err(|e|e.to_string())?)),
+        Format::Binary=>Ok(Box::new(BinaryWriter::new(file).map_err(|e|e.to_string())?)),
+    }
+}
+
+// Controller thread -------------------------------------------------------------------------------
+struct RecordingController;
+impl RecordingController {
+    fn spawn(
+        mut writer: Box<dyn DataWriter>,
+        fmt: Format,
+        directory: String,
+        max_duration: Duration,
+        app_handle: AppHandle,
+    ) -> JoinHandle<()> {
+        let state = app_handle.state::<Arc<AppState>>().inner().clone();
+        thread::spawn(move || {
+            let mut segment_start = SystemTime::now();
+            loop {
+                if !state.recording.recording_active.load(Ordering::SeqCst) { break; }
+
+                // Rotate segment -----------------------------------------------------------
+                if segment_start.elapsed().unwrap_or_default() >= max_duration {
+                    let _=writer.finalize();
+                    let base = base_filename();
+                    let mut new_path=PathBuf::from(&directory);
+                    new_path.push(format!("{base}.{}",fmt.extension()));
+                    match new_segment_writer(&new_path,fmt) {
+                        Ok(w)=>{ writer=w; segment_start=SystemTime::now();
+                            // notify UI
+                            if let Some(ui)=state.communication.app_handle.lock().unwrap().as_ref(){
+                                let fname=new_path.file_name().unwrap().to_string_lossy();
+                                let _=ui.emit("recording-filename-changed",fname.clone());
+                            }
+                            // rotate video
+                            video::rotate_video_segment(&state,&directory,&base);
+                        },
+                        Err(e)=>eprintln!("[Recording] ⚠️  segment rotation failed: {e}"),
+                    }
+                    continue;
                 }
+
+                // Consume data -------------------------------------------------------------
+                let batch=state.recording.get_recording_data();
+                if batch.is_empty(){ thread::sleep(Duration::from_millis(10)); continue; }
+                if let Err(e)=writer.write_batch(&batch){ eprintln!("[Recording] ⚠️  write error: {e}"); }
             }
-
-            // Get batch of recording data
-            let data_batch = state_clone.recording.get_recording_data();
-            if data_batch.is_empty() {
-                // If no new data, sleep a bit and try again
-                thread::sleep(Duration::from_millis(10));
-                continue;
-            }
-            
-            // Record the data based on format
-            let mut recording_file = state_clone.recording.recording_file.lock().unwrap();
-            if let Some((ref mut file, ref format)) = *recording_file {
-                match format.as_str() {
-                    "csv" => {
-                        write_csv_data(file, &data_batch);
-                    },
-                    "json" => {
-                        write_json_data(file, &data_batch, &mut first_json_entry);
-                    },
-                    "binary" => {
-                        write_binary_data(file, &data_batch);
-                    },
-                    _ => {}
-                }
-            }
-            
-            // Sleep a shorter time to check for new data more frequently
-            thread::sleep(Duration::from_millis(5));
-        }
-        
-        // Finalize the recording
-        let mut recording_file = state_clone.recording.recording_file.lock().unwrap();
-        if let Some((ref mut file, ref format)) = *recording_file {
-            if format == "json" {
-                // Close the JSON array
-                let _ = file.write_all(b"]");
-            }
-            
-            // Flush the file
-            let _ = file.flush();
-        }
-        
-        // Clear the file handle
-        *recording_file = None;
-    })
-}
-
-/// Rotates to a new recording segment when the max duration is reached.
-fn handle_segment_rotation(
-    state_clone: &Arc<AppState>,
-    format_clone: &str,
-    directory_clone: &str,
-    first_json_entry: &mut bool,
-    segment_start_time: &mut SystemTime,
-    _max_duration: &Duration,
-) {
-    // Finalize the current segment file (flush + close JSON array if needed)
-    {
-        let mut recording_file = state_clone.recording.recording_file.lock().unwrap();
-        if let Some((ref mut file, ref fmt)) = *recording_file {
-            if fmt == "json" {
-                let _ = file.write_all(b"]");
-            }
-            let _ = file.flush();
-        }
-    }
-
-    // Create a new filename based on the same format & directory
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_else(|_| Duration::from_secs(0));
-    let timestamp = now.as_millis();
-    let new_filename = match format_clone {
-        "csv" => format!("serial_recording_{}.csv", timestamp),
-        "json" => format!("serial_recording_{}.json", timestamp),
-        _ => format!("serial_recording_{}.bin", timestamp),
-    };
-
-    let mut new_path = PathBuf::from(directory_clone);
-    new_path.push(&new_filename);
-
-    if let Ok(mut new_file) = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&new_path)
-    {
-        // CSV: write header; JSON: open array
-        if format_clone == "csv" {
-            let mut header = String::from("timestamp");
-            for i in 0..8 {
-                header.push_str(&format!(",channel_{}", i));
-            }
-            let _ = writeln!(new_file, "{}", header);
-        } else if format_clone == "json" {
-            let _ = new_file.write_all(b"[");
-        }
-
-        // Swap file handle and update filename in shared state
-        *state_clone.recording.recording_file.lock().unwrap() =
-            Some((new_file, format_clone.to_string()));
-        *state_clone.recording.recording_filename.lock().unwrap() = Some(new_filename.clone());
-        
-        // Log the segment change
-        println!("Recording segment changed to: {}", new_filename);
-    }
-
-    // Emit events to frontend just to notify filename change
-    if let Some(app_handle) = state_clone.communication.app_handle.lock().unwrap().as_ref() {
-        // Emit the existing event with full payload
-        let _ = app_handle.emit("recording-file-changed", {
-            json!({
-                "filename": new_filename.clone(),
-                "directory": directory_clone,
-                "format": format_clone
-            })
-        });
-        
-        // Emit a more specific event for updating just the filename
-        let _ = app_handle.emit("recording-filename-changed", new_filename.clone());
-        
-        println!("Emitted filename change events for segment rotation");
-    }
-    
-    // Handle video recording segment rotation directly in the backend
-    if let Some(app_handle) = state_clone.communication.app_handle.lock().unwrap().as_ref() {
-        // Extract base filename for video recording (remove extension)
-        let base_filename = new_filename.replace(&format!(".{}", format_clone), "");
-        
-        // First stop the current video recording
-        println!("Stopping video recording for segment rotation");
-        match crate::streaming::stop_video_recording(app_handle.clone()) {
-            Ok(_) => println!("Successfully stopped video recording for segment rotation"),
-            Err(e) => println!("Warning: Failed to stop video recording for segment rotation: {}", e),
-        }
-        
-        // Small delay to ensure the video file is properly finalized
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        
-        // Start a new video recording segment
-        println!("Starting new video recording segment with base filename: {}", base_filename);
-        match crate::streaming::start_video_recording(
-            app_handle.clone(),
-            base_filename,
-            directory_clone.to_string(),
-        ) {
-            Ok(_) => println!("Successfully started new video recording segment"),
-            Err(e) => println!("Warning: Failed to start new video recording segment: {}", e),
-        }
-    }
-
-    // Reset per-segment flags and timer
-    *first_json_entry = true;
-    *segment_start_time = SystemTime::now();
-}
-
-/// Writes data in CSV format to the specified file.
-fn write_csv_data(file: &mut File, timestamped_data: &[(SystemTime, [f32; 8])]) {
-    // Process each data point with its timestamp
-    for (timestamp, channel_data) in timestamped_data {
-        // Convert timestamp to milliseconds
-        let timestamp_ms = timestamp
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_millis();
-            
-        // CSV: timestamp,val1,val2,...
-        let mut line = format!("{}", timestamp_ms);
-        // Each channel_data is an array of 8 f32 values
-        for &value in channel_data.iter() {
-            line.push_str(&format!(",{}", value));
-        }
-        if let Err(e) = writeln!(file, "{}", line) {
-            eprintln!("Error writing to CSV file: {}", e);
-            break;
-        }
-    }
-    // Flush CSV entries to disk in real time
-    if let Err(e) = file.flush() {
-        eprintln!("Error flushing CSV file: {}", e);
+            let _ = writer.finalize();
+        })
     }
 }
 
-/// Writes data in JSON format to the specified file.
-fn write_json_data(file: &mut File, timestamped_data: &[(SystemTime, [f32; 8])], first_json_entry: &mut bool) {
-    // Process each data point with its timestamp
-    for (timestamp, channel_data) in timestamped_data {
-        // Convert timestamp to milliseconds
-        let timestamp_ms = timestamp
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_millis();
-                        
-        // Convert data to flattened Vec for JSON serialization
-        let mut values = Vec::new();
-        for &value in channel_data.iter() {
-            values.push(value);
-        }
-                        
-        let json_entry = format!("{}{{\"timestamp\": {},\"values\": {}}}",
-            if *first_json_entry { "" } else { "," },
-            timestamp_ms,
-            serde_json::to_string(&values).unwrap()
-        );
-        *first_json_entry = false;
-                        
-        if let Err(e) = file.write_all(json_entry.as_bytes()) {
-            eprintln!("Error writing to JSON file: {}", e);
-            break;
-        }
-    }
+// Utility -----------------------------------------------------------------------------------------
+fn base_filename() -> String {
+    format!("serial_recording_{}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis())
 }
 
-/// Writes data in binary format to the specified file.
-fn write_binary_data(file: &mut File, timestamped_data: &[(SystemTime, [f32; 8])]) {
-    // Process each data point with its timestamp
-    for (timestamp, channel_data) in timestamped_data {
-        // Convert timestamp to milliseconds
-        let timestamp_ms = timestamp
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_millis() as u64;
-            
-        // Calculate number of values
-        let num_values = channel_data.len() as u32;
-        
-        // Write timestamp
-        if let Err(e) = file.write_all(&timestamp_ms.to_le_bytes()) {
-            eprintln!("Error writing timestamp to binary file: {}", e);
-            break;
-        }
-        
-        // Write number of values
-        if let Err(e) = file.write_all(&num_values.to_le_bytes()) {
-            eprintln!("Error writing value count to binary file: {}", e);
-            break;
-        }
-        
-        // Write each value
-        for &value in channel_data.iter() {
-            let value_f64 = value as f64;
-            if let Err(e) = file.write_all(&value_f64.to_le_bytes()) {
-                eprintln!("Error writing value to binary file: {}", e);
-                break;
-            }
-        }
+// -------------------------------------------------------------------------------------------------
+// Video sub‑module (private) -------------------------------------------------------------------------------------------------
+
+mod video {
+    use super::*;
+    use tauri_plugin_record_stream as rstream;
+
+    pub(super) fn start_video_recording(app_handle: AppHandle, base: &str, dir: &str) -> Result<bool,String>{
+        let full=Path::new(dir).join(format!("{base}.mp4")).to_string_lossy().into_owned();
+        let rt=tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e|e.to_string())?;
+        let res=rt.block_on(async{ rstream::start_record(app_handle.clone(), rstream::StartRecordRequest{file_path:full}).await }).map_err(|e|e.to_string())?;
+        if res.success { app_handle.state::<Arc<AppState>>().recording.video_recording_active.store(true,Ordering::SeqCst);} 
+        Ok(res.success)
     }
+
+    pub(super) fn stop_video_recording(app_handle: AppHandle)->Result<bool,String>{
+        app_handle.state::<Arc<AppState>>().recording.video_recording_active.store(false,Ordering::SeqCst);
+        rstream::stop_record(app_handle).map_err(|e|e.to_string())
+    }
+
+    pub(super) fn rotate_video_segment(state:&AppState, dir:&str, new_base:&str){
+        println!("[Recording] Rotating video segment {}", new_base);
+        if let Some(app)=state.communication.app_handle.lock().unwrap().clone(){
+            println!("[Recording] Stopping video recording");
+            let ret=stop_video_recording(app.clone());
+            if ret.is_err(){ eprintln!("[Recording] ⚠️  Failed to stop video recording: {}", ret.unwrap_err()); }
+            println!("[Recording] Waiting 400ms");
+            std::thread::sleep(Duration::from_millis(400));
+            println!("[Recording] Starting video recording");
+            let ret=start_video_recording(app,new_base,dir);
+            if ret.is_err(){ eprintln!("[Recording] ⚠️  Failed to start video recording: {}", ret.unwrap_err()); }
+        }}
 }

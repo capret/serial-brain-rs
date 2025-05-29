@@ -11,9 +11,9 @@ mod mdns;
 use commands::{
     connect_serial, connect_socket, discover_streaming_devices, get_available_ports, get_app_state,
     set_default_stream_url, get_recording_filename, push_video_frame, 
-    record_video_stream, send_serial, start_fake_data, start_recording, start_stream_recording, start_streaming, 
-    start_video_recording, stop_data_acquisition, stop_recording, stop_stream_recording, stop_streaming, 
-    stop_video_recording, toggle_fake_data, toggle_fake_signal,
+    send_serial, start_fake_data, start_recording, start_stream_recording, start_streaming, 
+    stop_data_acquisition, stop_recording, stop_stream_recording, stop_streaming, 
+    toggle_fake_data, toggle_fake_signal,
 };
 use file_utils::get_file_stats;
 use state::AppState;
@@ -46,13 +46,10 @@ pub fn run() {
             set_default_stream_url,
             get_recording_filename,
             get_file_stats,
-            record_video_stream,
-            stop_video_recording,
             push_video_frame,
             send_serial,
             start_fake_data,
             start_stream_recording,
-            start_video_recording,
             stop_stream_recording,
             stop_data_acquisition,
             start_streaming,

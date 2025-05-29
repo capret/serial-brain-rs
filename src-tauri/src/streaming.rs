@@ -1,5 +1,4 @@
 use crate::state::AppState;
-use crate::commands::{start_video_recording as cmd_start_video_recording, stop_video_recording as cmd_stop_video_recording};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use image::{ImageBuffer, Rgb, GenericImageView, ColorType};
 use image::codecs::png::PngEncoder;
@@ -11,6 +10,7 @@ use std::sync::{atomic::Ordering, Arc};
 use std::time::Duration;
 use std::thread;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_record_stream;
 
 // Constants for fake stream image generation
 const W: u32 = 320;
@@ -247,40 +247,4 @@ fn start_real_stream(
     Ok(())
 }
 
-/// Starts a video recording with the specified filename and directory.
-/// This function is a wrapper around the command-based implementation to allow
-/// direct calls from other modules like recording.rs during segment rotation.
-pub fn start_video_recording(
-    app_handle: AppHandle,
-    filename: String,
-    directory: String,
-) -> Result<bool, String> {
-    // Need to use a runtime for the async function call
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| format!("Failed to create runtime: {}", e))?;
-    
-    // Run the async function to start video recording
-    runtime.block_on(async {
-        cmd_start_video_recording(app_handle, filename, directory).await
-    })
-}
 
-/// Stops an active video recording.
-/// This function is a wrapper around the command-based implementation to allow
-/// direct calls from other modules like recording.rs during segment rotation.
-pub fn stop_video_recording(
-    app_handle: AppHandle,
-) -> Result<bool, String> {
-    // Need to use a runtime for the async function call
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| format!("Failed to create runtime: {}", e))?;
-    
-    // Run the async function to stop video recording
-    runtime.block_on(async {
-        cmd_stop_video_recording(app_handle).await
-    })
-}

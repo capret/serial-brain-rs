@@ -1,6 +1,5 @@
 use std::{
     collections::VecDeque,
-    fs::File,
     sync::{atomic::AtomicBool, mpsc::Sender, Arc, Mutex},
     thread::JoinHandle,
     time::SystemTime,
@@ -177,7 +176,6 @@ pub struct RecordingState {
     pub recording_buffer: Mutex<VecDeque<(SystemTime, ChannelData)>>, // Dedicated buffer for recording with timestamps
     pub recording_active: Arc<AtomicBool>,
     pub recording_handle: Mutex<Option<JoinHandle<()>>>,
-    pub recording_file: Mutex<Option<(File, String)>>,
     pub recording_filename: Mutex<Option<String>>, // Store current recording filename
     pub video_recording_active: Arc<AtomicBool>, // Flag for video recording
 }
@@ -188,7 +186,6 @@ impl RecordingState {
             recording_buffer: Mutex::new(VecDeque::new()),
             recording_active: Arc::new(AtomicBool::new(false)),
             recording_handle: Mutex::new(None),
-            recording_file: Mutex::new(None),
             recording_filename: Mutex::new(None),
             video_recording_active: Arc::new(AtomicBool::new(false)),
         }

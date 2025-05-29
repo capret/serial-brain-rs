@@ -56,7 +56,9 @@
     "noFolderSelected": "未选择文件夹",
     "noFiles": "选定目录中没有找到录制文件",
     "selectDirectory": "请选择目录以查看录制文件",
-    "confirmDeletePrefix": "您确定要删除"
+    "confirmDeletePrefix": "您确定要删除",
+    "video": "视频",
+    "noVideo": "无视频"
   },
   "signal": {
     "title": "信号设置",
@@ -134,9 +136,7 @@
     "enabled": "已启用",
     "disabled": "已禁用",
     "recordTest": "录制测试",
-    "recording": "正在录制",
-    "video": "视频",
-    "noVideo": "无视频"
+    "recording": "正在录制"
   },
   "auth": {
     "email": "邮箱",
