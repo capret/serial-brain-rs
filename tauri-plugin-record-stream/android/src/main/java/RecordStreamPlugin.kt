@@ -346,7 +346,7 @@ class RecordStreamPlugin(private val activity: Activity) : Plugin(activity) {
                 val isCovered = edgeCount < 500 // Threshold for considering camera covered
                 
                 // Log the edge detection results
-                Log.d("RecordStreamPlugin", "Edge detection: $edgeCount edges found, covered: $isCovered")
+                // Log.d("RecordStreamPlugin", "Edge detection: $edgeCount edges found, covered: $isCovered")
                 
                 // Clean up edge detection resources
                 grayMat.release()
