@@ -28,6 +28,7 @@ use std::sync::{atomic::Ordering, Arc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Manager, Emitter};
+use tauri_plugin_android_forward_service;
 
 // -------------------------------------------------------------------------------------------------
 // Public helpers -------------------------------------------------------------------------------------------------
@@ -49,6 +50,13 @@ pub fn start_recording(
     if let Err(e) = start_video_recording(app_handle.clone(), base_name.clone(), directory.clone()) {
         eprintln!("[Recording] ⚠️  Failed to start video recording: {e}");
     }
+    
+    // Start Android foreground service (non-fatal on failure) -------------------------------------
+    if let Err(e) = tauri_plugin_android_forward_service::start_forward_service(app_handle.clone()) {
+        eprintln!("[Recording] ⚠️  Failed to start Android foreground service: {e}");
+    } else {
+        println!("[Recording] Android foreground service started");
+    }
 
     // First data segment ---------------------------------------------------------------------------
     let mut first_path = PathBuf::from(&directory);
@@ -69,10 +77,16 @@ pub fn start_recording(
         max_duration,
         app_handle.clone(),
     );
+    // Store the current recording filename in the state
+    let filename = first_path.file_name().unwrap().to_string_lossy().into_owned();
+    *state.recording.recording_filename.lock().unwrap() = Some(filename.clone());
+    
+    // Store the handle and set recording active flag
     *state.recording.recording_handle.lock().unwrap() = Some(handle);
     state.recording.recording_active.store(true, Ordering::SeqCst);
 
-    Ok(first_path.file_name().unwrap().to_string_lossy().into())
+    // Return the filename
+    Ok(filename)
 }
 
 /// Stops the current recording (data + video).
@@ -87,7 +101,16 @@ pub fn stop_recording(app_handle: AppHandle) -> Result<(), String> {
         let _ = h.join();
     }
 
-    let _ = stop_video_recording(app_handle);
+    // Stop video recording
+    let _ = stop_video_recording(app_handle.clone());
+    
+    // Stop Android foreground service (non-fatal on failure)
+    if let Err(e) = tauri_plugin_android_forward_service::stop_forward_service(app_handle.clone()) {
+        eprintln!("[Recording] ⚠️  Failed to stop Android foreground service: {e}");
+    } else {
+        println!("[Recording] Android foreground service stopped");
+    }
+    
     Ok(())
 }
 
@@ -204,6 +227,12 @@ impl RecordingController {
 
                 // Rotate segment -----------------------------------------------------------
                 if segment_start.elapsed().unwrap_or_default() >= max_duration {
+                    // Capture the current filename before finalizing
+                    let current_filename = state.recording.recording_filename.lock().unwrap().clone();
+                    // Use the current filename as the completed filename if it exists
+                    let completed_filename = current_filename.unwrap_or_default();
+                    
+                    // Finalize the current segment
                     let _=writer.finalize();
                     let base = base_filename();
                     let mut new_path=PathBuf::from(&directory);
@@ -213,7 +242,13 @@ impl RecordingController {
                             // notify UI
                             if let Some(ui)=state.communication.app_handle.lock().unwrap().as_ref(){
                                 let fname=new_path.file_name().unwrap().to_string_lossy();
-                                let _=ui.emit("recording-filename-changed",fname.clone());
+                                // Update the filename in state
+                                let new_filename = fname.to_string();
+                                *state.recording.recording_filename.lock().unwrap() = Some(new_filename.clone());
+                                // First emit the completed event with the old filename
+                                let _=ui.emit("recording-completed", completed_filename);
+                                // Then emit the filename changed event with the new filename
+                                let _=ui.emit("recording-filename-changed", new_filename);
                             }
                             // rotate video
                             video::rotate_video_segment(&state,&directory,&base);

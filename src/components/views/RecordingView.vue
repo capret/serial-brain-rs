@@ -27,11 +27,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, inject } from 'vue';
+import { ref, onMounted, onUnmounted, watch, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { exists, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { exists, create as createDir } from '@tauri-apps/plugin-fs';
+import { BaseDirectory } from '@tauri-apps/api/path';
+import { isRecording as storeIsRecording, currentRecordingFilename as storeFilename } from '../../utils/records/fileStore';
+// Used for path operations
 import * as path from '@tauri-apps/api/path';
 import {
   recordingDirectory,
@@ -61,9 +64,9 @@ import {
   RecordedFilesList
 } from '../records';
 
-// For changing sidebar view
-const setActiveView = inject<(view: string) => void>('setActiveView');
-const setAdditionalViews = inject<(view: string) => void>('setAdditionalViews');
+// For changing sidebar view - using no-op function as fallback
+// Only keeping setAdditionalViews since that's what we use
+const setAdditionalViews = inject<(view: string) => void>('setAdditionalViews', () => {});
 
 
 // Define interfaces for backend response types
@@ -138,11 +141,19 @@ async function setupEventListeners() {
     }
   });
 
-  // Listen for recording filename changes (especially important for segment changes)
-  await listen('recording-filename-changed', (event) => {
-    const newFilename = event.payload as string;
-    console.log('Recording filename changed to:', newFilename);
-    recordingFilename.value = newFilename;
+  // Use the centralized reactive state from fileStore instead of events
+  
+  // Sync our local state with the store state
+  watch(storeIsRecording, (newIsRecording) => {
+    isRecording.value = newIsRecording;
+    console.log('RecordingView: Synced recording state from store:', newIsRecording);
+  });
+  
+  watch(storeFilename, (newFilename) => {
+    if (newFilename && isRecording.value) {
+      recordingFilename.value = newFilename;
+      console.log('RecordingView: Synced filename from store:', newFilename);
+    }
   });
 }
 
@@ -293,6 +304,8 @@ onMounted(async () => {
   }
 });
 
+// No need for custom event handlers with centralized state
+
 // Clean up when component unmounts
 onUnmounted(() => {
   // NOTE: We no longer stop recording when navigating away from this page
@@ -309,6 +322,8 @@ onUnmounted(() => {
     recordingCompletedUnsubscribe();
     recordingCompletedUnsubscribe = null;
   }
+  
+  // No custom event listeners to clean up with centralized state
 
   // Clean up the update interval for active recordings
   if (activeUpdateInterval) {
@@ -331,9 +346,12 @@ async function selectDirectory(): Promise<void> {
     // Create the directory if it doesn't exist
     if (!folderExists) {
       console.log('Creating signal_data directory in Documents');
-      await mkdir('signal_data', {
-        baseDir: BaseDirectory.Document,
-      });
+      try {
+        await createDir('signal_data', { baseDir: BaseDirectory.Document });
+        console.log('signal_data directory created');
+      } catch (e) {
+        console.error('Error creating signal_data directory:', e);
+      }
     }
 
     // Join the document dir with signal_data folder to get the full path
@@ -356,9 +374,8 @@ async function startRecording(format?: string, directory?: string, duration?: nu
       console.log('Camera not streaming, activating streaming view and starting camera stream');
 
       // Toggle the streaming view on in the sidebar
-      if (setActiveView && setAdditionalViews) {
-        setAdditionalViews('streaming');
-      }
+      // Always call the function since we're using no-op fallbacks
+      setAdditionalViews('streaming');
 
       // Start streaming using the shared state function
       const streamUrlResponse = await invoke('get_app_state', {
@@ -409,21 +426,10 @@ async function startRecording(format?: string, directory?: string, duration?: nu
 
     console.log('Received filename from backend:', actualFilename);
     recordingFilename.value = actualFilename;
-
-
-    // Only start the Android service if it's not already running
-    if (!isServiceRunning.value && !isSegmentChange) {
-      try {
-        await invoke('plugin:android-forward-service|start_forward_service');
-        console.log('Android foreground service started');
-        isServiceRunning.value = true;
-      } catch (e) {
-        console.warn('Forward service not available or failed to start:', e);
-      }
-    } else if (isSegmentChange) {
-      console.log('Segment change - not restarting Android service');
-    } else {
-      console.log('Android service already running - not restarting');
+    
+    // Android service is now handled by the backend automatically
+    if (isSegmentChange) {
+      console.log('Segment change - Android service handled by backend');
     }
 
     isRecording.value = true;
@@ -458,17 +464,10 @@ async function startRecording(format?: string, directory?: string, duration?: nu
 async function stopRecording(): Promise<void> {
   try {
     await invoke('stop_recording');
-
-    // Stop Android foreground service
-    if (isServiceRunning.value) {
-      try {
-        await invoke('plugin:android-forward-service|stop_forward_service');
-        console.log('Android foreground service stopped');
-        isServiceRunning.value = false;
-      } catch (e) {
-        console.warn('Forward service not available or failed to stop:', e);
-      }
-    }
+    
+    // Android service is now handled by the backend automatically
+    console.log('Recording stopped - Android service handled by backend');
+    isServiceRunning.value = false; // Reset the tracking variable
 
     // Clean up file watcher if active
     if (fileWatchUnsubscribe.value) {

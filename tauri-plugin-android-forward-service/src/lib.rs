@@ -21,6 +21,16 @@ use desktop::AndroidForwardService;
 #[cfg(mobile)]
 use mobile::AndroidForwardService;
 
+/// Start the Android foreground service
+pub fn start_forward_service<R: Runtime>(app: tauri::AppHandle<R>) -> Result<()> {
+  app.android_forward_service().start_service()
+}
+
+/// Stop the Android foreground service
+pub fn stop_forward_service<R: Runtime>(app: tauri::AppHandle<R>) -> Result<()> {
+  app.android_forward_service().stop_service()
+}
+
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the android-forward-service APIs.
 pub trait AndroidForwardServiceExt<R: Runtime> {
   fn android_forward_service(&self) -> &AndroidForwardService<R>;

@@ -97,8 +97,9 @@ import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { exists } from '@tauri-apps/plugin-fs';
-import { formatDate, formatTime, formatDuration, formatFileSize } from '../../utils/records/formatters';
 import type { RecordingFile } from '../../utils/records/types';
+import { formatDate, formatTime, formatDuration, formatFileSize } from '../../utils/records/formatters';
+import { lastCompletedFilename } from '../../utils/records/fileStore';
 
 // Define props
 const props = defineProps({
@@ -127,6 +128,9 @@ const startTime = ref<number | null>(null);
 const currentDuration = ref<string | null>(null);
 let updateInterval: number | undefined = undefined;
 
+// Store listeners for cleanup
+const listeners: Array<() => void> = [];
+
 // Video badge state
 const hasVideo = ref<boolean | null>(null); // null = not checked yet, true/false = has/doesn't have video
 
@@ -145,22 +149,51 @@ const liveDuration = computed(() => {
 });
 
 // Set up the live duration updating for active recordings
-onMounted(async () => {
+onMounted(() => {
+  // Set up live updates for active recordings
   setupLiveDurationUpdates();
   
   // Check if a corresponding video file exists
-  await checkVideoExists();
+  checkVideoExists();
+  
+    // Watch the lastCompletedFilename from fileStore to detect completed recordings
+  watch(lastCompletedFilename, (newCompletedFilename) => {
+    // Skip if empty
+    if (!newCompletedFilename) return;
+    
+    // Check if this card represents the file that just completed
+    if (props.file.name === newCompletedFilename) {
+      console.log(`This file just completed rotation: ${newCompletedFilename}`);
+      
+      // Force duration recalculation immediately since fileStore has already waited
+      try {
+        // Re-extract duration from filename using the latest file metadata
+        const extractedDuration = extractDurationFromFilename(props.file);
+        if (extractedDuration) {
+          currentDuration.value = extractedDuration;
+          console.log(`Updated duration for completed recording ${props.file.name}: ${currentDuration.value}`);
+        }
+      } catch (error) {
+        console.error('Error updating completed recording duration:', error);
+      }
+    }
+  });
 });
 
 // Clean up on unmount
 onUnmounted(() => {
+  // Clear the update interval
   if (updateInterval) {
     clearInterval(updateInterval);
     updateInterval = undefined;
   }
+  
+  // Clean up all event listeners
+  listeners.forEach(unlisten => unlisten());
 });
 
 // Watch for changes in the active recording status
+// Watch for active recording state changes
 watch(() => props.isActiveRecording, (isActive: boolean) => {
   if (isActive) {
     setupLiveDurationUpdates();
@@ -170,8 +203,34 @@ watch(() => props.isActiveRecording, (isActive: boolean) => {
   }
 });
 
+// Watch for file changes to update duration calculation
+watch(() => props.file, (newFile) => {
+  console.log(`File changed: ${newFile.name}`);
+  
+  // Reset internal state
+  startTime.value = null;
+  currentDuration.value = null;
+  
+  // If this is an active recording, setup the live updates immediately
+  if (props.isActiveRecording) {
+    console.log(`Setting up live duration updates for active recording: ${newFile.name}`);
+    setupLiveDurationUpdates();
+  } else {
+    // For non-active recordings, calculate duration once
+    console.log(`Calculating one-time duration for completed recording: ${newFile.name}`);
+    const extractedDuration = extractDurationFromFilename(newFile);
+    if (extractedDuration) {
+      currentDuration.value = extractedDuration;
+    }
+  }
+  
+  // Check if video exists for this file
+  checkVideoExists();
+}, { immediate: true });
+
 // Extract recording start time from filename
 function extractDurationFromFilename(file: RecordingFile): string | null {
+  // Extract timestamp from filename
   const match = file.name.match(/serial_recording_(\d+)/);
   if (!match || !match[1]) return null;
   
@@ -183,15 +242,31 @@ function extractDurationFromFilename(file: RecordingFile): string | null {
     // For active recordings, use current time
     endTimestamp = Date.now();
   } else if (file.dateObject instanceof Date) {
-    // For completed recordings, use modified time
+    // For completed recordings, prioritize modified time from file stats
     endTimestamp = file.dateObject.getTime();
+    
+    // Perform a sanity check - if the calculated duration is too short (less than a second),
+    // something might be wrong with the timestamps. In this case, try to use file size to estimate duration.
+    const durationMs = endTimestamp - startTimestamp;
+    if (durationMs < 1000 && file.rawSize) {
+      // Roughly estimate duration based on file size (assuming ~1KB per second as a minimum)
+      // This is a fallback for when the timestamp approach fails
+      const estimatedDurationMs = Math.max(1000, file.rawSize / 1024 * 1000);
+      console.log(`Using estimated duration for ${file.name}: ${formatDuration(estimatedDurationMs)} based on file size ${file.rawSize} bytes`);
+      return formatDuration(estimatedDurationMs);
+    }
   } else {
     return null;
   }
   
   const durationMs = endTimestamp - startTimestamp;
-  if (durationMs <= 0) return null;
+  if (durationMs <= 0) {
+    // If we still have an invalid duration, use at least 1 second
+    console.log(`Invalid duration for ${file.name}, using minimum 1 second`);
+    return formatDuration(1000); // Minimum 1 second
+  }
   
+  console.log(`Calculated duration for ${file.name}: ${formatDuration(durationMs)}`);
   return formatDuration(durationMs);
 }
 
@@ -203,7 +278,21 @@ function setupLiveDurationUpdates(): void {
     const timestamp = parseInt(match[1]);
     if (!isNaN(timestamp)) {
       startTime.value = timestamp;
+      
+      // Calculate duration immediately instead of waiting for first interval
+      const now = Date.now();
+      const initialDurationMs = now - timestamp;
+      currentDuration.value = formatDuration(initialDurationMs);
+      console.log(`Initial duration for ${props.file.name}: ${currentDuration.value}`);
+    } else {
+      console.warn(`Invalid timestamp in filename: ${props.file.name}`);
+      // Set a fallback duration (current time minus 1 second) to avoid showing 00:00:01
+      currentDuration.value = formatDuration(1000); // Start with at least 1 second
     }
+  } else {
+    console.warn(`Could not extract timestamp from filename: ${props.file.name}`);
+    // Set a fallback duration
+    currentDuration.value = formatDuration(1000); // Start with at least 1 second
   }
   
   // Clear any existing interval

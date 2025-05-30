@@ -104,12 +104,12 @@
 </template>
 
 <script lang="ts" setup>
-import { computed } from 'vue';
-import { ref, watch, onUnmounted, onMounted } from 'vue';
-import FileCard from './FileCard.vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { type RecordingFile } from '../../utils/records/types';
 import { syncFile, deleteFile, uploadFile } from '../../utils/records/fileOperations';
-import fileStore from '../../utils/records/fileStore';
+import * as fileStore from '../../utils/records/fileStore';
+import { currentRecordingFilename as storeFilename, lastCompletedFilename } from '../../utils/records/fileStore';
+import FileCard from './FileCard.vue';
 
 // Props
 const props = defineProps({
@@ -219,7 +219,7 @@ async function initializeComponent(directoryPath: string) {
     console.log('Component first initialization complete');
   } 
   // Directory has changed
-  else if (directoryPath !== fileStore.currentDirectory) {
+  else if (directoryPath !== fileStore.currentDirectory.value) {
     console.log('Directory changed, reloading files');
     await fileStore.setDirectory(directoryPath);
     currentPage.value = 1; // Reset to first page on new directory
@@ -288,7 +288,7 @@ watch(() => props.recordingDirectory, async (newPath, oldPath) => {
     await initializeComponent(newPath);
   }
   // Handle directory change
-  else if (newPath !== fileStore.currentDirectory) {
+  else if (newPath !== fileStore.currentDirectory.value) {
     console.log(`Directory changed from: ${oldPath} to: ${newPath}`);
     await initializeComponent(newPath);
   }
@@ -296,6 +296,9 @@ watch(() => props.recordingDirectory, async (newPath, oldPath) => {
 
 // Store the last known recording filename to handle stop recording properly
 const lastRecordingFilename = ref('');
+
+// Store event listeners for cleanup
+const listeners: Array<() => void> = [];
 
 // Watch for recording state changes
 watch([() => props.isRecording, () => props.recordingFilename], async ([isRecording, filename]) => {
@@ -318,8 +321,50 @@ watch([() => props.isRecording, () => props.recordingFilename], async ([isRecord
   }
 });
 
+// Use centralized reactive state from fileStore instead of custom events
+onMounted(() => {
+  // Watch for changes to the last completed filename
+  watch(lastCompletedFilename, (newCompletedFilename) => {
+    console.log('Last completed filename changed:', newCompletedFilename);
+    
+    // Only process if we're initialized and have a recording directory
+    if (isInitialized.value && props.recordingDirectory && newCompletedFilename) {
+      // Update the component key to force a complete re-render of all file cards
+      // This ensures we show the updated duration after a file completes
+      componentKey.value++;
+      console.log('Component re-rendered after file completion');
+    }
+  });
+  
+  // Watch for changes to the current recording filename
+  watch(storeFilename, async (newFilename) => {
+    console.log('Current recording filename changed:', newFilename);
+    
+    // Update our local tracking of the last known filename
+    if (newFilename && newFilename.trim() !== '') {
+      lastRecordingFilename.value = newFilename;
+      console.log('Saved recording filename:', lastRecordingFilename.value);
+      
+      // Explicitly refresh files to get the new file
+      if (isInitialized.value && props.recordingDirectory) {
+        console.log('Refreshing files due to new recording filename');
+        await refreshFiles();
+      }
+    }
+    
+    // Trigger a re-render to ensure the UI is up to date
+    if (isInitialized.value && props.recordingDirectory) {
+      componentKey.value++;
+    }
+  });
+});
+
 // Clean up on unmount
 onUnmounted(() => {
+  // Clean up event listeners
+  listeners.forEach(unlisten => unlisten());
+  
+  // Clean up file store
   fileStore.cleanup();
 });
 

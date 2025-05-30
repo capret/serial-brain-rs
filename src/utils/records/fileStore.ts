@@ -1,56 +1,127 @@
-import { ref } from 'vue';
+import { ref, type Ref } from 'vue';
 import { listen } from '@tauri-apps/api/event';
-import { loadBasicFileInfo, loadFileMetadata } from './fileLoader';
+import { loadBasicFileInfo as loadBasicFileInfoOriginal, loadFileMetadata } from './fileLoader';
+
+// Wrapper function to handle ref parameter
+async function loadBasicFileInfo(directory: string | Ref<string>) {
+  const dirPath = typeof directory === 'string' ? directory : directory.value;
+  return loadBasicFileInfoOriginal(dirPath);
+}
 import { stat } from '@tauri-apps/plugin-fs';
 import { type RecordingFile } from './types';
 import { formatFileSize, formatDuration } from './formatters';
-
 
 // Create a reactive file store that can be shared between components
 const files = ref<RecordingFile[]>([]);
 const isLoading = ref(false);
 const errorMessage = ref<string>('');
-let currentDirectory = '';
-let isRecording = false;
-let currentRecordingFilename = '';
-let filenameChangeUnsubscribe: (() => void) | null = null;
+
+// Reactive recording state that components can subscribe to
+const currentRecordingFilename = ref<string>('');
+const isRecording = ref<boolean>(false);
+const lastCompletedFilename = ref<string>('');
+
+// Export reactive refs for direct use in components
+export { files, isLoading, errorMessage, currentRecordingFilename, isRecording, lastCompletedFilename };
+
+// Reactive state for directory management
+const currentDirectory = ref<string>('');
 let initialized = false;
 
-// Track recording state changes
-let lastRecordingState = false;
-let lastFilename = '';
+// Export currentDirectory for components to use
+export { currentDirectory };
+
+// Store all event unsubscribe functions for cleanup
+let eventUnsubscribes: Array<() => void> = [];
 
 // Set up event listeners
 async function setupEventListeners() {
   if (initialized) return;
   
-  filenameChangeUnsubscribe = await listen('recording-filename-changed', (event) => {
-    console.log('[FileStore] Recording filename changed event:', event.payload);
-    setTimeout(() => loadFiles(), 500);
-  });
-  
-  initialized = true;
-  console.log('[FileStore] Event listeners initialized');
+  try {
+    // Clear any existing listeners first
+    eventUnsubscribes.forEach(unsub => unsub());
+    eventUnsubscribes = [];
+    
+    // 1. Listen for recording-completed events - handle these first to update completed file duration
+    const completedUnsubscribe = await listen('recording-completed', async (event) => {
+      const completedFilename = event.payload as string;
+      console.log('[FileStore] Recording completed event:', completedFilename);
+      
+      // Store the last completed filename for reference
+      lastCompletedFilename.value = completedFilename;
+      console.log(files.value)
+      // First, update the specific completed file's metadata with proper duration
+      try {
+        // Wait a short time for the file system to settle
+        setTimeout(async () => {
+          // Find the file in our current list
+          const completedFile = files.value.find(f => f.name === completedFilename);
+          if (completedFile) {
+            console.log('[FileStore] Updating metadata for completed file:', completedFilename);
+            await updateSingleFileMetadata(completedFile.path);
+          } else {
+            console.warn('[FileStore] Completed file not found in list:', completedFilename);
+          }
+        }, 500);
+      } catch (error) {
+        console.error('[FileStore] Error handling recording-completed event:', error);
+      }
+    });
+    eventUnsubscribes.push(completedUnsubscribe);
+    
+    // 2. Listen for recording-filename-changed events - to handle rotation to next file
+    const filenameChangeUnsubscribe = await listen('recording-filename-changed', (event) => {
+      const newFilename = event.payload as string;
+      console.log('[FileStore] Recording filename changed event:', newFilename);
+      
+      // Update the reactive reference with the new filename
+      currentRecordingFilename.value = newFilename;
+      
+      // Explicitly add the new file to our list immediately
+      if (newFilename && currentDirectory.value) {
+        console.log('[FileStore] Adding new recording file:', newFilename);
+        // First add the file to ensure it appears right away
+        addNewRecordingFile(newFilename);
+      }
+      
+      // After updating the completed file, also refresh all files to get updated metadata
+      // Wait a bit longer to ensure the completed file update has finished
+      setTimeout(async () => {
+        // Force a complete refresh of the files to get updated metadata
+        await loadFiles();
+        
+        console.log('[FileStore] Files refreshed after rotation');
+      }, 800); // Increased delay to ensure file system has updated
+    });
+    eventUnsubscribes.push(filenameChangeUnsubscribe);
+    
+    initialized = true;
+    console.log('[FileStore] Event listeners initialized');
+  } catch (error) {
+    console.error('[FileStore] Error setting up event listeners:', error);
+  }
 }
 
 // Clean up event listeners
 export function cleanup() {
-  if (filenameChangeUnsubscribe) {
-    filenameChangeUnsubscribe();
-    filenameChangeUnsubscribe = null;
-  }
+  // Clean up all event listeners
+  eventUnsubscribes.forEach(unsub => unsub());
+  eventUnsubscribes = [];
+  
+  // Reset state
   initialized = false;
   console.log('[FileStore] Event listeners cleaned up');
 }
 
 // Set or change the current directory
 export async function setDirectory(directoryPath: string) {
-  if (!directoryPath || directoryPath === currentDirectory) {
+  if (!directoryPath || directoryPath === currentDirectory.value) {
     return;
   }
   
   console.log(`[FileStore] Setting directory: ${directoryPath}`);
-  currentDirectory = directoryPath;
+  currentDirectory.value = directoryPath;
   
   // Set up event listeners if not already done
   await setupEventListeners();
@@ -111,6 +182,7 @@ export async function loadFiles() {
   } catch (error) {
     console.error('[FileStore] Error loading files:', error);
     errorMessage.value = `Error loading files: ${error}`;
+    files.value = [];
   } finally {
     isLoading.value = false;
   }
@@ -150,10 +222,10 @@ export async function loadMetadataForPage(pageFiles: RecordingFile[]) {
 
 // Add a single new recording file without reloading all files
 export async function addNewRecordingFile(filename: string) {
-  if (!currentDirectory || !filename) return;
+  if (!currentDirectory.value || !filename) return;
   
   console.log(`[FileStore] Adding new recording file: ${filename}`);
-  const filePath = `${currentDirectory}/${filename}`;
+  const filePath = `${currentDirectory.value}/${filename}`;
   
   // Check if file already exists in our list to prevent duplicates
   const existingFileIndex = files.value.findIndex(file => file.path === filePath);
@@ -184,37 +256,43 @@ export async function addNewRecordingFile(filename: string) {
   }
 }
 
+// Track previous state for optimization
+let previousRecordingState = false;
+let previousFilename = '';
+
 // Update recording state with optimized file handling
 export async function updateRecordingState(recording: boolean, filename: string) {
   // Skip if nothing has changed and we're not forcing an update
-  if (recording === lastRecordingState && filename === lastFilename && isRecording === recording) {
+  if (recording === previousRecordingState && 
+      filename === previousFilename && 
+      isRecording.value === recording) {
     console.log('[FileStore] Recording state unchanged, skipping update');
     return;
   }
   
   console.log(`[FileStore] Updating recording state: recording=${recording}, filename=${filename}`);
   
-  // Keep track of last filename before updating state
-  const previousFilename = currentRecordingFilename;
+  // Keep track of previous filename before updating state
+  const prevFilename = currentRecordingFilename.value;
   
-  // Update state
-  isRecording = recording;
+  // Update reactive state
+  isRecording.value = recording;
   
   // Store new filename if provided, or keep the previous one if stopping a recording
   if (filename && filename.trim() !== '') {
-    currentRecordingFilename = filename;
+    currentRecordingFilename.value = filename;
     console.log(`[FileStore] Setting current recording filename to: ${filename}`);
-  } else if (!recording && previousFilename) {
+  } else if (!recording && prevFilename) {
     // When stopping a recording but no filename provided, keep the previous one for proper cleanup
-    console.log(`[FileStore] Keeping previous filename for stopping: ${previousFilename}`);
+    console.log(`[FileStore] Keeping previous filename for stopping: ${prevFilename}`);
   }
   
-  // Update tracking variables
-  const wasRecording = lastRecordingState;
-  lastRecordingState = recording;
-  lastFilename = filename || currentRecordingFilename; // Ensure we track the actual filename
+  // Update tracking variables for change detection
+  const wasRecording = previousRecordingState;
+  previousRecordingState = recording;
+  previousFilename = filename || currentRecordingFilename.value; // Ensure we track the actual filename
   
-  if (!currentDirectory) return;
+  if (!currentDirectory.value) return;
   
   // Optimized handling of recording state changes
   if (recording && !wasRecording && filename) {
@@ -224,14 +302,14 @@ export async function updateRecordingState(recording: boolean, filename: string)
     // Stopping a recording - update the file's metadata
     const filenameToUpdate = filename || previousFilename;
     if (filenameToUpdate) {
-      const filePath = `${currentDirectory}/${filenameToUpdate}`;
+      const filePath = `${currentDirectory.value}/${filenameToUpdate}`;
       await updateSingleFileMetadata(filePath);
       console.log(`[FileStore] Updated file metadata after stopping recording: ${filePath}`);
     }
   } else if (recording && filename) {
     // If already recording but navigated back to page, ensure file exists
     console.log(`[FileStore] Ensuring recording file exists in list: ${filename}`);
-    const filePath = `${currentDirectory}/${filename}`;
+    const filePath = `${currentDirectory.value}/${filename}`;
     const fileExists = files.value.some(file => file.path === filePath);
     
     if (!fileExists) {
@@ -242,7 +320,7 @@ export async function updateRecordingState(recording: boolean, filename: string)
       // force reload files from directory to ensure we have the latest state
       const stillNotExists = !files.value.some(file => file.path === filePath);
       if (stillNotExists) {
-        console.log(`[FileStore] Active recording file still not found, reloading directory: ${currentDirectory}`);
+        console.log(`[FileStore] Active recording file still not found, reloading directory: ${currentDirectory.value}`);
         await loadFiles();
       }
     } else {
@@ -268,15 +346,15 @@ export async function removeFile(filePath: string) {
 
 // Helper function to check if a file is currently being recorded
 export function isActiveRecording(filePath: string): boolean {
-  if (!isRecording || !currentRecordingFilename) return false;
+  if (!isRecording.value || !currentRecordingFilename.value) return false;
   
   // Extract filename from path for comparison
   const pathParts = filePath.split('/');
   const filename = pathParts[pathParts.length - 1];
   
   // Double check against the current recording filename
-  const isActive = filename === currentRecordingFilename;
-  console.log(`[FileStore] Checking if ${filename} is active recording: ${isActive} (current: ${currentRecordingFilename})`);
+  const isActive = filename === currentRecordingFilename.value;
+  console.log(`[FileStore] Checking if ${filename} is active recording: ${isActive} (current: ${currentRecordingFilename.value})`);
   return isActive;
 }
 
@@ -304,7 +382,7 @@ export function updateFileSize(filePath: string, size: number, formattedSize: st
 }
 
 // Update a single file's metadata (e.g., when recording stops)
-async function updateSingleFileMetadata(filePath: string) {
+export async function updateSingleFileMetadata(filePath: string) {
   if (!filePath) return;
   
   console.log(`[FileStore] Updating metadata for single file: ${filePath}`);
