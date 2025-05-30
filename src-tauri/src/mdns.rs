@@ -16,7 +16,7 @@ use tauri::{AppHandle, Manager, Emitter};
 use libmdns::Responder;
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use serde::{Serialize, Deserialize};
-
+use rand::Rng;
 use crate::state::AppState;
 
 /// Convenience wrapper that tries to pick the first non-loopback IPv4
@@ -140,6 +140,59 @@ pub struct MdnsDevice {
     pub txt_records: Vec<String>,  // TXT records
 }
 
+/// Start a background thread that continuously scans for streaming devices
+/// This ensures the default_stream_url is always available in the backend state
+pub fn start_background_scanner(app: AppHandle) -> anyhow::Result<()> {
+    println!("[mDNS] Starting background scanner thread");
+    
+    // Clone app handle for thread
+    let app_clone = app.clone();
+    
+    // Create a background thread for periodic scanning
+    thread::spawn(move || {
+        // Wait a bit before first scan to allow system to initialize
+        thread::sleep(Duration::from_secs(2));
+        
+        // Initial discovery
+        if let Err(e) = discover_mdns_devices(app_clone.clone(), String::from("_iot._tcp.local.")) {
+            println!("[mDNS] Background scanner initial discovery error: {}", e);
+        }
+        
+        // Continuous scanning loop
+        loop {
+            // Sleep between scans to avoid excessive network traffic
+            thread::sleep(Duration::from_secs(30));
+            
+            // Get app state to check if app is still running
+            let state = match app_clone.try_state::<Arc<AppState>>() {
+                Some(state) => state,
+                None => {
+                    println!("[mDNS] Background scanner: app state not available, exiting");
+                    break;
+                }
+            };
+            
+            // Check if we already have discovered devices
+            let devices_count = {
+                let devices = state.mdns.discovered_devices.lock().unwrap();
+                devices.len()
+            };
+            
+            // Only scan if we don't have any devices or periodically refresh
+            if devices_count == 0 || rand::thread_rng().gen_bool(0.2) { // 20% chance to refresh even if we have devices
+                println!("[mDNS] Background scanner running discovery scan");
+                if let Err(e) = discover_mdns_devices(app_clone.clone(), String::from("_iot._tcp.local.")) {
+                    println!("[mDNS] Background scanner discovery error: {}", e);
+                }
+            } else {
+                println!("[mDNS] Background scanner: using {} cached devices", devices_count);
+            }
+        }
+    });
+    
+    Ok(())
+}
+
 /// Discover devices on the local network using mDNS
 /// Uses mdns-sd for discovery
 pub fn discover_mdns_devices(app: AppHandle, service_type: String) -> anyhow::Result<()> {
@@ -259,7 +312,32 @@ pub fn discover_mdns_devices(app: AppHandle, service_type: String) -> anyhow::Re
                         // Final emit of all discovered devices
                         let state = app_clone.state::<Arc<AppState>>();
                         let devices = state.mdns.discovered_devices.lock().unwrap().clone();
-                        app_clone.emit("mdns_devices_list", devices).unwrap_or_default();
+                        app_clone.emit("mdns_devices_list", devices.clone()).unwrap_or_default();
+                        
+                        // Update default_stream_url if we have any devices
+                        if !devices.is_empty() {
+                            // Find a camera device (preferring ones with 'cam' in the name)
+                            let camera_device = devices.iter()
+                                .find(|d| d.name.to_lowercase().contains("cam"))
+                                .or_else(|| devices.first());
+                                
+                            if let Some(device) = camera_device {
+                                // Construct the URL for the device
+                                let url = format!("http://{}:{}/stream", device.ip, device.port);
+                                
+                                // Update the default stream URL in the state
+                                let mut default_url = state.stream.default_stream_url.lock().unwrap();
+                                
+                                // Only update if we don't already have a URL
+                                if default_url.is_empty() {
+                                    *default_url = url.clone();
+                                    println!("[mDNS] Updated default stream URL to: {}", url);
+                                    
+                                    // Emit an event to notify the frontend that the default URL has changed
+                                    app_clone.emit("default_stream_url_updated", url).unwrap_or_default();
+                                }
+                            }
+                        }
                         
                         // Log completion
                         let msg = format!("[mDNS] Discovery completed for {}", service_type);

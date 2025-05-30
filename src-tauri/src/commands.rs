@@ -154,7 +154,7 @@ pub fn get_available_ports() -> Result<Vec<String>, String> {
 #[tauri::command]
 pub fn start_streaming(
     app_handle: AppHandle,
-    path: String,
+    path: Option<String>,
     fake: bool
 ) -> Result<(), String> {
     // Delegate to the implementation in the streaming module

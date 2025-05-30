@@ -316,7 +316,7 @@ async function toggleStreaming() {
   try {
     // The checkbox already updated isStreaming.value through v-model
     // So we need to act according to the new value
-    const success = await toggleStreamingState(isStreaming.value, streamUrl.value);
+    const success = await toggleStreamingState(isStreaming.value);
     
     if (success) {
       console.log(`Streaming ${isStreaming.value ? 'started' : 'stopped'} successfully`);
@@ -439,6 +439,13 @@ onMounted(async () => {
   } catch (error) {
     console.error('Error fetching initial states:', error);
   }
+  
+  // Listen for default stream URL updates from the backend
+  await listen<string>('default_stream_url_updated', ({ payload }) => {
+    console.log('Default stream URL updated in backend:', payload);
+    streamUrl.value = payload;
+    sharedStreamUrl.value = payload;
+  });
 
   /* ---------- frame listener ---------- */
   frameUnlisten = await listen<string>('frame', ({ payload }) => {
@@ -468,15 +475,11 @@ onMounted(async () => {
   // Set up device discovery listeners
   await setupDeviceListeners();
   
-  // Always load cached devices to ensure the list is populated
+  // Just load cached devices from the backend
+  // The background scanner will keep these updated
   loadCachedDevices();
   
-  // Only start new device discovery if we're not already streaming
-  if (!isStreaming.value) {
-    discoverDevices();
-  } else {
-    console.log('Streaming already active, skipping device discovery scan');
-  }
+  console.log('Using cached devices from backend scanner');
 });
 
 onUnmounted(() => {
@@ -639,6 +642,14 @@ async function selectDevice(device: any) {
   
   // Save this URL as the default in backend state
   await setDefaultStreamUrl(newUrl);
+  
+  // If streaming is already active, restart with the new URL
+  if (isStreaming.value) {
+    console.log('Restarting streaming with new URL');
+    // Toggle streaming off and on to restart with new URL
+    await invoke('stop_streaming');
+    await toggleStreamingState(true, newUrl);
+  }
 }
 
 // Check if a device is currently selected

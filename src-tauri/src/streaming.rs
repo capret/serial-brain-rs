@@ -20,11 +20,11 @@ const H: u32 = 240;
 /// 
 /// # Arguments
 /// * `app_handle` - Tauri app handle for emitting events back to the frontend
-/// * `path` - URL path for the stream source (only used if fake=false)
+/// * `path` - Optional URL path for the stream source. If None, uses the default_stream_url from state
 /// * `fake` - Whether to generate a fake stream or use the provided URL
 pub fn start_streaming(
     app_handle: AppHandle,
-    path: String,
+    path: Option<String>,
     fake: bool
 ) -> Result<(), String> {
     // stop any existing stream and wait for it to finish
@@ -43,7 +43,28 @@ pub fn start_streaming(
     if fake {
         start_fake_stream(app_handle)
     } else {
-        start_real_stream(app_handle, path)
+        // If path is provided, use it (and update the default URL)
+        if let Some(url) = path {
+            // Update default URL in state for future use
+            let mut default_url = state.stream.default_stream_url.lock().unwrap();
+            *default_url = url.clone();
+            println!("[Streaming] Updated default stream URL to: {}", url);
+            
+            start_real_stream(app_handle.clone(), url)
+        } else {
+            // Use default URL from state
+            let default_url = state.stream.default_stream_url.lock().unwrap().clone();
+            
+            if default_url.is_empty() {
+                let error_msg = "No streaming URL available and no default URL set";
+                println!("[Streaming] Error: {}", error_msg);
+                app_handle.emit("stream_error", Arc::new(error_msg.to_string())).unwrap_or_default();
+                return Err(error_msg.to_string());
+            }
+            
+            println!("[Streaming] Using default stream URL: {}", default_url);
+            start_real_stream(app_handle, default_url)
+        }
     }
 }
 

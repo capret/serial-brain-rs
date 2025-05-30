@@ -34,6 +34,13 @@ pub fn run() {
             let app_handle = app.handle();
             // Store in communication state for event emission
             *app_state.communication.app_handle.lock().unwrap() = Some(app_handle.clone());
+            
+            // Start the background mDNS scanner thread
+            println!("[Setup] Starting background mDNS scanner...");
+            if let Err(e) = mdns::start_background_scanner(app_handle.clone()) {
+                println!("[Setup] Error starting background mDNS scanner: {}", e);
+            }
+            
             Ok(())
         })
         // Removed automatic frame stream on startup; streaming controlled via commands

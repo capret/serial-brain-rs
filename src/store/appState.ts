@@ -144,40 +144,36 @@ export const streamUrl = ref<string>('');
 export async function toggleStreamingState(active: boolean, url?: string): Promise<boolean> {
   try {
     if (active) {
-      // Important: Only use the provided URL or the existing URL, don't fallback to default unnecessarily
-      // This ensures we don't override a custom URL with a default one
-      let streamingUrl: string;
-      
+      // If URL is explicitly provided, set it as the default in the backend
       if (url) {
-        // If URL is explicitly provided, use it
-        streamingUrl = url;
-        console.log('Using explicitly provided URL:', streamingUrl);
-      } else if (streamUrl.value) {
-        // If we already have a URL in the state, preserve it
-        streamingUrl = streamUrl.value;
-        console.log('Preserving existing URL:', streamingUrl);
-      } else {
-        // Only as a last resort, get the default URL using the centralized state function
-        const result = await invoke<any>('get_app_state', {
-          category: 'stream',
-          key: 'default_stream_url'
-        });
-        streamingUrl = result ? result.toString() : '';
-        console.log('Using default URL from backend:', streamingUrl);
+        console.log('Setting new default URL in backend:', url);
+        await invoke('set_default_stream_url', { url });
+        // Update frontend state
+        streamUrl.value = url;
       }
       
-      if (!streamingUrl) {
-        console.warn('No streaming URL available');
-        return false;
-      }
-      
-      // Start streaming
-      await invoke('start_streaming', { path: streamingUrl, fake: false });
-      console.log('Streaming started with URL:', streamingUrl);
+      // Start streaming - backend will use its stored default_stream_url
+      await invoke('start_streaming', { fake: false });
+      console.log('Streaming started using backend default URL');
       
       // Update state
       streamingActive.value = true;
-      streamUrl.value = streamingUrl;
+      
+      // If frontend doesn't have URL yet, fetch it from backend to display to user
+      if (!streamUrl.value) {
+        try {
+          const result = await invoke<string>('get_app_state', {
+            category: 'stream',
+            key: 'default_stream_url'
+          });
+          if (result) {
+            streamUrl.value = result;
+            console.log('Retrieved URL from backend for display:', result);
+          }
+        } catch (e) {
+          console.error('Error fetching URL from backend:', e);
+        }
+      }
     } else {
       // Stop streaming
       await invoke('stop_streaming');
