@@ -10,6 +10,7 @@
     "language": "语言"
   },
   "sidebar": {
+    "dashboard": "总览",
     "visualization": "数据可视化",
     "signal": "信号设置",
     "filters": "滤波器",
