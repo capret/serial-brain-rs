@@ -10,6 +10,7 @@
     "language": "Language"
   },
   "sidebar": {
+    "dashboard": "Dashboard",
     "visualization": "Visualization",
     "signal": "Signal Settings",
     "filters": "Filters",
