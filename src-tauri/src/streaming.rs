@@ -125,6 +125,8 @@ fn start_fake_stream(
 }
 
 /// Starts a real stream from a camera or network source.
+/// This implementation provides robust reconnection and frame buffering.
+/// Only manual stop can end the streaming; network errors trigger reconnection.
 fn start_real_stream(
     app_handle: AppHandle,
     url: String,
@@ -139,107 +141,157 @@ fn start_real_stream(
     let state_clone = Arc::clone(&app_state);
     
     let handle = thread::spawn(move || {
-        // build HTTP client with timeout
-        let client = match Client::builder().timeout(Duration::from_secs(1)).build() {
-            Ok(c) => c,
-            Err(e) => {
-                let _ = app_clone.emit("stream_error", Arc::new(e.to_string()));
-                return;
-            }
-        };
+        let mut last_frame_buffer: Option<Vec<u8>> = None;
+        let reconnect_delay = Duration::from_millis(100); // Wait before reconnection attempts
         
-        // send request and handle status errors
-        let resp = match client.get(&url).send() {
-            Ok(r) => match r.error_for_status() {
-                Ok(r2) => r2,
-                Err(e) => {
-                    let _ = app_clone.emit("stream_error", Arc::new(e.to_string()));
-                    return;
-                }
-            },
-            Err(e) => {
-                let _ = app_clone.emit("stream_error", Arc::new(e.to_string()));
-                return;
-            }
-        };
-        
-        let content_type = resp
-            .headers()
-            .get("Content-Type")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-            
-        let boundary = content_type
-            .split(';')
-            .find_map(|s| s.trim().strip_prefix("boundary="))
-            .unwrap_or("frame");
-            
-        let boundary_marker = format!("--{}", boundary);
-        let mut reader = BufReader::new(resp);
-        let mut line = String::new();
-        
+        // Main streaming loop - only exits on manual stop
         while running.load(Ordering::SeqCst) {
-            line.clear();
-            if reader.read_line(&mut line).is_err() {
-                break;
-            }
+            // Attempt to establish connection
+            let client = match Client::builder()
+                .timeout(Duration::from_secs(5)) // Increased timeout for better stability
+                .build() 
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = app_clone.emit("stream_error", Arc::new(format!("Client build error: {}, retrying...", e)));
+                    thread::sleep(reconnect_delay);
+                    continue; // Retry connection
+                }
+            };
             
-            if line.trim() == boundary_marker {
-                // parse headers
-                let mut content_length = 0;
-                loop {
-                    let mut header_line = String::new();
-                    if reader.read_line(&mut header_line).is_err() {
-                        break;
+            // Attempt to connect to stream
+            let resp = match client.get(&url).send() {
+                Ok(r) => match r.error_for_status() {
+                    Ok(r2) => r2,
+                    Err(e) => {
+                        let _ = app_clone.emit("stream_error", Arc::new(format!("HTTP error: {}, reconnecting...", e)));
+                        thread::sleep(reconnect_delay);
+                        continue; // Retry connection
                     }
-                    
-                    let h = header_line.trim();
-                    if h.is_empty() {
-                        break;
-                    }
-                    
-                    let mut parts = h.splitn(2, ':');
-                    if let Some(key) = parts.next() {
-                        if let Some(val) = parts.next() {
-                            if key.to_lowercase() == "content-length" {
-                                content_length = val.trim().parse::<usize>().unwrap_or(0);
-                            }
-                        }
-                    }
+                },
+                Err(e) => {
+                    let _ = app_clone.emit("stream_error", Arc::new(format!("Connection error: {}, reconnecting...", e)));
+                    thread::sleep(reconnect_delay);
+                    continue; // Retry connection
+                }
+            };
+            
+            let _ = app_clone.emit("stream_connected", Arc::new("Stream connected successfully"));
+            
+            let content_type = resp
+                .headers()
+                .get("Content-Type")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+                
+            let boundary = content_type
+                .split(';')
+                .find_map(|s| s.trim().strip_prefix("boundary="))
+                .unwrap_or("frame");
+                
+            let boundary_marker = format!("--{}", boundary);
+            let mut reader = BufReader::new(resp);
+            let mut line = String::new();
+            
+            // Frame reading loop - breaks on connection errors to trigger reconnection
+            let mut connection_active = true;
+            while running.load(Ordering::SeqCst) && connection_active {
+                line.clear();
+                
+                // Handle read line errors by breaking to reconnect
+                if reader.read_line(&mut line).is_err() {
+                    let _ = app_clone.emit("stream_error", Arc::new("Connection lost, reconnecting..."));
+                    connection_active = false;
+                    break;
                 }
                 
-                // read image data
-                if content_length > 0 {
-                    let mut buffer = vec![0u8; content_length];
-                    match reader.read_exact(&mut buffer) {
-                        Ok(_) => {
-                            // Encode the image to base64 and emit to frontend
-                            let b64 = STANDARD.encode(&buffer);
-                            let _ = app_clone.emit("frame", Arc::new(b64.clone()));
-                            
-                            // Also push frame to video recorder if recording is active
-                            if state_clone.recording.video_recording_active.load(Ordering::SeqCst) {
-                                // Convert to raw RGB bytes for recording instead of using base64 PNG
-                                if let Ok(img) = image::load_from_memory(&buffer) {
-                                    let rgb = img.to_rgb8();
-                                    let dims = img.dimensions();
-                                    match tauri_plugin_record_stream::push_frame(app_clone.clone(), rgb.into_raw(), dims.0, dims.1) {
-                                        Ok(analysis) => {
-                                            let _ = app_clone.emit("frame_analysis", Arc::new(!analysis.is_covered));
-                                        },
-                                        Err(e) => println!("Error pushing frame to video recorder: {}", e)
-                                    }
+                if line.trim() == boundary_marker {
+                    // Parse headers
+                    let mut content_length = 0;
+                    let mut header_parse_error = false;
+                    
+                    loop {
+                        let mut header_line = String::new();
+                        if reader.read_line(&mut header_line).is_err() {
+                            header_parse_error = true;
+                            break;
+                        }
+                        
+                        let h = header_line.trim();
+                        if h.is_empty() {
+                            break;
+                        }
+                        
+                        let mut parts = h.splitn(2, ':');
+                        if let Some(key) = parts.next() {
+                            if let Some(val) = parts.next() {
+                                if key.to_lowercase() == "content-length" {
+                                    content_length = val.trim().parse::<usize>().unwrap_or(0);
                                 }
                             }
                         }
-                        Err(e) => {
-                            let _ = app_clone.emit("stream_error", Arc::new(format!("Error reading frame: {}", e)));
-                            break;
+                    }
+                    
+                    if header_parse_error {
+                        let _ = app_clone.emit("stream_error", Arc::new("Header parse error, reconnecting..."));
+                        connection_active = false;
+                        break;
+                    }
+                    
+                    // Read image data
+                    if content_length > 0 {
+                        let mut buffer = vec![0u8; content_length];
+                        match reader.read_exact(&mut buffer) {
+                            Ok(_) => {
+                                // Successfully read new frame - update last frame buffer
+                                last_frame_buffer = Some(buffer.clone());
+                                
+                                // Encode the image to base64 and emit to frontend
+                                let b64 = STANDARD.encode(&buffer);
+                                let _ = app_clone.emit("frame", Arc::new(b64.clone()));
+                                
+                                // Also push frame to video recorder if recording is active
+                                if state_clone.recording.video_recording_active.load(Ordering::SeqCst) {
+                                    // Convert to raw RGB bytes for recording instead of using base64 PNG
+                                    if let Ok(img) = image::load_from_memory(&buffer) {
+                                        let rgb = img.to_rgb8();
+                                        let dims = img.dimensions();
+                                        match tauri_plugin_record_stream::push_frame(app_clone.clone(), rgb.into_raw(), dims.0, dims.1) {
+                                            Ok(analysis) => {
+                                                let _ = app_clone.emit("frame_analysis", Arc::new(!analysis.is_covered));
+                                            },
+                                            Err(e) => println!("Error pushing frame to video recorder: {}", e)
+                                        }
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                // Failed to read new frame - send last frame if available
+                                if let Some(ref last_buffer) = last_frame_buffer {
+                                    let b64 = STANDARD.encode(last_buffer);
+                                    let _ = app_clone.emit("frame", Arc::new(b64.clone()));
+                                    let _ = app_clone.emit("stream_error", Arc::new("Frame read error, sending last frame and reconnecting..."));
+                                } else {
+                                    let _ = app_clone.emit("stream_error", Arc::new("Frame read error, no last frame available, reconnecting..."));
+                                }
+                                connection_active = false;
+                                break;
+                            }
                         }
                     }
+                } else if line.trim().is_empty() {
+                    // Empty line might indicate connection issues
+                    continue;
                 }
             }
+            
+            // If we're here due to connection error (not manual stop), wait before reconnecting
+            if running.load(Ordering::SeqCst) && !connection_active {
+                thread::sleep(reconnect_delay);
+            }
         }
+        
+        let _ = app_clone.emit("stream_stopped", Arc::new("Stream stopped by user"));
     });
     
     let app_state = app_handle.state::<Arc<AppState>>();
