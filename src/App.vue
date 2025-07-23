@@ -20,7 +20,6 @@
           ]" />
         <div class="flex-grow overflow-y-auto space-y-6 h-full pb-4 max-[800px]:pb-16 max-[800px]:mx-2" style="min-height: 0;">
           <!-- Primary View -->
-          <DashboardView v-if="primaryView === 'dashboard'" class="view" />
           <VisualizationView v-if="primaryView === 'visualization'" class="view"/>
           <SignalConfigView v-if="primaryView === 'signal'" class="view" :selected-data-source="selectedDataSource" :serial-settings="serialSettings" :tcp-settings="tcpSettings" :fake-data-settings="fakeDataSettings" @data-source-changed="onDataSourceChanged" />
           <FilterConfigView v-if="primaryView === 'filters'" class="view" />
@@ -69,9 +68,8 @@ import SignalConfigView from './components/views/SignalConfigView.vue';
 import FilterConfigView from './components/views/FilterConfigView.vue';
 import RecordingView from './components/views/RecordingView.vue';
 import StreamingView from './components/views/StreamingView.vue';
-import DashboardView from './components/views/DashboardView.vue';
 import AppHeader from './components/AppHeader.vue';
-const primaryView = ref('dashboard'); // Options: 'dashboard', 'visualization', 'signal', 'filters', 'folder', 'streaming'
+const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder', 'streaming'
 const additionalViews = ref<string[]>([]);
 const collapsed = ref(false);
 
