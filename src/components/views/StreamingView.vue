@@ -603,8 +603,8 @@ onMounted(async () => {
     /* ---------- backend error listener ---------- */
     errorUnlisten = await listen<string>("stream_error", ({ payload }) => {
         console.error("Stream error:", payload);
-        isStreaming.value = false;
-        if (isRecording.value) stopRecording();
+        // isStreaming.value = false;
+        // if (isRecording.value) stopRecording();
     });
 
     // Set up device discovery listeners
@@ -622,10 +622,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-    // frameUnlisten?.();
-    // analysisUnlisten?.();
-    // errorUnlisten?.();
-    // if (isRecording.value) stopRecording();
+    frameUnlisten?.();
+    analysisUnlisten?.();
+    errorUnlisten?.();
 });
 
 /* ===================================================================

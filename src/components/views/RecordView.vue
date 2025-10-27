@@ -557,12 +557,6 @@ async function stopRecording(): Promise<void> {
         try {
             await invoke("stop_video_recording");
             console.log("Video recording stopped");
-
-            // Also update the shared streaming state to reflect that streaming has stopped
-            if (streamingActive.value) {
-                await toggleStreamingState(false);
-                console.log("Shared streaming state updated to inactive");
-            }
         } catch (error) {
             console.warn("Error stopping video recording:", error);
         }
