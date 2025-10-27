@@ -13,8 +13,8 @@
     "dashboard": "总览",
     "visualization": "数据可视化",
     "signal": "信号设置",
-    "filters": "滤波器",
-    "folder": "录制",
+    "record": "录制",
+    "fileInspect": "文件",
     "streaming": "流传输"
   },
   "visualization": {
@@ -35,6 +35,18 @@
     "windowSize": "显示窗口大小"
   },
   "recording": {
+    "title": "录制控制",
+    "cameraStatus": "摄像头状态",
+    "signalStatus": "信号状态",
+    "streaming": "流传输中",
+    "notStreaming": "未流传输",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "controls": "录制控制",
+    "recordingInProgress": "正在录制",
+    "filename": "文件名",
+    "startRecording": "开始录制",
+    "stopRecording": "停止录制",
     "setup": "录制设置",
     "storageLocation": "存储位置",
     "format": "录制格式",
@@ -54,10 +66,15 @@
     "size": "大小",
     "duration": "时长",
     "created": "创建于",
+    "video": "视频",
+    "noVideo": "无视频",
     "noFolderSelected": "未选择文件夹",
     "noFiles": "选定目录中没有找到录制文件",
     "selectDirectory": "请选择目录以查看录制文件",
     "confirmDeletePrefix": "您确定要删除"
+  },
+  "fileInspect": {
+    "title": "文件检查器"
   },
   "signal": {
     "title": "信号设置",

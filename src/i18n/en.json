@@ -13,8 +13,8 @@
     "dashboard": "Dashboard",
     "visualization": "Visualization",
     "signal": "Signal Settings",
-    "filters": "Filters",
-    "folder": "Recording",
+    "record": "Record",
+    "fileInspect": "Files",
     "streaming": "Streaming"
   },
   "visualization": {
@@ -35,6 +35,18 @@
     "windowSize": "Display Window Size"
   },
   "recording": {
+    "title": "Recording Control",
+    "cameraStatus": "Camera Status",
+    "signalStatus": "Signal Status",
+    "streaming": "Streaming",
+    "notStreaming": "Not Streaming",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "controls": "Recording Controls",
+    "recordingInProgress": "Recording in Progress",
+    "filename": "Filename",
+    "startRecording": "Start Recording",
+    "stopRecording": "Stop Recording",
     "setup": "Recording Setup",
     "storageLocation": "Storage Location",
     "format": "Recording Format",
@@ -60,6 +72,9 @@
     "noFiles": "No recording files found in the selected directory",
     "selectDirectory": "Select a directory to view recorded files",
     "confirmDeletePrefix": "Are you sure you want to delete"
+  },
+  "fileInspect": {
+    "title": "File Inspector"
   },
   "filter": {
     "title": "Filter Configuration",

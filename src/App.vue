@@ -9,7 +9,7 @@
       <AppHeader @logout="handleLogout" :user="currentUser" />
       <div class="flex gap-8 flex-grow h-full overflow-hidden max-[800px]:flex-col">
         <!-- Sidebar Component -->
-        <AppSidebar v-model:activeView="primaryView" v-model:additionalViews="additionalViews" v-model:collapsed="collapsed" :class="[
+        <AppSidebar v-model:activeView="primaryView" :class="[
             collapsed ? 'w-16 px-2 py-5' : 'w-60 p-5',
             'mb-4 border border-gray-700 shadow-inner rounded-lg overflow-y-auto',
             'flex flex-col flex-shrink-0 bg-gray-800 bg-opacity-60',
@@ -22,13 +22,9 @@
           <!-- Primary View -->
           <VisualizationView v-if="primaryView === 'visualization'" class="view"/>
           <SignalConfigView v-if="primaryView === 'signal'" class="view" :selected-data-source="selectedDataSource" :serial-settings="serialSettings" :tcp-settings="tcpSettings" :fake-data-settings="fakeDataSettings" @data-source-changed="onDataSourceChanged" />
-          <FilterConfigView v-if="primaryView === 'filters'" class="view" />
-          <RecordingView v-if="primaryView === 'folder'" class="view" />
+          <RecordView v-if="primaryView === 'record'" class="view" />
+          <FileInspectView v-if="primaryView === 'file-inspect'" class="view" />
           <StreamingView v-if="primaryView === 'streaming'" class="view" />
-          <!-- Additional Views (only in visualization) -->
-          <StreamingView v-if="primaryView === 'visualization' && additionalViews.includes('streaming')" class="view" />
-          <FilterConfigView v-if="primaryView === 'visualization' && additionalViews.includes('filters')" class="view" />
-          <RecordingView v-if="primaryView === 'visualization' && additionalViews.includes('folder')" class="view" />
         </div>
       </div>
     </div>
@@ -65,12 +61,11 @@ import LoginPage from './components/auth/LoginPage.vue';
 import AppSidebar from './components/AppSidebar.vue';
 import VisualizationView from './components/views/SignalPlottingView.vue';
 import SignalConfigView from './components/views/SignalConfigView.vue';
-import FilterConfigView from './components/views/FilterConfigView.vue';
-import RecordingView from './components/views/RecordingView.vue';
+import RecordView from './components/views/RecordView.vue';
+import FileInspectView from './components/views/FileInspectView.vue';
 import StreamingView from './components/views/StreamingView.vue';
 import AppHeader from './components/AppHeader.vue';
-const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'filters', 'folder', 'streaming'
-const additionalViews = ref<string[]>([]);
+const primaryView = ref('visualization'); // Options: 'visualization', 'signal', 'record', 'file-inspect', 'streaming'
 const collapsed = ref(false);
 
 // Define functions to update views and provide them for injection
@@ -78,17 +73,8 @@ function setActiveView(view: string) {
   primaryView.value = view;
 }
 
-function setAdditionalViews(view: string) {
-  const list = additionalViews.value;
-  const next = list.includes(view)
-    ? list.filter(v => v !== view)
-    : [...list, view];
-  additionalViews.value = next;
-}
-
 // Provide these functions for child components to inject
 provide('setActiveView', setActiveView);
-provide('setAdditionalViews', setAdditionalViews);
 
 // Signal source state
 const selectedDataSource = ref('fake'); // Options: 'serial', 'tcp', 'fake'
