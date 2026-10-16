@@ -1,5 +1,9 @@
 # Tauri + Vue + TypeScript
 
+## 中文技术文档
+
+项目的核心架构、信号协议、数据缓存、实时波形、分段录制、摄像头发现与流处理、跨平台视频编码、Android 后台运行及文件索引机制，见 [Serial Brain 技术文档](docs/technical/README.md)。各专题说明所解决的问题、实现原理、数据契约和当前实现边界。
+
 This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
 
 ## Recommended IDE Setup
